@@ -11,6 +11,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 ## What You Built
 
 ### Phase 1: Core Framework ✅ (44 tests, 2,432 LOC)
+
 - **Thread-safe frame buffer** with condition variables for efficient streaming
 - **Real-time FPS tracking** with rolling 30-frame window
 - **Lock-free connection counter** for stream limiting
@@ -21,6 +22,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 - **Race-detection verified** implementation
 
 **Achievements**:
+
 - Zero race conditions with concurrent stream access
 - Efficient frame waiting (not polling)
 - Proper MJPEG boundary formatting
@@ -29,12 +31,14 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 ### Phase 2: Production Features ✅ (23 tests, +362 LOC)
 
 #### Phase 2.1: MJPEG Streaming (2 tests)
+
 - Efficient frame waiting mechanism (`WaitFrame()` with timeout)
 - Proper MJPEG multipart boundaries and headers
 - Connection limiting enforcement
 - Verified working with JPEG SOI/EOI markers present
 
 #### Phase 2.2: Settings Persistence (9 tests)
+
 - Thread-safe persistent key-value store
 - Atomic file writes (temp file + rename pattern)
 - JSON serialization
@@ -43,6 +47,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 - Verified working with concurrent access
 
 #### Phase 2.3: Real Camera Integration (12 tests)
+
 - V4L2 device support via ffmpeg subprocess
 - Graceful fallback to mock camera when device unavailable
 - FPS throttling with proper frame interval calculation
@@ -51,6 +56,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 - Verified camera auto-selection in main.go
 
 ### Phase 3: Web UI ✅ (6 tests, +~1,200 LOC embedded)
+
 - **Responsive HTML5 interface** with embedded CSS + JavaScript
 - **Real-time MJPEG viewer** with auto-reconnect capability
 - **Settings controls**:
@@ -73,6 +79,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 ## Technical Specifications
 
 ### Architecture
+
 - **Language**: Go 1.22+
 - **HTTP Framework**: Chi v5 (lightweight router)
 - **Image Format**: MJPEG with proper multipart boundaries
@@ -82,6 +89,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 - **Real Camera**: ffmpeg subprocess to V4L2 device
 
 ### API Endpoints (11 total)
+
 1. `GET /health` - Health status with FPS
 2. `GET /ready` - Readiness probe
 3. `GET /stream.mjpg` - MJPEG video stream
@@ -95,6 +103,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 11. (WebSocket ready for future use)
 
 ### Performance Metrics
+
 - **Binary Size**: 8.9MB (static, includes embedded assets)
 - **Docker Image Size**: ~12MB
 - **Startup Time**: <1 second
@@ -103,6 +112,7 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 - **Frame Latency**: ~40-100ms (depends on network)
 
 ### Test Coverage
+
 - **Total Tests**: 81 (100% passing)
 - **Race Detection**: All tests pass with `-race` flag
 - **Test Suites**:
@@ -120,12 +130,14 @@ Motion In Ocean is a **production-ready Raspberry Pi MJPEG streaming server** wr
 ### Docker (Recommended)
 
 **For Development (mock camera)**:
+
 ```bash
 docker run -p 8000:8000 gogomio:phase3
 docker-compose -f docker-compose.mock.yml up
 ```
 
 **For Raspberry Pi (real camera)**:
+
 ```bash
 docker run --device /dev/video0 -p 8000:8000 gogomio:phase3
 # or with docker-compose:
@@ -133,6 +145,7 @@ docker-compose up
 ```
 
 **Multi-architecture support**:
+
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/gogomio:latest --push .
 ```
@@ -154,6 +167,7 @@ PORT=8080 ./gogomio
 ```
 
 ### Environment Variables
+
 - `PORT`: HTTP server port (default: 8000)
 - `BIND_HOST`: Bind address (default: 0.0.0.0)
 - `RESOLUTION`: Camera resolution (default: "640x480")
@@ -173,6 +187,7 @@ PORT=8080 ./gogomio
 - Mobile browsers (iOS Safari 13+, Chrome Android)
 
 **Web UI Features**:
+
 - Real-time MJPEG display in `<img>` tag
 - Responsive grid layout
 - Touch-friendly controls on mobile
@@ -184,6 +199,7 @@ PORT=8080 ./gogomio
 ## Key Features
 
 ✅ **Production Ready**:
+
 - Multi-platform (amd64, arm64)
 - Graceful error handling
 - Comprehensive logging
@@ -191,6 +207,7 @@ PORT=8080 ./gogomio
 - Docker optimized
 
 ✅ **Streaming**:
+
 - Efficient MJPEG encoding
 - Proper multipart boundaries
 - Connection limiting
@@ -198,12 +215,14 @@ PORT=8080 ./gogomio
 - Status monitoring
 
 ✅ **Real Hardware Support**:
+
 - V4L2 device detection
 - ffmpeg integration
 - Camera fallback logic
 - Pi camera 1 & 2 support
 
 ✅ **User Friendly**:
+
 - Modern web interface
 - Real-time statistics
 - One-click settings adjustment
@@ -211,6 +230,7 @@ PORT=8080 ./gogomio
 - No external dependencies
 
 ✅ **Developer Friendly**:
+
 - TDD approach with comprehensive tests
 - Clear separation of concerns
 - Well-documented code
@@ -264,6 +284,7 @@ PORT=8080 ./gogomio
 ## Development Workflow
 
 ### Testing
+
 ```bash
 # Run all tests with race detection
 go test ./... -race -v
@@ -279,6 +300,7 @@ go test ./... -v 2>&1 | grep "^=== RUN" | wc -l
 ```
 
 ### Building
+
 ```bash
 # Build binary
 go build -o gogomio ./cmd/gogomio
@@ -291,6 +313,7 @@ docker buildx build --platform linux/amd64,linux/arm64 -t gogomio .
 ```
 
 ### Running
+
 ```bash
 # Run locally
 ./gogomio
@@ -311,6 +334,7 @@ MOCK_CAMERA=true ./gogomio
 ## Lessons Learned
 
 ### What Worked Well
+
 1. **TDD Approach**: Test-first ensured robust code from the start
 2. **Incremental Phases**: Breaking work into manageable chunks maintained momentum
 3. **Embedded Assets**: No external file serving needed in Docker
@@ -318,6 +342,7 @@ MOCK_CAMERA=true ./gogomio
 5. **Chi Framework**: Lightweight and perfect for this use case
 
 ### Technical Decisions
+
 1. **Mock Camera**: Allowed testing without hardware
 2. **ffmpeg Subprocess**: Avoided CGO complexity while supporting V4L2
 3. **Embedded Web UI**: Guaranteed deployment consistency
