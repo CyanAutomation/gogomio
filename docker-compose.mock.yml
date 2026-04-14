@@ -1,8 +1,6 @@
 services:
   gogomio:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: docker.io/cyanautomation/gogomio:latest
     # For testing on any platform (amd64, arm64, etc.)
     platform: linux/amd64
     ports:
