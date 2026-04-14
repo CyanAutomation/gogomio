@@ -205,3 +205,53 @@ func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 		t.Errorf("final frame count is %d, want 3", finalCount)
 	}
 }
+
+// TestFrameBufferWaitFrameSuccess tests WaitFrame returns frame when available
+func TestFrameBufferWaitFrameSuccess(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+	testFrame := []byte{1, 2, 3, 4, 5}
+
+	done := make(chan []byte)
+	go func() {
+		frame := fb.WaitFrame(2 * time.Second)
+		done <- frame
+	}()
+
+	// Give goroutine time to start waiting
+	time.Sleep(50 * time.Millisecond)
+
+	// Write frame
+	fb.Write(testFrame)
+
+	select {
+	case frame := <-done:
+		if !bytes.Equal(frame, testFrame) {
+			t.Errorf("WaitFrame got %v, want %v", frame, testFrame)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for frame")
+	}
+}
+
+// TestFrameBufferWaitFrameTimeout tests WaitFrame returns nil on timeout
+func TestFrameBufferWaitFrameTimeout(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+
+	done := make(chan []byte)
+	go func() {
+		frame := fb.WaitFrame(100 * time.Millisecond)
+		done <- frame
+	}()
+
+	select {
+	case frame := <-done:
+		if frame != nil {
+			t.Errorf("WaitFrame got %v on timeout, want nil", frame)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timeout in test")
+	}
+}
+

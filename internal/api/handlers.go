@@ -9,6 +9,7 @@ import (
 
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
+	"github.com/CyanAutomation/gogomio/internal/settings"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -19,6 +20,7 @@ type FrameManager struct {
 	frameBuffer    *camera.FrameBuffer
 	streamStats    *camera.StreamStats
 	connTracker    *camera.ConnectionTracker
+	settingsM      *settings.Manager
 	mu             sync.RWMutex
 	captureStarted bool
 
@@ -40,6 +42,7 @@ func NewFrameManager(cam camera.Camera, cfg *config.Config) *FrameManager {
 		frameBuffer: camera.NewFrameBuffer(stats, bufferTargetFPS),
 		streamStats: stats,
 		connTracker: camera.NewConnectionTracker(),
+		settingsM:   settings.NewManager("/tmp/gogomio/settings.json"),
 		doneChan:    make(chan struct{}),
 	}
 
@@ -107,51 +110,64 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("Connection", "close")
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return fmt.Errorf("response writer does not support flushing")
 	}
 
-	// Stream frames with timeout
-	ticker := time.NewTicker(fm.cfg.FrameTimeout())
-	defer ticker.Stop()
+	frameTimeout := fm.cfg.FrameTimeout()
+	lastFrame := fm.frameBuffer.GetFrame()
 
 	for {
 		select {
 		case <-fm.doneChan:
 			return fmt.Errorf("stream stopped")
-		case <-ticker.C:
-			// Frame timeout, continue (client may have disconnected)
-			continue
 		default:
 		}
 
-		// Try to get frame (non-blocking)
-		frame := fm.GetFrame()
-		if frame != nil {
-			// Write MJPEG boundary and frame
-			if _, err := w.Write([]byte("--frame\r\n")); err != nil {
-				return err
-			}
-			if _, err := w.Write([]byte("Content-Type: image/jpeg\r\n")); err != nil {
-				return err
-			}
-			if _, err := w.Write([]byte("Content-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")); err != nil {
-				return err
-			}
-			if _, err := w.Write(frame); err != nil {
-				return err
-			}
-			if _, err := w.Write([]byte("\r\n")); err != nil {
-				return err
-			}
-
-			flusher.Flush()
-		} else {
-			// No frame yet, sleep briefly
-			time.Sleep(10 * time.Millisecond)
+		// Wait for new frame with timeout
+		frame := fm.frameBuffer.WaitFrame(frameTimeout)
+		if frame == nil {
+			// Timeout waiting for frame, keep connection open or retry
+			continue
 		}
+
+		// Skip if same frame as last (no new frames)
+		if len(frame) == len(lastFrame) {
+			same := true
+			for i := range frame {
+				if frame[i] != lastFrame[i] {
+					same = false
+					break
+				}
+			}
+			if same {
+				continue
+			}
+		}
+		lastFrame = frame
+
+		// Write MJPEG boundary and frame
+		boundary := []byte("--frame\r\n")
+		headers := []byte("Content-Type: image/jpeg\r\nContent-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")
+		trailer := []byte("\r\n")
+
+		if _, err := w.Write(boundary); err != nil {
+			return err
+		}
+		if _, err := w.Write(headers); err != nil {
+			return err
+		}
+		if _, err := w.Write(frame); err != nil {
+			return err
+		}
+		if _, err := w.Write(trailer); err != nil {
+			return err
+		}
+
+		flusher.Flush()
 	}
 }
 
@@ -252,6 +268,19 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 </html>
 `))
 	})
+
+	// Settings management endpoints
+	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsGet(w, r, fm)
+	})
+
+	router.Post("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsUpdate(w, r, fm)
+	})
+
+	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsUpdate(w, r, fm)
+	})
 }
 
 // Handler functions
@@ -328,6 +357,46 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, s
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// Settings handlers
+
+func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
+	settings := fm.settingsM.GetAll()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"settings": settings,
+	})
+}
+
+// SettingsUpdateRequest represents a request body for updating settings
+type SettingsUpdateRequest struct {
+	Settings map[string]interface{} `json:"settings"`
+}
+
+func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
+	var req SettingsUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	// Save each setting
+	for key, value := range req.Settings {
+		if err := fm.settingsM.Set(key, value); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "failed to save setting: " + key})
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "ok",
+		"message": fmt.Sprintf("saved %d settings", len(req.Settings)),
+	})
 }
 
 // Middleware

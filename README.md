@@ -5,6 +5,7 @@ A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-p
 ## Features
 
 **v0.1.0 (Current - MVP)**
+
 - ✅ MJPEG streaming (`/stream.mjpg`)
 - ✅ Snapshot capture (`/snapshot.jpg`)
 - ✅ REST API endpoints (`/api/config`, `/api/status`, `/health`, `/ready`)
@@ -17,6 +18,7 @@ A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-p
 - ✅ 51+ unit and integration tests (TDD)
 
 **Future (v0.2+)**
+
 - Hub management discovery and registration
 - Prometheus metrics endpoint
 - Rate limiting per endpoint
@@ -43,6 +45,7 @@ curl http://localhost:8000/api/config | jq
 ### Raspberry Pi (Real Camera)
 
 **Prerequisites:**
+
 - Raspberry Pi 3B+, 4, or 5
 - CSI camera connected
 - Docker installed (`curl -sSL https://get.docker.com | sh`)
@@ -150,6 +153,7 @@ export MOCK_CAMERA=false
 ### API
 
 - **GET `/api/config`** - Server configuration and stats
+
   ```json
   {
     "resolution": [640, 480],
@@ -165,6 +169,7 @@ export MOCK_CAMERA=false
   ```
 
 - **GET `/api/status`** - Server health and uptime
+
   ```json
   {
     "status": "ok",
@@ -243,6 +248,7 @@ docker-compose -f docker-compose.mock.yml up --build
 - Thread-safety tests for concurrent access
 
 Run tests:
+
 ```bash
 go test ./... -v -race -cover
 ```
@@ -250,28 +256,33 @@ go test ./... -v -race -cover
 ## Performance
 
 **Typical Performance (Raspberry Pi 4B)**
+
 - Streaming: 24-30 FPS @ 1280x720
 - Latency: ~80-120ms end-to-end
 - Memory: ~50-80MB
 - CPU: 15-25% @ 24 FPS, 720p
 
 **Estimated Performance (Future - Real Camera)**
+
 - Expected improvement: 30-50% lower latency with libcamera integration
 - Better hardware acceleration for JPEG encoding
 
 ## Troubleshooting
 
 **Camera not initializing**
+
 - Ensure CSI cable is properly connected to Pi
 - Check `/dev/video0` exists: `ls -la /dev/video0`
 - In docker-compose, verify device mapping
 
 **High CPU usage**
+
 - Lower `MIO_FPS` or `MIO_RESOLUTION`
 - Increase `MIO_TARGET_FPS` to throttle encoder
 - Check system load: `top`
 
 **Timeout connecting to stream**
+
 - Verify Pi is reachable: `ping YOUR_PI_IP`
 - Check firewall allows port 8000
 - Verify stream is running: `curl http://YOUR_PI_IP:8000/api/config`
@@ -279,7 +290,9 @@ go test ./... -v -race -cover
 ## Integration Examples
 
 ### Home Assistant
+
 Add to `configuration.yaml`:
+
 ```yaml
 camera:
   - platform: mjpeg
@@ -288,14 +301,17 @@ camera:
 ```
 
 ### OctoPrint
+
 Set webcam stream URL: `http://YOUR_PI_IP:8000/stream.mjpg`
 
 ### VLC
+
 ```bash
 vlc http://YOUR_PI_IP:8000/stream.mjpg
 ```
 
 ### curl for snapshots
+
 ```bash
 curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 ```

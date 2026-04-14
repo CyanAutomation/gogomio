@@ -18,12 +18,14 @@ Built and pushed multi-architecture images for both Raspberry Pi (arm64) and dev
 ### Build Process
 
 #### Step 1: Set up buildx builder
+
 ```bash
 docker buildx create --name gogomio-builder --platform linux/amd64,linux/arm64 --use
 # Result: ✅ Created and active
 ```
 
 #### Step 2: Multi-platform build & push
+
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -t cyanautomation/gogomio:latest \
@@ -51,6 +53,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 **Manifest Digest:** `sha256:92d5c89f71787e34929e3fa63536006ef1cc5360a0a75fbe05f891be9f9d4226`
 
 #### Supported Platforms
+
 ```json
 {
   "architectures": [
@@ -62,11 +65,13 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```
 
 **Verification:**
+
 ```bash
 docker manifest inspect cyanautomation/gogomio:latest
 ```
 
 Result shows both architectures available:
+
 - ✅ **linux/amd64**: SHA256:da36eb652b223ef3602ea5c9cd1257ac75faaf2323d938b1a4869423cfb69022
 - ✅ **linux/arm64**: SHA256:31969ad3d8969517c777225f9693dcabacb79b80986982ba44cc5ecdeb2b4152
 
@@ -86,6 +91,7 @@ docker pull cyanautomation/gogomio:0.1.0-multiarch
 ### Testing on Different Platforms
 
 #### On Raspberry Pi (arm64)
+
 ```bash
 # Docker will automatically pull the arm64 image
 docker pull cyanautomation/gogomio:latest
@@ -98,6 +104,7 @@ docker compose -f docker-compose.yml up
 ```
 
 #### On Development Machine (amd64)
+
 ```bash
 # Docker will automatically pull the amd64 image
 docker pull cyanautomation/gogomio:latest
@@ -112,6 +119,7 @@ docker compose -f docker-compose.mock.yml up
 ### Image Verification
 
 **Local amd64 test successful:**
+
 ```
 2026/04/14 21:15:12 🌊 Motion In Ocean - Go Edition v0.1.0-dev
 2026/04/14 21:15:12 Using mock camera (development mode)
@@ -133,6 +141,7 @@ Image: cyanautomation/gogomio:latest (uncompressed)
 ```
 
 Optimizations applied:
+
 - Multi-stage Docker build (builder → runtime)
 - `CGO_ENABLED=0` for static binary
 - `-ldflags="-s -w"` for stripped binary
@@ -143,11 +152,13 @@ Optimizations applied:
 #### For Raspberry Pi
 
 **Prerequisites:**
+
 - Raspberry Pi 4 or better (4GB+ RAM recommended)
 - Raspberry Pi OS (any architecture) with Docker installed
 - CSI camera connected and enabled
 
 **Quick Start:**
+
 ```bash
 # Internet connected device:
 docker run -d \
@@ -168,6 +179,7 @@ curl http://localhost:8000/api/config
 ```
 
 **Via docker-compose:**
+
 ```bash
 # Clone repository (or download docker-compose.yml)
 docker compose -f docker-compose.yml up -d
@@ -179,6 +191,7 @@ docker compose logs -f
 #### For Development
 
 **Run locally with mock camera:**
+
 ```bash
 docker run -d \
   --name gogomio-dev \
@@ -236,12 +249,14 @@ A: This is normal - QEMU cross-compilation is ~15x slower than native. First bui
 
 **Q: Image pulls wrong architecture**  
 A: Docker automatically selects correct image based on running platform. Verify with:
+
 ```bash
 docker inspect <imageid> | grep -i architecture
 ```
 
 **Q: Container won't start on Pi**  
 A: Verify image architecture matches Pi CPU:
+
 ```bash
 # On Pi
 uname -m  # Should show aarch64

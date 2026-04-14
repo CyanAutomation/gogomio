@@ -5,11 +5,13 @@
 ## Deliverables
 
 ### Core Infrastructure
+
 - ✅ Go module initialized (`github.com/CyanAutomation/gogomio`)
 - ✅ Project structure with proper package organization
 - ✅ Dependencies: Chi HTTP router only (minimal)
 
 ### Data Structures (34 tests, 100% race-safe)
+
 1. **FrameBuffer** - Thread-safe JPEG frame buffer
    - Condition variable notification for efficient frame waiting
    - FPS throttling support
@@ -33,12 +35,14 @@
    - 10 comprehensive tests
 
 ### Configuration System (6 tests)
+
 - Environment variable parsing with defaults
 - Resolution validation (WIDTHxHEIGHT format)
 - Frame timeout calculation
 - JSON serialization for status reporting
 
 ### HTTP API (8 tests, fully functional)
+
 - **GET /health** - Liveness probe
 - **GET /ready** - Readiness probe (503 if camera not ready)
 - **GET /api/config** - Server configuration + live stats (FPS, frame count, connections)
@@ -48,6 +52,7 @@
 - **GET /** - HTML index page with links
 
 ### Main Application
+
 - Full entry point in `cmd/gogomio/main.go`
 - Configuration loading
 - Camera initialization (mock in Phase 1, real in Phase 2)
@@ -55,6 +60,7 @@
 - Proper logging
 
 ### Docker & Deployment
+
 - Multi-stage Dockerfile (builder + runtime Alpine)
 - Non-root user execution
 - Health checks configured
@@ -64,6 +70,7 @@
 ## Test Coverage
 
 **Total: 44+ tests**
+
 - FrameBuffer: 6 tests
 - StreamStats: 8 tests  
 - ConnectionTracker: 10 tests
@@ -72,6 +79,7 @@
 - Handlers: 8 tests
 
 **All tests pass:**
+
 - Standard: `go test ./... -v` ✅
 - Race detection: `go test ./... -race` ✅
 - Coverage-compatible
@@ -79,6 +87,7 @@
 ## Building & Running
 
 ### Local Development
+
 ```bash
 # Build
 go build -v ./cmd/gogomio
@@ -95,6 +104,7 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 ```
 
 ### Docker (Recommended)
+
 ```bash
 # Mock mode (development, any platform)
 docker-compose -f docker-compose.mock.yml up
@@ -145,6 +155,7 @@ HTTP Handlers (Chi Router)
 5. ✅ Mock testing environment
 
 Just need to:
+
 - Integrate real camera (periph.io or libcamera bindings)
 - Implement MJPEG boundary-frame transmission in /stream.mjpg
 - Add settings persistence
