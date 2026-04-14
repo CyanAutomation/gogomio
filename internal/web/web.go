@@ -21,7 +21,7 @@ func RegisterStaticFiles(r *chi.Mux) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		
+
 		data, err := webFS.ReadFile("index.html")
 		if err != nil {
 			log.Printf("Error reading index.html: %v", err)
