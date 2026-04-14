@@ -10,6 +10,7 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/CyanAutomation/gogomio/internal/settings"
+	"github.com/CyanAutomation/gogomio/internal/web"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -200,6 +201,9 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	// Middleware
 	router.Use(loggingMiddleware)
 
+	// Register web UI (must be before other handlers for proper routing)
+	web.RegisterStaticFiles(router)
+
 	// Health check endpoints
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, fm, startTime)
@@ -227,46 +231,6 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 
 	router.Get("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		handleAPIStatus(w, r, fm, startTime)
-	})
-
-	// Placeholder for future endpoints
-	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(`
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Motion In Ocean - Go Edition</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-    .container { background: white; padding: 20px; border-radius: 5px; }
-    h1 { color: #333; }
-    .info { color: #666; margin: 10px 0; }
-    a { color: #0066cc; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🌊 Motion In Ocean - Go Edition</h1>
-    <p class="info">Raspberry Pi CSI Camera MJPEG Streaming Server</p>
-    
-    <h2>Endpoints</h2>
-    <ul>
-      <li><a href="/stream.mjpg">Live Stream: /stream.mjpg</a></li>
-      <li><a href="/snapshot.jpg">Latest Snapshot: /snapshot.jpg</a></li>
-      <li><a href="/api/config">Configuration: /api/config</a></li>
-      <li><a href="/api/status">Status: /api/status</a></li>
-      <li><a href="/health">Health Check: /health</a></li>
-      <li><a href="/ready">Readiness Probe: /ready</a></li>
-    </ul>
-
-    <h2>Info</h2>
-    <p class="info">Server is running and ready to stream.</p>
-  </div>
-</body>
-</html>
-`))
 	})
 
 	// Settings management endpoints

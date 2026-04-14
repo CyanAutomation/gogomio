@@ -11,6 +11,7 @@ All Phase 2 objectives completed with full test coverage and production-ready co
 **Implemented:** Efficient, real-time MJPEG frame streaming with connection limiting.
 
 ### Features
+
 - **Efficient Frame Waiting**: `WaitFrame()` method replaces polling with smart timeout-based checks
 - **MJPEG Compliance**: Proper boundary markers, Content-Type headers, Content-Length
 - **Connection Limiting**: Enforces max concurrent stream connections (configurable)
@@ -18,6 +19,7 @@ All Phase 2 objectives completed with full test coverage and production-ready co
 - **Client Disconnection Handling**: Graceful cleanup on network errors
 
 ### Endpoint
+
 ```
 GET /stream.mjpg
   - Content-Type: multipart/x-mixed-replace; boundary=frame
@@ -26,10 +28,12 @@ GET /stream.mjpg
 ```
 
 ### Tests Added (2 new)
+
 - `TestMJPEGStreamingEndpoint` - Verifies boundary markers and headers
 - `TestStreamingConnectionLimit` - Confirms max connection enforcement
 
 ### FrameBuffer Improvements
+
 - Added `WaitFrame(timeout)` method for efficient stream waiting
 - Tests: `TestFrameBufferWaitFrameSuccess`, `TestFrameBufferWaitFrameTimeout`
 - Eliminates busy-waiting; uses polling with deadline-based timeout
@@ -45,6 +49,7 @@ GET /stream.mjpg
 ### New Package: `internal/settings`
 
 **Manager Features**
+
 - Thread-safe key-value storage with RWMutex
 - Atomic file writes (temp file + rename pattern)
 - Automatic directory creation
@@ -52,6 +57,7 @@ GET /stream.mjpg
 - Graceful error handling
 
 **API Methods**
+
 - `Set(key, value)` - Save setting with persistence
 - `Get(key)` - Retrieve value (returns nil if not exist)
 - `GetString(key, default)` - Type-safe string retrieval
@@ -63,6 +69,7 @@ GET /stream.mjpg
 ### Endpoints
 
 #### GET /api/settings
+
 ```bash
 curl http://localhost:8000/api/settings
 
@@ -77,6 +84,7 @@ Response:
 ```
 
 #### POST /api/settings (or PUT)
+
 ```bash
 curl -X POST http://localhost:8000/api/settings \
   -H "Content-Type: application/json" \
@@ -90,12 +98,14 @@ Response:
 ```
 
 ### Storage
+
 - **Location**: `/tmp/gogomio/settings.json`
 - **Format**: Pretty-printed JSON for editability
 - **Persistence**: Survives container restart
 - **Atomicity**: No partial writes; temp file approach prevents corruption
 
 ### Tests Added (9 new)
+
 - `TestSettingsSetGet` - Basic operations
 - `TestSettingsGetNonexistent` - Proper nil handling
 - `TestSettingsGetString` - Type conversion with defaults
@@ -117,12 +127,14 @@ Response:
 ## Test Coverage Summary
 
 ### New Tests Added (Phase 2)
+
 - **Frame Buffer**: 2 new (WaitFrame timing tests)
 - **API Handlers**: 2 new (MJPEG streaming tests)
 - **Settings**: 9 new (comprehensive package tests)
 - **Total New**: 13 tests
 
 ### Overall Test Statistics
+
 ```
 Total Tests: 57 (44 from Phase 1 + 13 from Phase 2)
 All Passing: ✅ YES
@@ -131,6 +143,7 @@ execution time: ~17 seconds
 ```
 
 ### Test Breakdown by Package
+
 ```
 internal/api        (10 tests, 3.6s)
   - All handler endpoints verified
@@ -159,12 +172,14 @@ internal/settings   (9 tests, 1.0s)
 ## Code Quality
 
 ### Complexity Analysis
+
 - **Binary Size**: 21.6 MB (unchanged)
 - **Docker Image**: 19.6 MB (multi-arch compatible)
 - **Code Style**: Consistent with Phase 1
 - **Race Detector**: All tests pass with `-race` flag
 
 ### Package Statistics
+
 ```
 internal/api        → +45 lines (settings handlers)
 internal/camera     → +70 lines (WaitFrame method)
@@ -172,6 +187,7 @@ internal/settings   → 165 lines new package (complete)
 ```
 
 ### API Endpoints (now 10 total)
+
 ```
 GET     /                      → HTML dashboard
 GET     /health                → Liveness probe
@@ -190,10 +206,12 @@ PUT     /api/settings          → Update settings [NEW]
 ## Docker Testing
 
 Multi-platform images tested:
+
 - ✅ linux/amd64 (development/testing)
 - ✅ linux/arm64 (Raspberry Pi)
 
 **Build & Test Process**
+
 ```bash
 # Build multi-arch
 docker buildx build \
@@ -215,6 +233,7 @@ curl http://localhost:8000/api/settings
 ## Next Phase: Real Camera Integration (Phase 2.3)
 
 ### Remaining Work for Full Functionality
+
 1. **Camera Hardware**
    - Evaluate: periph.io vs libcamera bindings vs V4L2
    - Decision: CGO likely required (camera access is OS-level)
@@ -237,12 +256,14 @@ curl http://localhost:8000/api/settings
 ## Performance Characteristics
 
 ### Streaming Performance
+
 - **Frame Rate**: Configurable (8-60 FPS tested)
 - **Latency**: ~100-200ms (mock camera + streaming overhead)
 - **Throughput**: ~2-5 Mbps at 640x480@24 FPS with 85% quality
 - **Connection Overhead**: ~1KB per frame metadata (MJPEG boundaries)
 
 ### Settings Performance  
+
 - **Write Latency**: <1ms (average)
 - **Read Latency**: <100μs
 - **Concurrent Readers**: No limit (RWMutex)
@@ -253,6 +274,7 @@ curl http://localhost:8000/api/settings
 ## Deployment Status
 
 ### Production Readiness
+
 - ✅ Multi-architecture Docker builds (amd64/arm64)
 - ✅ Health check endpoints
 - ✅ Connection limiting for resource protection
@@ -262,12 +284,14 @@ curl http://localhost:8000/api/settings
 - ⚠️ Real camera integration still pending (mock mode only)
 
 ### What's Ready for Deployment
+
 - Mock camera development/testing systems
 - CI/CD pipelines (no camera hardware required)
 - Docker orchestration infrastructure
 - Settings management for runtime configuration
 
 ### What's Needed for Production Raspberry Pi
+
 - Real camera driver integration (Phase 2.3)
 - Camera-specific error handling
 - Performance tuning for actual hardware
@@ -292,6 +316,7 @@ curl http://localhost:8000/api/settings
 ## Quick Start for Phase 2 Features
 
 ### Test Settings on Raspberry Pi
+
 ```bash
 # Deploy
 docker pull cyanautomation/gogomio:latest
@@ -316,6 +341,7 @@ ffplay http://raspberrypi.local:8000/stream.mjpg
 ```
 
 ### Verify Streaming
+
 ```bash
 # Capture one second of stream
 timeout 1 curl http://localhost:8000/stream.mjpg -o /tmp/test.mjpg
