@@ -1,0 +1,53 @@
+# Git repository
+.git
+.gitignore
+.gitattributes
+
+# GitHub
+.github
+
+# Version control
+.hg
+.svn
+.bzr
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build and deployment files
+.terraform
+.env
+.env.local
+docker-compose*.yml
+
+# Documentation (already in image if needed)
+*.md
+LICENSE
+QUICK_REFERENCE.md
+
+# Test and CI files
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Node and Python caches
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Docker files (not needed in image)
+Dockerfile
+.dockerignore
+
+# Misc
+*.log
+.cache/
+tmp/
+temp/
