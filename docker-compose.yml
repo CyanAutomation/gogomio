@@ -1,47 +1,48 @@
+---
+# GoGoMio Docker Compose Configuration
+
 services:
   gogomio:
-    image: docker.io/cyanautomation/gogomio:latest
-    # For Raspberry Pi, use multi-arch builds
-    platform: linux/arm64
-    ports:
-      - "8000:8000"
-    environment:
-      # Camera configuration
-      MIO_RESOLUTION: "640x480"
-      MIO_FPS: 24
-      MIO_TARGET_FPS: 24
-      MIO_JPEG_QUALITY: 90
-      MIO_MAX_STREAM_CONNECTIONS: 10
-      MIO_PORT: 8000
-      MIO_BIND_HOST: "0.0.0.0"
-      MIO_APP_MODE: "webcam"
-      MOCK_CAMERA: "false"
-    
-    # For real Raspberry Pi with CSI camera, uncomment device mappings
-    devices:
-      - /dev/video0:/dev/video0     # CSI camera device
-      # - /dev/mem:/dev/mem          # Required for libcamera (optional)
-    
-    # Volume for persistent state
-    volumes:
-      - /tmp/gogomio:/tmp
-    
-    # Resource limits (adjust for your Pi model)
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 256M
-        reservations:
-          cpus: '0.5'
-          memory: 128M
-    
-    # Restart policy
+    image: docker.io/cyanautomation/gogomio:${GOGOMIO_IMAGE_TAG:-latest}
+    container_name: gogomio
     restart: unless-stopped
-    
-    # Logging
+    env_file: ./.env
+
+    security_opt:
+      - no-new-privileges:true
+
+    platform: linux/arm64
+
+    environment:
+      TZ: ${TZ}
+      MIO_RESOLUTION: ${MIO_RESOLUTION}
+      MIO_FPS: ${MIO_FPS}
+      MIO_TARGET_FPS: ${MIO_TARGET_FPS}
+      MIO_JPEG_QUALITY: ${MIO_JPEG_QUALITY}
+      MIO_MAX_STREAM_CONNECTIONS: ${MIO_MAX_STREAM_CONNECTIONS}
+      MIO_PORT: ${GOGOMIO_PORT}
+      MIO_BIND_HOST: ${MIO_BIND_HOST}
+      MIO_APP_MODE: ${MIO_APP_MODE}
+      MOCK_CAMERA: ${MOCK_CAMERA}
+
+    ports:
+      - "${GOGOMIO_PORT}:${GOGOMIO_PORT}"
+
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+
+    devices:
+      - /dev/video0:/dev/video0
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${GOGOMIO_PORT}/ready >/dev/null || exit 1"]
+      interval: 2m
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
