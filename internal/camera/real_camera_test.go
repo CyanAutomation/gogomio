@@ -109,9 +109,9 @@ func TestRealCameraResolutionConfiguration(t *testing.T) {
 	rc := NewRealCamera()
 
 	testCases := []struct {
-		width  int
-		height int
-		fps    int
+		width   int
+		height  int
+		fps     int
 		quality int
 	}{
 		{1920, 1080, 30, 85},

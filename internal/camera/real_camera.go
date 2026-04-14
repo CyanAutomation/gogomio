@@ -107,14 +107,14 @@ func (rc *RealCamera) captureViaFFmpeg() ([]byte, error) {
 	// ffmpeg command to read from V4L2 device and output single JPEG
 	cmd := exec.Command(
 		"ffmpeg",
-		"-f", "video4linux2",                          // Input format
-		"-input_format", "mjpeg",                      // Request MJPEG if available
-		"-i", rc.devicePath,                           // Input device
-		"-frames:v", "1",                              // Capture 1 frame
-		"-c:v", "mjpeg",                               // Encode to JPEG
-		"-q:v", fmt.Sprintf("%d", rc.jpegQuality),   // JPEG quality (2-31, inverse)
-		"-f", "image2",                                // Output format
-		"-",                                           // Output to stdout
+		"-f", "video4linux2", // Input format
+		"-input_format", "mjpeg", // Request MJPEG if available
+		"-i", rc.devicePath, // Input device
+		"-frames:v", "1", // Capture 1 frame
+		"-c:v", "mjpeg", // Encode to JPEG
+		"-q:v", fmt.Sprintf("%d", rc.jpegQuality), // JPEG quality (2-31, inverse)
+		"-f", "image2", // Output format
+		"-", // Output to stdout
 	)
 
 	// Capture output
