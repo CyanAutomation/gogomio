@@ -241,8 +241,8 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 		done <- true
 	}()
 
-	// Let streaming run for a moment, then stop
-	time.Sleep(200 * time.Millisecond)
+	// Let streaming run for a moment to accumulate frames
+	time.Sleep(500 * time.Millisecond)
 
 	// Verify response headers
 	if ct := w.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
