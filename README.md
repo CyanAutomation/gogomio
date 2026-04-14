@@ -329,7 +329,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 |-------|----------|--------|
 | **v0.1** | Mock camera, MJPEG stream, API, Docker | ✅ Current |
 | **v0.2** | Real Pi camera (libcamera), Prometheus metrics | 🔄 Planned |
-| **v0.3** | Web UI, Hub discovery, Settings persistence | 📋 Planned |
+| **v0.3** | Web UI, Settings persistence | 📋 Planned |
 | **v0.4** | Rate limiting, Performance profiles, Advanced config | 📋 Future |
 
 ## Contributing
