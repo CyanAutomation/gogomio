@@ -14,7 +14,6 @@ services:
       MIO_MAX_STREAM_CONNECTIONS: 10
       MIO_PORT: 8000
       MIO_BIND_HOST: "0.0.0.0"
-      MIO_APP_MODE: "webcam"
       # Enable mock camera for development without Pi hardware
       MOCK_CAMERA: "true"
     

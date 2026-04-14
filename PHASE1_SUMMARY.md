@@ -144,7 +144,6 @@ HTTP Handlers (Chi Router)
 - ✋ No settings persistence to JSON yet
 - ✋ No web UI streaming viewer yet
 - ✋ No rate limiting on endpoints
-- ✋ No discovery/hub registration
 
 ## What's Ready for Phase 2
 

@@ -19,7 +19,6 @@ A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-p
 
 **Future (v0.2+)**
 
-- Hub management discovery and registration
 - Prometheus metrics endpoint
 - Rate limiting per endpoint
 - Web UI streaming viewer
@@ -129,9 +128,6 @@ export MIO_PORT=8000
 
 # Server bind address (default: 0.0.0.0)
 export MIO_BIND_HOST=0.0.0.0
-
-# App mode: "webcam" or "management" (default: webcam)
-export MIO_APP_MODE=webcam
 
 # Mock camera for development (default: false)
 export MOCK_CAMERA=false
