@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  gogomio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # For testing on any platform (amd64, arm64, etc.)
+    platform: linux/amd64
+    ports:
+      - "8000:8000"
+    environment:
+      # Camera configuration
+      MIO_RESOLUTION: "1280x720"
+      MIO_FPS: 30
+      MIO_TARGET_FPS: 30
+      MIO_JPEG_QUALITY: 85
+      MIO_MAX_STREAM_CONNECTIONS: 10
+      MIO_PORT: 8000
+      MIO_BIND_HOST: "0.0.0.0"
+      MIO_APP_MODE: "webcam"
+      # Enable mock camera for development without Pi hardware
+      MOCK_CAMERA: "true"
+    
+    # No device mappings needed for mock mode
+    
+    # Volume for logs
+    volumes:
+      - /tmp/gogomio:/tmp
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '1'
+          memory: 256M
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
