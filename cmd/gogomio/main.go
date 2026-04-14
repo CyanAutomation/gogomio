@@ -31,8 +31,15 @@ func main() {
 		log.Println("Using mock camera (development mode)")
 		cam = camera.NewMockCamera()
 	} else {
-		log.Println("Using real camera (Raspberry Pi CSI)")
-		cam = camera.NewMockCamera() // TODO: Replace with real camera implementation in Phase 2
+		// Try real camera first if device is available
+		realCam := camera.NewRealCamera()
+		if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+			log.Printf("Real camera unavailable (%v), falling back to mock camera", err)
+			cam = camera.NewMockCamera()
+		} else {
+			log.Println("Using real camera (Raspberry Pi CSI)")
+			cam = realCam
+		}
 	}
 
 	// Start camera
