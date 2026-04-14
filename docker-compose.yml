@@ -1,8 +1,6 @@
 services:
   gogomio:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: docker.io/cyanautomation/gogomio:latest
     # For Raspberry Pi, use multi-arch builds
     platform: linux/arm64
     ports:
