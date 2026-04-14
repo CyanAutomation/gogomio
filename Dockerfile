@@ -29,7 +29,14 @@ RUN CGO_ENABLED=0 go build \
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata ffmpeg
+RUN apk add --no-cache ca-certificates tzdata
+
+# Install ffmpeg - optional for real camera support
+# Use apk update before install to ensure latest package info
+# If ffmpeg fails, continue anyway (mock camera mode will still work)
+RUN apk update && \
+    apk add --no-cache ffmpeg || \
+    echo "WARNING: ffmpeg not available - real camera support disabled, use MOCK_CAMERA=true"
 
 # Create non-root user
 RUN adduser -D -u 1000 gogomio
