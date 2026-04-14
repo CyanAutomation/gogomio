@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 go build \
 FROM alpine:3.19
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata ffmpeg
 
 # Create non-root user
 RUN adduser -D -u 1000 gogomio
