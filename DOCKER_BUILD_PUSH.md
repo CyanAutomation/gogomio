@@ -3,6 +3,7 @@
 ## ✅ Build & Push Successful
 
 ### Build Information
+
 - **Date**: 2026-04-14
 - **Image Name**: `cyanautomation/gogomio`
 - **Tags**: `latest`, `0.1.0`
@@ -11,6 +12,7 @@
 - **Registry**: Docker Hub
 
 ### Build Process
+
 ```bash
 # Fixed go.mod version requirement (1.25.4 → 1.22)
 # Built with both tags:
@@ -25,6 +27,7 @@ docker build -t cyanautomation/gogomio:latest \
 ```
 
 ### Push Results
+
 ```
 cyanautomation/gogomio:latest
 ├─ SHA256: 8da43e76c4ba02f67d2941e760aa5cba906c6fcd8d155af93cd23e093795a190
@@ -38,12 +41,14 @@ cyanautomation/gogomio:0.1.0
 ```
 
 ### Verification - Pull from Docker Hub
+
 ```bash
 docker pull cyanautomation/gogomio:latest
 # ✅ Downloaded successfully from Docker Hub
 ```
 
 ### Verification - Container Test
+
 ```bash
 docker run --rm -e MOCK_CAMERA=true cyanautomation/gogomio:latest
 
@@ -77,11 +82,13 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 ## Fixes Applied
 
 ### Issue: Go Version Mismatch
+
 **Problem**: `go.mod` required Go 1.25.4, but Dockerfile uses golang:1.22-alpine
 
 **Solution**: Updated `go.mod` to require Go 1.22 (matches Dockerfile and available in Alpine)
 
 **File Changed**: [go.mod](go.mod)
+
 ```diff
 - go 1.25.4
 + go 1.22
@@ -90,6 +97,7 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 ## Next Steps for Continuous Deployment
 
 ### Multi-Platform Build (arm64 for RaspberryPi)
+
 To build for both arm64 and amd64, use Docker buildx:
 
 ```bash
@@ -106,6 +114,7 @@ docker buildx build \
 ```
 
 ### Automated CI/CD Pipeline Suggestion
+
 Consider adding GitHub Actions workflow:
 
 ```yaml
@@ -144,5 +153,6 @@ jobs:
 | Version Fixes | ✅ Applied (go.mod) |
 
 **Status**: Ready for deployment! Images available at:
-- https://hub.docker.com/r/cyanautomation/gogomio
+
+- <https://hub.docker.com/r/cyanautomation/gogomio>
 - Pull: `docker pull cyanautomation/gogomio:latest`

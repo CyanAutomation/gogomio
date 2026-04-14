@@ -75,5 +75,33 @@ func (fb *FrameBuffer) GetFrame() []byte {
 	return frameCopy
 }
 
+// WaitFrame waits for a new frame to become available within the timeout duration.
+// Returns nil if timeout is exceeded. This is used for efficient streaming.
+func (fb *FrameBuffer) WaitFrame(timeout time.Duration) []byte {
+	deadline := time.Now().Add(timeout)
+	pollInterval := 5 * time.Millisecond
+
+	for {
+		fb.condition.L.Lock()
+		frame := fb.frame
+		fb.condition.L.Unlock()
+
+		// If frame available, return it
+		if frame != nil {
+			frameCopy := make([]byte, len(frame))
+			copy(frameCopy, frame)
+			return frameCopy
+		}
+
+		// Check if deadline exceeded
+		if time.Now().After(deadline) {
+			return nil
+		}
+
+		// Sleep briefly before next poll
+		time.Sleep(pollInterval)
+	}
+}
+
 // Ensure FrameBuffer implements io.Writer
 var _ io.Writer = (*FrameBuffer)(nil)

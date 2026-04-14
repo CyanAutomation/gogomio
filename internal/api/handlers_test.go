@@ -223,6 +223,103 @@ func TestConnectionLimitNotification(t *testing.T) {
 	}
 }
 
+// TestMJPEGStreamingEndpoint tests the /stream.mjpg endpoint with frame transmission
+func TestMJPEGStreamingEndpoint(t *testing.T) {
+	router, cam, _ := setupTestServer(t)
+	defer cam.Stop()
+
+	// Wait for mock camera to generate frames
+	time.Sleep(600 * time.Millisecond)
+
+	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	w := httptest.NewRecorder()
+
+	// Run request in goroutine with timeout
+	done := make(chan bool)
+	go func() {
+		router.ServeHTTP(w, req)
+		done <- true
+	}()
+
+	// Let streaming run for a moment, then stop
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify response headers
+	if ct := w.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
+		t.Errorf("Content-Type: got %q, want multipart/x-mixed-replace", ct)
+	}
+
+	// Verify MJPEG boundary markers are present
+	responseBody := w.Body.String()
+	if responseBody == "" {
+		t.Fatal("no response body from stream")
+	}
+
+	if !contains(responseBody, "--frame") {
+		t.Error("MJPEG boundary marker --frame not found in response")
+	}
+
+	if !contains(responseBody, "Content-Type: image/jpeg") {
+		t.Error("JPEG Content-Type header not found in response")
+	}
+
+	if !contains(responseBody, "Content-Length:") {
+		t.Error("Content-Length header not found in response")
+	}
+
+	// Verify status code is 200 (streaming started)
+	if w.Code != http.StatusOK {
+		t.Errorf("status code: got %d, want 200", w.Code)
+	}
+}
+
+// TestStreamingConnectionLimit tests that max stream connections are enforced
+func TestStreamingConnectionLimit(t *testing.T) {
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 1, // Limit to 1 connection
+		Port:                 8000,
+		BindHost:             "0.0.0.0",
+		AppMode:              "webcam",
+		MockCamera:           true,
+	}
+
+	mockCam := camera.NewMockCamera()
+	if err := mockCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+		t.Fatalf("Failed to start mock camera: %v", err)
+	}
+	defer mockCam.Stop()
+
+	router := chi.NewRouter()
+	frame := NewFrameManager(mockCam, cfg)
+	RegisterHandlers(router, frame, cfg)
+
+	// Wait for frames to be available
+	time.Sleep(600 * time.Millisecond)
+
+	// First request should succeed
+	req1, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	w1 := httptest.NewRecorder()
+	go router.ServeHTTP(w1, req1)
+	time.Sleep(100 * time.Millisecond)
+
+	// Second request should be rejected (conn limit)
+	req2, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	w2 := httptest.NewRecorder()
+	router.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusTooManyRequests {
+		t.Errorf("second connection status: got %d, want %d", w2.Code, http.StatusTooManyRequests)
+	}
+
+	if !contains(w2.Body.String(), "Max stream connections") {
+		t.Error("error message not found in response")
+	}
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	for i := 0; i < len(s)-len(substr)+1; i++ {
