@@ -61,7 +61,6 @@ func TestConfigDefaults(t *testing.T) {
 	os.Unsetenv("MIO_TARGET_FPS")
 	os.Unsetenv("MIO_PORT")
 	os.Unsetenv("MIO_BIND_HOST")
-	os.Unsetenv("MIO_APP_MODE")
 
 	cfg := LoadFromEnv()
 
@@ -83,9 +82,6 @@ func TestConfigDefaults(t *testing.T) {
 	}
 	if cfg.BindHost != "0.0.0.0" {
 		t.Errorf("default bind host is %s, want 0.0.0.0", cfg.BindHost)
-	}
-	if cfg.AppMode != "webcam" {
-		t.Errorf("default app mode is %s, want webcam", cfg.AppMode)
 	}
 }
 
@@ -127,7 +123,6 @@ func TestConfigJSON(t *testing.T) {
 		MaxStreamConnections: 5,
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
-		AppMode:              "webcam",
 		MockCamera:           false,
 	}
 
@@ -160,7 +155,6 @@ func TestConfigToString(t *testing.T) {
 		MaxStreamConnections: 10,
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
-		AppMode:              "webcam",
 		MockCamera:           false,
 	}
 
@@ -197,7 +191,6 @@ func TestConfigTimeouts(t *testing.T) {
 		MaxStreamConnections: 10,
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
-		AppMode:              "webcam",
 		MockCamera:           false,
 	}
 

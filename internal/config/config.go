@@ -18,7 +18,6 @@ type Config struct {
 	MaxStreamConnections int    `json:"max_stream_connections"`
 	Port                 int    `json:"port"`
 	BindHost             string `json:"bind_host"`
-	AppMode              string `json:"app_mode"`
 	MockCamera           bool   `json:"mock_camera"`
 }
 
@@ -32,7 +31,6 @@ func LoadFromEnv() *Config {
 		MaxStreamConnections: 10,
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
-		AppMode:              "webcam",
 		MockCamera:           false,
 	}
 
@@ -82,11 +80,6 @@ func LoadFromEnv() *Config {
 	// Bind host
 	if host := os.Getenv("MIO_BIND_HOST"); host != "" {
 		cfg.BindHost = host
-	}
-
-	// App mode
-	if mode := os.Getenv("MIO_APP_MODE"); mode != "" {
-		cfg.AppMode = mode
 	}
 
 	// Mock camera

@@ -22,7 +22,6 @@ func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config
 		MaxStreamConnections: 10,
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
-		AppMode:              "webcam",
 		MockCamera:           true,
 	}
 
@@ -283,7 +282,6 @@ func TestStreamingConnectionLimit(t *testing.T) {
 		MaxStreamConnections: 1, // Limit to 1 connection
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
-		AppMode:              "webcam",
 		MockCamera:           true,
 	}
 
