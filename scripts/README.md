@@ -7,6 +7,7 @@ This directory contains helper scripts for building and managing GoGoMio Docker 
 **Purpose:** Build and push multi-architecture Docker images to Docker Hub (linux/amd64 and linux/arm64)
 
 **Features:**
+
 - ✅ Automatic buildx builder setup
 - ✅ Multi-platform build (x86_64 and ARM64)
 - ✅ Docker Hub authentication check
@@ -129,6 +130,7 @@ docker run -e MOCK_CAMERA=true -p 8000:8000 cyanautomation/gogomio:latest
 ## Preventing Future Issues
 
 **❌ Don't do this:**
+
 ```bash
 docker build -t cyanautomation/gogomio:latest .
 docker push cyanautomation/gogomio:latest
@@ -136,6 +138,7 @@ docker push cyanautomation/gogomio:latest
 ```
 
 **✅ Always do this:**
+
 ```bash
 ./scripts/build-multiarch.sh latest
 # or for versioned releases:
@@ -145,25 +148,31 @@ docker push cyanautomation/gogomio:latest
 ## Troubleshooting
 
 ### "buildx not available"
+
 ```bash
 # Upgrade Docker or enable buildx manually
 docker run --privileged --rm tonistiigi/binfmt --install all
 ```
 
 ### "Not logged into Docker Hub"
+
 ```bash
 docker login
 # Enter your credentials
 ```
 
 ### Build takes a very long time
+
 The ARM64 build uses QEMU emulation, which is **15-20x slower** than native compilation. This is normal and expected.
+
 - amd64 native: ~10-20 seconds
 - arm64 emulated: ~3-5 minutes
 - Total: ~5 minutes
 
 ### Push fails partway through
+
 The script uses `--push` to stream layers as they build. If the connection drops:
+
 1. Check your Docker Hub login: `docker login`
 2. Try again: `./scripts/build-multiarch.sh latest`
 3. Docker will resume from cached layers
