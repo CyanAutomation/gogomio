@@ -93,6 +93,30 @@ for tag in "${BUILD_TAGS[@]}"; do
     TAG_ARGS="${TAG_ARGS} -t ${tag}"
 done
 
+# Check if ARM64 emulation is available
+echo -e "\n${YELLOW}Checking QEMU ARM64 support...${NC}"
+if ! docker run --privileged --rm tonistiigi/binfmt:latest | grep -q '"linux/arm64"'; then
+    echo -e "${RED}❌ ARM64 emulation not available in this environment${NC}"
+    echo ""
+    echo -e "${YELLOW}This dev container only supports amd64. Three solutions:${NC}"
+    echo ""
+    echo -e "${BLUE}1. Use GitHub Actions (RECOMMENDED)${NC}"
+    echo -e "   Push to 'main' or create a git tag to trigger automatic build"
+    echo -e "   ${BLUE}git tag -a v0.2.0 -m 'Release 0.2.0'${NC}"
+    echo -e "   ${BLUE}git push origin v0.2.0${NC}"
+    echo -e "   View progress at: https://github.com/CyanAutomation/gogomio/actions"
+    echo ""
+    echo -e "${BLUE}2. Build only amd64 (dev/testing only)${NC}"
+    echo -e "   ${BLUE}docker buildx build --platform linux/amd64 -t cyanautomation/gogomio:latest --push .${NC}"
+    echo -e "   ⚠️  WARNING: This breaks Raspberry Pi compatibility"
+    echo ""
+    echo -e "${BLUE}3. Run from a system with ARM64 support${NC}"
+    echo -e "   Use native Linux on Raspberry Pi or enable nested virtualization"
+    echo ""
+    exit 1
+fi
+echo -e "${GREEN}✓ QEMU ARM64 support available${NC}"
+
 # Run the build
 if docker buildx build \
     --platform "${PLATFORMS}" \
