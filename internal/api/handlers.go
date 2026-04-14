@@ -394,7 +394,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "ok",
+		"status":  "ok",
 		"message": fmt.Sprintf("saved %d settings", len(req.Settings)),
 	})
 }

@@ -254,4 +254,3 @@ func TestFrameBufferWaitFrameTimeout(t *testing.T) {
 		t.Fatal("timeout in test")
 	}
 }
-
