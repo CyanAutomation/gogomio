@@ -47,6 +47,26 @@ func TestConnectionTrackerDecrement(t *testing.T) {
 	}
 }
 
+// TestConnectionTrackerDecrementBelowZeroClamps ensures extra decrements never make count negative.
+func TestConnectionTrackerDecrementBelowZeroClamps(t *testing.T) {
+	tracker := NewConnectionTracker()
+
+	tracker.Decrement()
+	tracker.Decrement()
+
+	if tracker.Count() != 0 {
+		t.Errorf("count is %d, want 0", tracker.Count())
+	}
+
+	tracker.Increment()
+	tracker.Decrement()
+	tracker.Decrement()
+
+	if tracker.Count() != 0 {
+		t.Errorf("count after extra decrement is %d, want 0", tracker.Count())
+	}
+}
+
 // TestConnectionTrackerTryIncrementSuccess tests successful increment within limit
 func TestConnectionTrackerTryIncrementSuccess(t *testing.T) {
 	tracker := NewConnectionTracker()
