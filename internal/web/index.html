@@ -473,8 +473,8 @@
             }
 
             stopStream() {
-                this.isStreaming = false;
                 this.imageElement.removeAttribute("src");
+                this.isStreaming = false;
                 this.imageElement.style.display = "none";
                 this.loadingElement.style.display = "block";
                 this.spinnerElement.style.display = "none";
