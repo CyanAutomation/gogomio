@@ -35,12 +35,22 @@ QUICK_REFERENCE.md
 .gitlab-ci.yml
 .travis.yml
 Jenkinsfile
+*_test.go
+coverage.out
+*.cover
+.test/
 
 # Node and Python caches
 node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Project-specific
+scripts/
+mock/
+testdata/
+.githooks
 
 # Docker files (not needed in image)
 Dockerfile
