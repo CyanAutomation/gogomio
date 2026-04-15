@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,8 +26,6 @@ type FrameManager struct {
 	captureMu       sync.Mutex
 	captureStarted  bool
 	clientCount     int64 // atomic counter for connected clients
-	lastFrameHash   [16]byte
-	lastFrameHashMu sync.RWMutex
 
 	// Channel to signal goroutine to stop
 	doneChan chan struct{}
@@ -145,7 +142,7 @@ func (fm *FrameManager) GetFrame() []byte {
 	defer fm.DecrementClients()
 
 	// Wait briefly for a frame to become available
-	frame := fm.frameBuffer.WaitFrame(100 * time.Millisecond)
+	frame, _ := fm.frameBuffer.WaitFrame(0, 100*time.Millisecond)
 	if frame != nil {
 		return frame
 	}
@@ -183,7 +180,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 	}
 
 	frameTimeout := fm.cfg.FrameTimeout()
-	lastFrame := fm.frameBuffer.GetFrame()
+	lastSeenVersion := fm.frameBuffer.CurrentVersion()
 	fm.captureMu.Lock()
 	streamDone := fm.doneChan
 	fm.captureMu.Unlock()
@@ -196,27 +193,12 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 		}
 
 		// Wait for new frame with timeout
-		frame := fm.frameBuffer.WaitFrame(frameTimeout)
+		frame, version := fm.frameBuffer.WaitFrame(lastSeenVersion, frameTimeout)
 		if frame == nil {
 			// Timeout waiting for frame, keep connection open or retry
 			continue
 		}
-
-		// Skip if same frame as last (use hash for fast comparison)
-		frameHash := md5.Sum(frame)
-		fm.lastFrameHashMu.RLock()
-		sameHash := frameHash == fm.lastFrameHash
-		fm.lastFrameHashMu.RUnlock()
-
-		if sameHash && len(frame) == len(lastFrame) {
-			continue
-		}
-
-		fm.lastFrameHashMu.Lock()
-		fm.lastFrameHash = frameHash
-		fm.lastFrameHashMu.Unlock()
-
-		lastFrame = frame
+		lastSeenVersion = version
 
 		// Write MJPEG boundary and frame
 		boundary := []byte("--frame\r\n")
