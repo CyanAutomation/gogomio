@@ -184,10 +184,13 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 
 	frameTimeout := fm.cfg.FrameTimeout()
 	lastFrame := fm.frameBuffer.GetFrame()
+	fm.captureMu.Lock()
+	done := fm.doneChan
+	fm.captureMu.Unlock()
 
 	for {
 		select {
-		case <-fm.doneChan:
+		case <-done:
 			return fmt.Errorf("stream stopped")
 		default:
 		}
