@@ -28,8 +28,8 @@ RUN CGO_ENABLED=0 go build \
 # Stage 2: Runtime
 FROM alpine:3.19
 
-# Install runtime dependencies (keep minimal for fast ARM64 builds)
-RUN apk add --no-cache ca-certificates tzdata
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates tzdata curl
 
 # Create non-root user
 RUN adduser -D -u 1000 gogomio
@@ -44,6 +44,10 @@ COPY --from=builder /build/gogomio /app/gogomio
 
 # Set ownership
 RUN chown -R gogomio:gogomio /app
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fsS http://localhost:8000/ready || exit 1
 
 # Switch to non-root user
 USER gogomio
