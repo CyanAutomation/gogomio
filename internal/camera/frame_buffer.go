@@ -10,7 +10,7 @@ import (
 // It implements io.Writer interface for use with Picamera2-style encoders.
 type FrameBuffer struct {
 	frame                 []byte
-	frameVersion          uint64
+	frameSeq              uint64
 	condition             *sync.Cond
 	stats                 *StreamStats
 	lastFrameMonotonic    int64
@@ -52,7 +52,7 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	fb.frame = make([]byte, len(buf))
 	copy(fb.frame, buf)
 	now = time.Now().UnixNano()
-	fb.frameVersion++
+	fb.frameSeq++
 	fb.lastFrameMonotonic = now
 	fb.stats.RecordFrame(now)
 
@@ -77,56 +77,49 @@ func (fb *FrameBuffer) GetFrame() []byte {
 	return frameCopy
 }
 
-// CurrentVersion returns the latest published frame version.
-func (fb *FrameBuffer) CurrentVersion() uint64 {
+// CurrentSequence returns the latest published frame sequence.
+func (fb *FrameBuffer) CurrentSequence() uint64 {
 	fb.condition.L.Lock()
 	defer fb.condition.L.Unlock()
-	return fb.frameVersion
+	return fb.frameSeq
 }
 
-// WaitFrame waits for a frame newer than lastSeenVersion within timeout.
-// Returns (nil, lastSeenVersion) if timeout is exceeded.
-func (fb *FrameBuffer) WaitFrame(lastSeenVersion uint64, timeout time.Duration) ([]byte, uint64) {
+// WaitFrame waits for a frame newer than lastSeenSeq within timeout.
+// Returns (nil, lastSeenSeq) if timeout is exceeded.
+func (fb *FrameBuffer) WaitFrame(lastSeenSeq uint64, timeout time.Duration) ([]byte, uint64) {
 	fb.condition.L.Lock()
 	defer fb.condition.L.Unlock()
 
-	if fb.frameVersion > lastSeenVersion && fb.frame != nil {
+	if fb.frameSeq > lastSeenSeq && fb.frame != nil {
 		frameCopy := make([]byte, len(fb.frame))
 		copy(frameCopy, fb.frame)
-		return frameCopy, fb.frameVersion
+		return frameCopy, fb.frameSeq
 	}
 
 	if timeout <= 0 {
-		return nil, lastSeenVersion
+		return nil, lastSeenSeq
 	}
 
 	timedOut := false
-	stopTimer := make(chan struct{})
-	defer close(stopTimer)
+	timer := time.AfterFunc(timeout, func() {
+		fb.condition.L.Lock()
+		timedOut = true
+		fb.condition.Broadcast()
+		fb.condition.L.Unlock()
+	})
+	defer timer.Stop()
 
-	go func() {
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-
-		select {
-		case <-timer.C:
-			timedOut = true
-			fb.condition.Broadcast()
-		case <-stopTimer:
-		}
-	}()
-
-	for {
+	for fb.frameSeq <= lastSeenSeq && !timedOut {
 		fb.condition.Wait()
-		if fb.frameVersion > lastSeenVersion && fb.frame != nil {
-			frameCopy := make([]byte, len(fb.frame))
-			copy(frameCopy, fb.frame)
-			return frameCopy, fb.frameVersion
-		}
-		if timedOut {
-			return nil, lastSeenVersion
-		}
 	}
+
+	if fb.frameSeq <= lastSeenSeq || fb.frame == nil {
+		return nil, lastSeenSeq
+	}
+
+	frameCopy := make([]byte, len(fb.frame))
+	copy(frameCopy, fb.frame)
+	return frameCopy, fb.frameSeq
 }
 
 // Ensure FrameBuffer implements io.Writer
