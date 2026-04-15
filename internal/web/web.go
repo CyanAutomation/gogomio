@@ -28,6 +28,9 @@ func RegisterStaticFiles(r *chi.Mux) {
 			http.Error(w, "Failed to load UI", http.StatusInternalServerError)
 			return
 		}
-		w.Write(data)
+		if _, err := w.Write(data); err != nil {
+			// Client likely disconnected
+			_ = err
+		}
 	})
 }

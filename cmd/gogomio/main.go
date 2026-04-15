@@ -71,7 +71,9 @@ func main() {
 	go func() {
 		<-sigChan
 		log.Println("Shutdown signal received, stopping server...")
-		server.Close()
+		if err := server.Close(); err != nil {
+			log.Printf("Error closing server: %v", err)
+		}
 	}()
 
 	// Start server

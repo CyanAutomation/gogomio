@@ -142,7 +142,10 @@ func (rc *RealCamera) captureViaFFmpeg() ([]byte, error) {
 			return nil, fmt.Errorf("ffmpeg error: %w (stderr: %s)", err, stderr.String())
 		}
 	case <-time.After(2 * time.Second):
-		cmd.Process.Kill()
+		if err := cmd.Process.Kill(); err != nil {
+			// Process may already be dead, ignore error
+			_ = err
+		}
 		return nil, fmt.Errorf("ffmpeg capture timeout")
 	}
 

@@ -37,7 +37,7 @@ func TestMockCameraCaptureFrame(t *testing.T) {
 		t.Fatalf("CaptureFrame failed: %v", err)
 	}
 
-	if frame == nil || len(frame) == 0 {
+	if len(frame) == 0 {
 		t.Error("captured frame is empty")
 	}
 

@@ -107,10 +107,18 @@ func TestSnapshotEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer cam.Stop()
 
-	// Wait for first frame to be captured and buffered
-	// Mock camera takes time to encode JPEG, especially with race detector on
-	time.Sleep(500 * time.Millisecond)
+	// Pre-populate frame by making a stream request in background
+	// This ensures capture loop is started and frame buffer has content
+	go func() {
+		req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+	}()
 
+	// Wait for frame to be captured and buffered
+	time.Sleep(200 * time.Millisecond)
+
+	// Now test snapshot endpoint
 	req, _ := http.NewRequest("GET", "/snapshot.jpg", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -227,8 +235,8 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer cam.Stop()
 
-	// Wait for mock camera to generate frames
-	time.Sleep(600 * time.Millisecond)
+	// Wait for mock camera to generate frames with lazy capture
+	time.Sleep(800 * time.Millisecond)
 
 	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
 	w := httptest.NewRecorder()
@@ -241,16 +249,18 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 	}()
 
 	// Let streaming run for a moment to accumulate frames
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(600 * time.Millisecond)
 
-	// Verify response headers
+	// Verify response headers (safe to check anytime during streaming)
 	if ct := w.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
 		t.Errorf("Content-Type: got %q, want multipart/x-mixed-replace", ct)
 	}
 
-	// Verify MJPEG boundary markers are present
+	// Read response body - httptest.ResponseRecorder buffers everything
 	responseBody := w.Body.String()
-	if responseBody == "" {
+	
+	// Verify MJPEG boundary markers are present
+	if len(responseBody) == 0 {
 		t.Fatal("no response body from stream")
 	}
 
