@@ -105,7 +105,9 @@ func (fm *FrameManager) stopCapture() {
 func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	defer func() {
 		fm.captureMu.Lock()
-		fm.captureStarted = false
+		if fm.doneChan == done {
+			fm.captureStarted = false
+		}
 		fm.captureMu.Unlock()
 	}()
 
