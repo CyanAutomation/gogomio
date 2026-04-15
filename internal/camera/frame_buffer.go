@@ -10,6 +10,7 @@ import (
 // It implements io.Writer interface for use with Picamera2-style encoders.
 type FrameBuffer struct {
 	frame                 []byte
+	frameVersion          uint64
 	condition             *sync.Cond
 	stats                 *StreamStats
 	lastFrameMonotonic    int64
@@ -51,6 +52,7 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	fb.frame = make([]byte, len(buf))
 	copy(fb.frame, buf)
 	now = time.Now().UnixNano()
+	fb.frameVersion++
 	fb.lastFrameMonotonic = now
 	fb.stats.RecordFrame(now)
 
@@ -75,43 +77,57 @@ func (fb *FrameBuffer) GetFrame() []byte {
 	return frameCopy
 }
 
-// WaitFrame waits for a new frame to become available within the timeout duration.
-// Uses condition variable for efficient waiting with short polling intervals.
-// Returns nil if timeout is exceeded. This is used for efficient streaming.
-func (fb *FrameBuffer) WaitFrame(timeout time.Duration) []byte {
-	deadline := time.Now().Add(timeout)
-	pollInterval := 50 * time.Millisecond // Increased from 5ms to 50ms (still very responsive)
+// CurrentVersion returns the latest published frame version.
+func (fb *FrameBuffer) CurrentVersion() uint64 {
+	fb.condition.L.Lock()
+	defer fb.condition.L.Unlock()
+	return fb.frameVersion
+}
+
+// WaitFrame waits for a frame newer than lastSeenVersion within timeout.
+// Returns (nil, lastSeenVersion) if timeout is exceeded.
+func (fb *FrameBuffer) WaitFrame(lastSeenVersion uint64, timeout time.Duration) ([]byte, uint64) {
+	fb.condition.L.Lock()
+	defer fb.condition.L.Unlock()
+
+	if fb.frameVersion > lastSeenVersion && fb.frame != nil {
+		frameCopy := make([]byte, len(fb.frame))
+		copy(frameCopy, fb.frame)
+		return frameCopy, fb.frameVersion
+	}
+
+	if timeout <= 0 {
+		return nil, lastSeenVersion
+	}
+
+	timedOut := false
+	stopTimer := make(chan struct{})
+	defer close(stopTimer)
+
+	go func() {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+			fb.condition.L.Lock()
+			timedOut = true
+			fb.condition.Broadcast()
+			fb.condition.L.Unlock()
+		case <-stopTimer:
+		}
+	}()
 
 	for {
-		fb.condition.L.Lock()
-		frame := fb.frame
-		fb.condition.L.Unlock()
-
-		// If frame available, return it
-		if frame != nil {
-			frameCopy := make([]byte, len(frame))
-			copy(frameCopy, frame)
-			return frameCopy
+		fb.condition.Wait()
+		if fb.frameVersion > lastSeenVersion && fb.frame != nil {
+			frameCopy := make([]byte, len(fb.frame))
+			copy(frameCopy, fb.frame)
+			return frameCopy, fb.frameVersion
 		}
-
-		// Check if deadline exceeded
-		if time.Now().After(deadline) {
-			return nil
+		if timedOut {
+			return nil, lastSeenVersion
 		}
-
-		// Calculate remaining time
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return nil
-		}
-
-		// Use shorter sleep interval to maintain responsiveness
-		if remaining < pollInterval {
-			pollInterval = remaining
-		}
-
-		// Sleep briefly before next poll
-		time.Sleep(pollInterval)
 	}
 }
 

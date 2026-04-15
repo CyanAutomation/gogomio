@@ -214,7 +214,7 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 
 	done := make(chan []byte)
 	go func() {
-		frame := fb.WaitFrame(2 * time.Second)
+		frame, _ := fb.WaitFrame(0, 2*time.Second)
 		done <- frame
 	}()
 
@@ -241,7 +241,7 @@ func TestFrameBufferWaitFrameTimeout(t *testing.T) {
 
 	done := make(chan []byte)
 	go func() {
-		frame := fb.WaitFrame(100 * time.Millisecond)
+		frame, _ := fb.WaitFrame(0, 100*time.Millisecond)
 		done <- frame
 	}()
 
