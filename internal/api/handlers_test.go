@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -397,6 +398,37 @@ func TestFrameManagerCaptureLoopSingleGoroutineAcrossRapidClientFlaps(t *testing
 
 	if max := atomic.LoadInt64(&cam.maxActive); max > 1 {
 		t.Fatalf("expected at most one active capture loop during rapid client flaps, saw %d", max)
+	}
+}
+
+func TestFrameManagerStreamAndCaptureLifecycleRaceFree(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
+	cam := &captureLoopCountingCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	for i := 0; i < 20; i++ {
+		w := httptest.NewRecorder()
+		errCh := make(chan error, 1)
+
+		go func() {
+			errCh <- fm.StreamFrame(w, cfg.MaxStreamConnections)
+		}()
+
+		time.Sleep(15 * time.Millisecond)
+		fm.stopCapture()
+
+		select {
+		case err := <-errCh:
+			if err == nil {
+				t.Fatalf("expected stream to stop with an error")
+			}
+			if !strings.Contains(err.Error(), "stream stopped") {
+				t.Fatalf("expected stream stopped error, got %v", err)
+			}
+		case <-time.After(500 * time.Millisecond):
+			t.Fatalf("stream did not stop after capture shutdown on iteration %d", i)
+		}
 	}
 }
 
