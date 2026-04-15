@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +12,33 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/go-chi/chi/v5"
 )
+
+type captureLoopCountingCamera struct {
+	activeCaptures int64
+	maxActive      int64
+}
+
+func (c *captureLoopCountingCamera) Start(_, _, _, _ int) error { return nil }
+func (c *captureLoopCountingCamera) Stop() error                { return nil }
+func (c *captureLoopCountingCamera) IsReady() bool              { return true }
+
+func (c *captureLoopCountingCamera) CaptureFrame() ([]byte, error) {
+	active := atomic.AddInt64(&c.activeCaptures, 1)
+	defer atomic.AddInt64(&c.activeCaptures, -1)
+
+	for {
+		currentMax := atomic.LoadInt64(&c.maxActive)
+		if active <= currentMax {
+			break
+		}
+		if atomic.CompareAndSwapInt64(&c.maxActive, currentMax, active) {
+			break
+		}
+	}
+
+	time.Sleep(4 * time.Millisecond)
+	return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil
+}
 
 // setupTestServer creates a test Chi router with API handlers
 func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config) {
@@ -325,6 +353,50 @@ func TestStreamingConnectionLimit(t *testing.T) {
 
 	if !contains(w2.Body.String(), "Max stream connections") {
 		t.Error("error message not found in response")
+	}
+}
+
+func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	fm.startCapture()
+
+	startDone := make(chan struct{})
+	for i := 0; i < 10; i++ {
+		go func() {
+			fm.startCapture()
+			startDone <- struct{}{}
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		<-startDone
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	fm.stopCapture()
+
+	if max := atomic.LoadInt64(&cam.maxActive); max > 1 {
+		t.Fatalf("expected at most one active capture loop, saw %d", max)
+	}
+}
+
+func TestFrameManagerCaptureLoopSingleGoroutineAcrossRapidClientFlaps(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	for i := 0; i < 15; i++ {
+		fm.IncrementClients()
+		time.Sleep(6 * time.Millisecond)
+		fm.DecrementClients()
+	}
+
+	if max := atomic.LoadInt64(&cam.maxActive); max > 1 {
+		t.Fatalf("expected at most one active capture loop during rapid client flaps, saw %d", max)
 	}
 }
 
