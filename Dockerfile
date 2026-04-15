@@ -50,11 +50,8 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata curl
 
-# Conditionally install ffmpeg for real camera support
-RUN if [ "${INSTALL_FFMPEG}" = "true" ]; then \
-      echo "Installing ffmpeg for real camera support..."; \
-      apk add --no-cache ffmpeg; \
-    fi
+# Install ffmpeg for real camera support (V4L2 camera access on Raspberry Pi)
+RUN apk add --no-cache ffmpeg
 
 # Create non-root user with explicit umask
 RUN adduser -D -u 1000 gogomio && \
