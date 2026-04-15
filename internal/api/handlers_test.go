@@ -432,6 +432,81 @@ func TestFrameManagerStreamAndCaptureLifecycleRaceFree(t *testing.T) {
 	}
 }
 
+func TestFrameManagerDecrementClientsClampsAtZeroAndTracksImbalance(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	fm.DecrementClients()
+	fm.DecrementClients()
+
+	if count := atomic.LoadInt64(&fm.clientCount); count != 0 {
+		t.Fatalf("client count = %d, want 0", count)
+	}
+
+	if imbalance := atomic.LoadInt64(&fm.clientImbalance); imbalance != 2 {
+		t.Fatalf("client imbalance count = %d, want 2", imbalance)
+	}
+
+	fm.captureMu.Lock()
+	started := fm.captureStarted
+	fm.captureMu.Unlock()
+	if started {
+		t.Fatalf("capture should not be running after extra decrements from zero")
+	}
+}
+
+func TestFrameManagerClientLifecycleWithExtraDecrementRemainsStable(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	fm.IncrementClients()
+	waitForCaptureState(t, fm, true)
+
+	fm.DecrementClients()
+	waitForCaptureState(t, fm, false)
+
+	// Extra decrement should clamp and record imbalance, but not break future transitions.
+	fm.DecrementClients()
+
+	if count := atomic.LoadInt64(&fm.clientCount); count != 0 {
+		t.Fatalf("client count after extra decrement = %d, want 0", count)
+	}
+	if imbalance := atomic.LoadInt64(&fm.clientImbalance); imbalance != 1 {
+		t.Fatalf("client imbalance count = %d, want 1", imbalance)
+	}
+
+	fm.IncrementClients()
+	waitForCaptureState(t, fm, true)
+
+	fm.DecrementClients()
+	waitForCaptureState(t, fm, false)
+}
+
+func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		fm.captureMu.Lock()
+		started := fm.captureStarted
+		fm.captureMu.Unlock()
+
+		if started == want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	fm.captureMu.Lock()
+	got := fm.captureStarted
+	fm.captureMu.Unlock()
+	t.Fatalf("captureStarted = %v, want %v", got, want)
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	for i := 0; i < len(s)-len(substr)+1; i++ {

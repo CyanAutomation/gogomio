@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ type FrameManager struct {
 	captureMu       sync.Mutex
 	captureStarted  bool
 	clientCount     int64 // atomic counter for connected clients
+	clientImbalance int64 // atomic counter for decrement calls when clientCount is already 0
 
 	// Channel to signal goroutine to stop
 	doneChan chan struct{}
@@ -64,9 +66,23 @@ func (fm *FrameManager) IncrementClients() {
 
 // DecrementClients decrements the client count and stops capture if this is the last client.
 func (fm *FrameManager) DecrementClients() {
-	new := atomic.AddInt64(&fm.clientCount, -1)
-	if new == 0 {
-		fm.stopCapture()
+	for {
+		current := atomic.LoadInt64(&fm.clientCount)
+		if current <= 0 {
+			if atomic.CompareAndSwapInt64(&fm.clientCount, current, 0) {
+				imbalanceCount := atomic.AddInt64(&fm.clientImbalance, 1)
+				log.Printf("frame manager client count imbalance detected: decrement at count=%d, clamped to 0 (total imbalances=%d)", current, imbalanceCount)
+				return
+			}
+			continue
+		}
+
+		if atomic.CompareAndSwapInt64(&fm.clientCount, current, current-1) {
+			if current-1 == 0 {
+				fm.stopCapture()
+			}
+			return
+		}
 	}
 }
 
