@@ -39,6 +39,10 @@ func (m *Manager) Set(key string, value interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.data == nil {
+		m.data = make(map[string]interface{})
+	}
+
 	m.data[key] = value
 	return m.persist()
 }
@@ -166,6 +170,10 @@ func (m *Manager) load() error {
 	var loaded map[string]interface{}
 	if err := json.Unmarshal(data, &loaded); err != nil {
 		return fmt.Errorf("failed to unmarshal settings: %w", err)
+	}
+
+	if loaded == nil {
+		loaded = make(map[string]interface{})
 	}
 
 	m.data = loaded
