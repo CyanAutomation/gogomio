@@ -11,14 +11,14 @@ import (
 
 // MockCamera is a testing implementation that generates synthetic JPEG frames.
 type MockCamera struct {
-	mu              sync.RWMutex
-	ready           bool
-	width           int
-	height          int
-	fps             int
-	jpegQuality     int
-	lastFrameTime   time.Time
-	frameCounter    int64
+	mu            sync.RWMutex
+	ready         bool
+	width         int
+	height        int
+	fps           int
+	jpegQuality   int
+	lastFrameTime time.Time
+	frameCounter  int64
 }
 
 // NewMockCamera creates a new mock camera.
@@ -133,10 +133,10 @@ func (mc *MockCamera) generateTestFrame(width, height, quality int, frameNum int
 
 			// Write directly to pixel buffer (R, G, B, A at stride)
 			idx := offset + x*4
-			pix[idx] = r       // R
-			pix[idx+1] = g     // G
-			pix[idx+2] = b     // B
-			pix[idx+3] = 255   // A (always opaque)
+			pix[idx] = r     // R
+			pix[idx+1] = g   // G
+			pix[idx+2] = b   // B
+			pix[idx+3] = 255 // A (always opaque)
 		}
 	}
 
