@@ -36,6 +36,7 @@ RUN CGO_ENABLED=0 go build \
 FROM alpine:3.19
 
 # Build arguments for runtime stage
+ARG VERSION
 ARG INSTALL_FFMPEG
 ARG PORT
 
@@ -44,8 +45,7 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.description="Motion detection and MJPEG streaming service for cameras" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.authors="CyanAutomation" \
-      org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio" \
-      org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+      org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata curl
@@ -71,6 +71,9 @@ COPY --from=builder /build/gogomio /app/gogomio
 
 # Set ownership
 RUN chown -R gogomio:gogomio /app
+
+# Set environment variables
+ENV PORT=${PORT}
 
 # Expose configured port
 EXPOSE ${PORT}
