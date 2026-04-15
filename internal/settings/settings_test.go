@@ -236,3 +236,23 @@ func TestSettingsDirectoryCreation(t *testing.T) {
 		t.Errorf("settings file not created: %v", err)
 	}
 }
+
+// TestSettingsSetAfterNullFile tests setting values after loading a JSON null payload.
+func TestSettingsSetAfterNullFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "null_settings.json")
+
+	if err := os.WriteFile(settingsPath, []byte("null"), 0644); err != nil {
+		t.Fatalf("failed to write null settings file: %v", err)
+	}
+
+	m := NewManager(settingsPath)
+
+	if err := m.Set("key", "value"); err != nil {
+		t.Fatalf("Set returned error after loading null file: %v", err)
+	}
+
+	if got := m.Get("key"); got != "value" {
+		t.Fatalf("Get returned %v, want value", got)
+	}
+}
