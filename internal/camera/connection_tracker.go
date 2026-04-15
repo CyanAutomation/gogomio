@@ -24,9 +24,21 @@ func (ct *ConnectionTracker) Increment() {
 }
 
 // Decrement decrements the connection count.
-// Safe to call even if count is 0 (will go negative, but caller should track state).
+// Safe to call even if count is 0 (count is clamped at 0).
 func (ct *ConnectionTracker) Decrement() {
-	atomic.AddInt64(&ct.count, -1)
+	for {
+		current := atomic.LoadInt64(&ct.count)
+		if current <= 0 {
+			if atomic.CompareAndSwapInt64(&ct.count, current, 0) {
+				return
+			}
+			continue
+		}
+
+		if atomic.CompareAndSwapInt64(&ct.count, current, current-1) {
+			return
+		}
+	}
 }
 
 // TryIncrement attempts to increment the count if below maxConnections.
