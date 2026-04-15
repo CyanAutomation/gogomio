@@ -24,7 +24,6 @@ type FrameManager struct {
 	streamStats     *camera.StreamStats
 	connTracker     *camera.ConnectionTracker
 	settingsM       *settings.Manager
-	mu              sync.RWMutex
 	captureMu       sync.Mutex
 	captureStarted  bool
 	clientCount     int64 // atomic counter for connected clients
@@ -124,7 +123,7 @@ func (fm *FrameManager) captureLoop() {
 		}
 
 		if frame != nil {
-			fm.frameBuffer.Write(frame)
+			_, _ = fm.frameBuffer.Write(frame)
 		}
 	}
 }
@@ -157,7 +156,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 	// Check connection limit
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("Max stream connections reached (limit: 2)"))
+		_, _ = w.Write([]byte("Max stream connections reached (limit: 2)"))
 		return fmt.Errorf("connection limit exceeded")
 	}
 	defer fm.connTracker.Decrement()
@@ -278,7 +277,8 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	// Stream endpoints
 	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
 		if err := fm.StreamFrame(w, cfg.MaxStreamConnections); err != nil {
-			// Client disconnected or error occurred
+			// Client disconnected or error occurred - this is normal
+			_ = err
 		}
 	})
 
@@ -323,32 +323,39 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		// Client likely disconnected, ignore error
+		_ = err
+	}
 }
 
 func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	if !fm.cam.IsReady() {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "initializing"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "initializing"}); err != nil {
+			_ = err
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
+		_ = err
+	}
 }
 
 func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	frame := fm.GetFrame()
 	if frame == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		w.Write([]byte("Camera not ready"))
+		_, _ = w.Write([]byte("Camera not ready"))
 		return
 	}
 
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Write(frame)
+	_, _ = w.Write(frame)
 }
 
 func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
@@ -367,7 +374,9 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		_ = err
+	}
 }
 
 func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
@@ -382,7 +391,9 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, s
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		_ = err
+	}
 }
 
 // Settings handlers
@@ -391,9 +402,11 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager)
 	settings := fm.settingsM.GetAll()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"settings": settings,
-	})
+	}); err != nil {
+		_ = err
+	}
 }
 
 // SettingsUpdateRequest represents a request body for updating settings

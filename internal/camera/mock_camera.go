@@ -149,7 +149,10 @@ func (mc *MockCamera) generateTestFrame(width, height, quality int, frameNum int
 	if err != nil {
 		// Fallback to lower quality if encoding fails
 		buf.Reset()
-		jpeg.Encode(buf, img, &jpeg.Options{Quality: 75})
+		if err := jpeg.Encode(buf, img, &jpeg.Options{Quality: 75}); err != nil {
+			// If both fail, return error (shouldn't happen normally)
+			return nil
+		}
 	}
 
 	return buf.Bytes()

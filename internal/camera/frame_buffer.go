@@ -14,7 +14,6 @@ type FrameBuffer struct {
 	stats                 *StreamStats
 	lastFrameMonotonic    int64
 	targetFrameIntervalNS int64
-	bufferPool            *sync.Pool // Pool for reusable frame buffers
 }
 
 // NewFrameBuffer creates a new FrameBuffer.
@@ -23,12 +22,6 @@ func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 	fb := &FrameBuffer{
 		condition: sync.NewCond(&sync.Mutex{}),
 		stats:     stats,
-		bufferPool: &sync.Pool{
-			New: func() interface{} {
-				// Pre-allocate buffers sized for typical JPEG frames (~20-30KB)
-				return make([]byte, 0, 32*1024)
-			},
-		},
 	}
 	if targetFPS > 0 {
 		fb.targetFrameIntervalNS = 1e9 / int64(targetFPS)
@@ -54,32 +47,14 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	fb.condition.L.Lock()
 	defer fb.condition.L.Unlock()
 
-	// Reuse buffer from pool if possible
-	pooledBuf := fb.bufferPool.Get().([]byte)
-	if cap(pooledBuf) < size {
-		// Pool buffer too small, allocate larger
-		pooledBuf = make([]byte, size)
-	} else {
-		pooledBuf = pooledBuf[:size]
-	}
-
-	// Copy frame data into reused buffer
-	copy(pooledBuf, buf)
-
-	// Return old buffer to pool if it's a reasonable size
-	if fb.frame != nil && cap(fb.frame) < 64*1024 {
-		fbCopy := fb.frame
-		fbCopy = fbCopy[:0]
-		fb.bufferPool.Put(fbCopy)
-	}
-
 	// Store frame and update timestamp
-	fb.frame = pooledBuf
+	fb.frame = make([]byte, len(buf))
+	copy(fb.frame, buf)
 	now = time.Now().UnixNano()
 	fb.lastFrameMonotonic = now
 	fb.stats.RecordFrame(now)
 
-	// Signal all waiting readers (use Broadcast for correct semantics with condition.Wait())
+	// Signal all waiting readers
 	fb.condition.Broadcast()
 
 	return size, nil
