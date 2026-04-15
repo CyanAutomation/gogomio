@@ -217,7 +217,7 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 		seq   uint64
 	})
 	go func() {
-		frame, seq := fb.WaitFrame(0, 2*time.Second)
+		frame, seq := fb.WaitFrame(2*time.Second, 0)
 		done <- struct {
 			frame []byte
 			seq   uint64
@@ -253,7 +253,7 @@ func TestFrameBufferWaitFrameIgnoresUnchangedFrame(t *testing.T) {
 	currentSeq := fb.CurrentSequence()
 
 	start := time.Now()
-	frame, seq := fb.WaitFrame(currentSeq, 120*time.Millisecond)
+	frame, seq := fb.WaitFrame(120*time.Millisecond, currentSeq)
 	elapsed := time.Since(start)
 
 	if frame != nil {
@@ -277,7 +277,7 @@ func TestFrameBufferWaitFrameTimeout(t *testing.T) {
 		seq   uint64
 	})
 	go func() {
-		frame, seq := fb.WaitFrame(0, 100*time.Millisecond)
+		frame, seq := fb.WaitFrame(100*time.Millisecond, 0)
 		done <- struct {
 			frame []byte
 			seq   uint64
