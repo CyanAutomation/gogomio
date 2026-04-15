@@ -66,7 +66,7 @@ func (fm *FrameManager) IncrementClients() {
 
 // DecrementClients decrements the client count and stops capture if this is the last client.
 func (fm *FrameManager) DecrementClients() {
-	for {
+	for attempts := 0; attempts < 100; attempts++ {
 		current := atomic.LoadInt64(&fm.clientCount)
 		if current <= 0 {
 			if atomic.CompareAndSwapInt64(&fm.clientCount, current, 0) {
@@ -84,6 +84,8 @@ func (fm *FrameManager) DecrementClients() {
 			return
 		}
 	}
+	// Fallback: force clamp to 0 after max attempts
+	atomic.StoreInt64(&fm.clientCount, 0)
 }
 
 // startCapture starts the capture loop if not already running.
