@@ -86,7 +86,7 @@ func (fb *FrameBuffer) CurrentSequence() uint64 {
 
 // WaitFrame waits for a frame newer than lastSeenSeq within timeout.
 // Returns (nil, lastSeenSeq) if timeout is exceeded.
-func (fb *FrameBuffer) WaitFrame(lastSeenSeq uint64, timeout time.Duration) ([]byte, uint64) {
+func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
 	fb.condition.L.Lock()
 	defer fb.condition.L.Unlock()
 

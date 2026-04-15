@@ -1,10 +1,12 @@
 package api
 
 import (
+	"errors"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,6 +41,59 @@ func (c *captureLoopCountingCamera) CaptureFrame() ([]byte, error) {
 
 	time.Sleep(4 * time.Millisecond)
 	return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil
+}
+
+type repeatedFrameCamera struct{}
+
+func (c *repeatedFrameCamera) Start(_, _, _, _ int) error { return nil }
+func (c *repeatedFrameCamera) Stop() error                { return nil }
+func (c *repeatedFrameCamera) IsReady() bool              { return true }
+func (c *repeatedFrameCamera) CaptureFrame() ([]byte, error) {
+	time.Sleep(5 * time.Millisecond)
+	return []byte{0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9}, nil
+}
+
+var errStopStream = errors.New("stop stream")
+
+type countingStreamWriter struct {
+	header       http.Header
+	targetFrames int
+
+	mu         sync.Mutex
+	boundaries int
+}
+
+func newCountingStreamWriter(targetFrames int) *countingStreamWriter {
+	return &countingStreamWriter{
+		header:       make(http.Header),
+		targetFrames: targetFrames,
+	}
+}
+
+func (w *countingStreamWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *countingStreamWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if string(p) == "--frame\r\n" {
+		w.boundaries++
+		if w.boundaries >= w.targetFrames {
+			return 0, errStopStream
+		}
+	}
+	return len(p), nil
+}
+
+func (w *countingStreamWriter) WriteHeader(_ int) {}
+func (w *countingStreamWriter) Flush()            {}
+
+func (w *countingStreamWriter) BoundaryCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.boundaries
 }
 
 // setupTestServer creates a test Chi router with API handlers
@@ -429,6 +484,51 @@ func TestFrameManagerStreamAndCaptureLifecycleRaceFree(t *testing.T) {
 		case <-time.After(500 * time.Millisecond):
 			t.Fatalf("stream did not stop after capture shutdown on iteration %d", i)
 		}
+	}
+}
+
+func TestStreamFrameEmitsRepeatedIdenticalFramesBySequence(t *testing.T) {
+	cfg := &config.Config{FPS: 120, TargetFPS: 120, MaxStreamConnections: 2}
+	cam := &repeatedFrameCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	writer := newCountingStreamWriter(3)
+	err := fm.StreamFrame(writer, cfg.MaxStreamConnections)
+	if !errors.Is(err, errStopStream) {
+		t.Fatalf("expected stream stop error, got %v", err)
+	}
+
+	if got := writer.BoundaryCount(); got < 3 {
+		t.Fatalf("expected at least 3 frames written for repeated frame bytes, got %d", got)
+	}
+}
+
+func TestStreamFrameDedupeIsPerClientNotGlobal(t *testing.T) {
+	cfg := &config.Config{FPS: 120, TargetFPS: 120, MaxStreamConnections: 2}
+	cam := &repeatedFrameCamera{}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	writerA := newCountingStreamWriter(2)
+	writerB := newCountingStreamWriter(2)
+	errCh := make(chan error, 2)
+
+	go func() { errCh <- fm.StreamFrame(writerA, cfg.MaxStreamConnections) }()
+	go func() { errCh <- fm.StreamFrame(writerB, cfg.MaxStreamConnections) }()
+
+	for i := 0; i < 2; i++ {
+		err := <-errCh
+		if !errors.Is(err, errStopStream) {
+			t.Fatalf("expected stream stop error, got %v", err)
+		}
+	}
+
+	if got := writerA.BoundaryCount(); got < 2 {
+		t.Fatalf("client A expected at least 2 frames, got %d", got)
+	}
+	if got := writerB.BoundaryCount(); got < 2 {
+		t.Fatalf("client B expected at least 2 frames, got %d", got)
 	}
 }
 
