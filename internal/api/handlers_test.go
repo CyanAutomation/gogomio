@@ -19,7 +19,7 @@ func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config
 		FPS:                  24,
 		TargetFPS:            24,
 		JPEGQuality:          90,
-		MaxStreamConnections: 10,
+		MaxStreamConnections: 2,
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
 		MockCamera:           true,

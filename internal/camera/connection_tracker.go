@@ -2,6 +2,7 @@ package camera
 
 import (
 	"sync/atomic"
+	"time"
 )
 
 // ConnectionTracker tracks the number of active connections with a maximum limit.
@@ -30,8 +31,12 @@ func (ct *ConnectionTracker) Decrement() {
 
 // TryIncrement attempts to increment the count if below maxConnections.
 // Returns true if successful, false if at or above limit.
+// Uses exponential backoff to reduce CPU spinning under high contention.
 func (ct *ConnectionTracker) TryIncrement(maxConnections int) bool {
-	for {
+	backoff := time.Microsecond
+	maxBackoff := 100 * time.Microsecond
+
+	for attempts := 0; attempts < 10; attempts++ {
 		current := atomic.LoadInt64(&ct.count)
 		if current >= int64(maxConnections) {
 			return false
@@ -41,8 +46,19 @@ func (ct *ConnectionTracker) TryIncrement(maxConnections int) bool {
 		if atomic.CompareAndSwapInt64(&ct.count, current, current+1) {
 			return true
 		}
-		// Retry if CompareAndSwap failed (another goroutine changed count)
+
+		// Backoff before retry
+		if attempts > 0 {
+			time.Sleep(backoff)
+			backoff = backoff * 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
 	}
+
+	// Failed after retries, count likely at limit
+	return false
 }
 
 // Count returns the current connection count.

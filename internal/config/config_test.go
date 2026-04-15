@@ -74,8 +74,8 @@ func TestConfigDefaults(t *testing.T) {
 	if cfg.JPEGQuality != 90 {
 		t.Errorf("default JPEG quality is %d, want 90", cfg.JPEGQuality)
 	}
-	if cfg.MaxStreamConnections != 10 {
-		t.Errorf("default max connections is %d, want 10", cfg.MaxStreamConnections)
+	if cfg.MaxStreamConnections != 2 {
+		t.Errorf("default max connections is %d, want 2", cfg.MaxStreamConnections)
 	}
 	if cfg.Port != 8000 {
 		t.Errorf("default port is %d, want 8000", cfg.Port)

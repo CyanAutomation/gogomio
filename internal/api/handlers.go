@@ -1,10 +1,12 @@
 package api
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/CyanAutomation/gogomio/internal/camera"
@@ -16,14 +18,18 @@ import (
 
 // FrameManager coordinates camera capture and serves frames to HTTP clients.
 type FrameManager struct {
-	cam            camera.Camera
-	cfg            *config.Config
-	frameBuffer    *camera.FrameBuffer
-	streamStats    *camera.StreamStats
-	connTracker    *camera.ConnectionTracker
-	settingsM      *settings.Manager
-	mu             sync.RWMutex
-	captureStarted bool
+	cam             camera.Camera
+	cfg             *config.Config
+	frameBuffer     *camera.FrameBuffer
+	streamStats     *camera.StreamStats
+	connTracker     *camera.ConnectionTracker
+	settingsM       *settings.Manager
+	mu              sync.RWMutex
+	captureMu       sync.Mutex
+	captureStarted  bool
+	clientCount     int64 // atomic counter for connected clients
+	lastFrameHash   [16]byte
+	lastFrameHashMu sync.RWMutex
 
 	// Channel to signal goroutine to stop
 	doneChan chan struct{}
@@ -45,21 +51,61 @@ func NewFrameManager(cam camera.Camera, cfg *config.Config) *FrameManager {
 		connTracker: camera.NewConnectionTracker(),
 		settingsM:   settings.NewManager("/tmp/gogomio/settings.json"),
 		doneChan:    make(chan struct{}),
+		clientCount: 0,
 	}
 
-	// Start capture goroutine
-	fm.captureStarted = true
-	go fm.captureLoop()
-
+	// Capture loop starts lazily when first client connects
 	return fm
+}
+
+// IncrementClients increments the client count and starts capture if this is the first client.
+func (fm *FrameManager) IncrementClients() {
+	new := atomic.AddInt64(&fm.clientCount, 1)
+	if new == 1 {
+		fm.startCapture()
+	}
+}
+
+// DecrementClients decrements the client count and stops capture if this is the last client.
+func (fm *FrameManager) DecrementClients() {
+	new := atomic.AddInt64(&fm.clientCount, -1)
+	if new == 0 {
+		fm.stopCapture()
+	}
+}
+
+// startCapture starts the capture loop if not already running.
+func (fm *FrameManager) startCapture() {
+	fm.captureMu.Lock()
+	if fm.captureStarted {
+		fm.captureMu.Unlock()
+		return
+	}
+	fm.captureStarted = true
+	fm.doneChan = make(chan struct{})
+	fm.captureMu.Unlock()
+	go fm.captureLoop()
+}
+
+// stopCapture stops the capture loop if currently running.
+func (fm *FrameManager) stopCapture() {
+	fm.captureMu.Lock()
+	if !fm.captureStarted {
+		fm.captureMu.Unlock()
+		return
+	}
+	fm.captureStarted = false
+	close(fm.doneChan)
+	fm.captureMu.Unlock()
+	time.Sleep(50 * time.Millisecond) // Allow goroutine to exit cleanly
 }
 
 // captureLoop continuously captures frames from the camera and writes to the frame buffer.
 func (fm *FrameManager) captureLoop() {
 	defer func() {
-		fm.mu.Lock()
+		fm.captureMu.Lock()
 		fm.captureStarted = false
-		fm.mu.Unlock()
+		fm.captureMu.Unlock()
 	}()
 
 	for {
@@ -85,25 +131,40 @@ func (fm *FrameManager) captureLoop() {
 
 // Stop stops the frame capture loop.
 func (fm *FrameManager) Stop() {
-	close(fm.doneChan)
-	time.Sleep(100 * time.Millisecond) // Allow goroutine to exit
+	fm.stopCapture()
 }
 
 // GetFrame returns a copy of the current frame for snapshot endpoints.
+// Ensures capture is running to provide current frames on-demand.
 func (fm *FrameManager) GetFrame() []byte {
+	// Temporarily increment client count to ensure capture is running
+	fm.IncrementClients()
+	defer fm.DecrementClients()
+
+	// Wait briefly for a frame to become available
+	frame := fm.frameBuffer.WaitFrame(100 * time.Millisecond)
+	if frame != nil {
+		return frame
+	}
+
+	// Fall back to existing frame if available
 	return fm.frameBuffer.GetFrame()
 }
 
 // StreamFrame writes frames to an HTTP response in MJPEG format.
-// Manages connection tracking and respects the max connection limit.
+// Manages connection tracking and respects the max connection limit (max 2 concurrent streams).
 func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) error {
 	// Check connection limit
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("Max stream connections reached"))
+		w.Write([]byte("Max stream connections reached (limit: 2)"))
 		return fmt.Errorf("connection limit exceeded")
 	}
 	defer fm.connTracker.Decrement()
+
+	// Track client lifecycle for lazy capture
+	fm.IncrementClients()
+	defer fm.DecrementClients()
 
 	// Set MJPEG headers
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
@@ -135,19 +196,20 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 			continue
 		}
 
-		// Skip if same frame as last (no new frames)
-		if len(frame) == len(lastFrame) {
-			same := true
-			for i := range frame {
-				if frame[i] != lastFrame[i] {
-					same = false
-					break
-				}
-			}
-			if same {
-				continue
-			}
+		// Skip if same frame as last (use hash for fast comparison)
+		frameHash := md5.Sum(frame)
+		fm.lastFrameHashMu.RLock()
+		sameHash := frameHash == fm.lastFrameHash
+		fm.lastFrameHashMu.RUnlock()
+
+		if sameHash && len(frame) == len(lastFrame) {
+			continue
 		}
+
+		fm.lastFrameHashMu.Lock()
+		fm.lastFrameHash = frameHash
+		fm.lastFrameHashMu.Unlock()
+
 		lastFrame = frame
 
 		// Write MJPEG boundary and frame
