@@ -17,26 +17,26 @@ func TestConfigFromEnv(t *testing.T) {
 	defer func() {
 		// Restore
 		if origResolution != "" {
-			os.Setenv("MIO_RESOLUTION", origResolution)
+			_ = os.Setenv("MIO_RESOLUTION", origResolution)
 		} else {
-			os.Unsetenv("MIO_RESOLUTION")
+			_ = os.Unsetenv("MIO_RESOLUTION")
 		}
 		if origFPS != "" {
-			os.Setenv("MIO_FPS", origFPS)
+			_ = os.Setenv("MIO_FPS", origFPS)
 		} else {
-			os.Unsetenv("MIO_FPS")
+			_ = os.Unsetenv("MIO_FPS")
 		}
 		if origPort != "" {
-			os.Setenv("MIO_PORT", origPort)
+			_ = os.Setenv("MIO_PORT", origPort)
 		} else {
-			os.Unsetenv("MIO_PORT")
+			_ = os.Unsetenv("MIO_PORT")
 		}
 	}()
 
 	// Set test values
-	os.Setenv("MIO_RESOLUTION", "1280x720")
-	os.Setenv("MIO_FPS", "30")
-	os.Setenv("MIO_PORT", "8080")
+	_ = os.Setenv("MIO_RESOLUTION", "1280x720")
+	_ = os.Setenv("MIO_FPS", "30")
+	_ = os.Setenv("MIO_PORT", "8080")
 
 	cfg := LoadFromEnv()
 
@@ -54,13 +54,13 @@ func TestConfigFromEnv(t *testing.T) {
 // TestConfigDefaults tests that default values are used when env vars are not set
 func TestConfigDefaults(t *testing.T) {
 	// Unset all config env vars
-	os.Unsetenv("MIO_RESOLUTION")
-	os.Unsetenv("MIO_FPS")
-	os.Unsetenv("MIO_JPEG_QUALITY")
-	os.Unsetenv("MIO_MAX_STREAM_CONNECTIONS")
-	os.Unsetenv("MIO_TARGET_FPS")
-	os.Unsetenv("MIO_PORT")
-	os.Unsetenv("MIO_BIND_HOST")
+	_ = os.Unsetenv("MIO_RESOLUTION")
+	_ = os.Unsetenv("MIO_FPS")
+	_ = os.Unsetenv("MIO_JPEG_QUALITY")
+	_ = os.Unsetenv("MIO_MAX_STREAM_CONNECTIONS")
+	_ = os.Unsetenv("MIO_TARGET_FPS")
+	_ = os.Unsetenv("MIO_PORT")
+	_ = os.Unsetenv("MIO_BIND_HOST")
 
 	cfg := LoadFromEnv()
 

@@ -40,7 +40,7 @@ func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config
 // TestHealthEndpoint tests the /health endpoint
 func TestHealthEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	req, _ := http.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -63,7 +63,7 @@ func TestHealthEndpoint(t *testing.T) {
 // TestReadyEndpoint tests the /ready endpoint
 func TestReadyEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	req, _ := http.NewRequest("GET", "/ready", nil)
 	w := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestReadyEndpoint(t *testing.T) {
 // TestConfigEndpoint tests the /api/config endpoint
 func TestConfigEndpoint(t *testing.T) {
 	router, cam, cfg := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	req, _ := http.NewRequest("GET", "/api/config", nil)
 	w := httptest.NewRecorder()
@@ -105,7 +105,7 @@ func TestConfigEndpoint(t *testing.T) {
 // TestSnapshotEndpoint tests the /snapshot.jpg endpoint
 func TestSnapshotEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	// Pre-populate frame by making a stream request in background
 	// This ensures capture loop is started and frame buffer has content
@@ -147,7 +147,7 @@ func TestSnapshotEndpoint(t *testing.T) {
 // TestStreamEndpoint tests the /stream.mjpg endpoint initialization
 func TestStreamEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	// Create a request with context to timeout
 	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
@@ -178,7 +178,7 @@ func TestStreamEndpoint(t *testing.T) {
 // TestIndexEndpoint tests the / root endpoint returns HTML
 func TestIndexEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	req, _ := http.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
@@ -197,7 +197,7 @@ func TestIndexEndpoint(t *testing.T) {
 // TestCORSHeaders tests CORS headers are present
 func TestCORSHeaders(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	req, _ := http.NewRequest("GET", "/api/config", nil)
 	w := httptest.NewRecorder()
@@ -211,7 +211,7 @@ func TestCORSHeaders(t *testing.T) {
 // TestConnectionLimitNotification tests connection limiting feedback
 func TestConnectionLimitNotification(t *testing.T) {
 	router, cam, cfg := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	// The actual connection limit is tested in unit tests
 	// This just verifies the endpoint handles connection count reporting
@@ -220,7 +220,7 @@ func TestConnectionLimitNotification(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	var result map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &result)
+	_ = json.Unmarshal(w.Body.Bytes(), &result)
 
 	// Check that max_stream_connections is reported
 	if maxConn, ok := result["max_stream_connections"]; ok {
@@ -233,7 +233,7 @@ func TestConnectionLimitNotification(t *testing.T) {
 // TestMJPEGStreamingEndpoint tests the /stream.mjpg endpoint with frame transmission
 func TestMJPEGStreamingEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
-	defer cam.Stop()
+	defer func() { _ = cam.Stop() }()
 
 	// Wait for mock camera to generate frames with lazy capture
 	time.Sleep(800 * time.Millisecond)
@@ -299,7 +299,7 @@ func TestStreamingConnectionLimit(t *testing.T) {
 	if err := mockCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 		t.Fatalf("Failed to start mock camera: %v", err)
 	}
-	defer mockCam.Stop()
+	defer func() { _ = mockCam.Stop() }()
 
 	router := chi.NewRouter()
 	frame := NewFrameManager(mockCam, cfg)

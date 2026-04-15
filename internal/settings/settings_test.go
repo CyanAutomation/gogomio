@@ -10,9 +10,9 @@ import (
 // TestSettingsSetGet tests basic set and get operations
 func TestSettingsSetGet(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
-	m.Set("key", "value")
+	_ = m.Set("key", "value")
 	result := m.Get("key")
 
 	if result != "value" {
@@ -23,7 +23,7 @@ func TestSettingsSetGet(t *testing.T) {
 // TestSettingsGetNonexistent tests getting a non-existent key
 func TestSettingsGetNonexistent(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
 	result := m.Get("nonexistent")
 	if result != nil {
@@ -34,9 +34,9 @@ func TestSettingsGetNonexistent(t *testing.T) {
 // TestSettingsGetString tests GetString with defaults
 func TestSettingsGetString(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
-	m.Set("str", "hello")
+	_ = m.Set("str", "hello")
 	result := m.GetString("str", "default")
 	if result != "hello" {
 		t.Errorf("GetString returned %q, want hello", result)
@@ -47,7 +47,7 @@ func TestSettingsGetString(t *testing.T) {
 		t.Errorf("GetString missing returned %q, want default", result)
 	}
 
-	m.Set("notstring", 42)
+	_ = m.Set("notstring", 42)
 	result = m.GetString("notstring", "default")
 	if result != "default" {
 		t.Errorf("GetString non-string returned %q, want default", result)
@@ -57,16 +57,16 @@ func TestSettingsGetString(t *testing.T) {
 // TestSettingsGetInt tests GetInt with type conversions
 func TestSettingsGetInt(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
-	m.Set("int", 42)
+	_ = m.Set("int", 42)
 	result := m.GetInt("int", 0)
 	if result != 42 {
 		t.Errorf("GetInt returned %d, want 42", result)
 	}
 
 	// JSON unmarshals numbers as float64
-	m.Set("float", 99.0)
+	_ = m.Set("float", 99.0)
 	result = m.GetInt("float", 0)
 	if result != 99 {
 		t.Errorf("GetInt float returned %d, want 99", result)
@@ -81,10 +81,10 @@ func TestSettingsGetInt(t *testing.T) {
 // TestSettingsDelete tests deleting keys
 func TestSettingsDelete(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
-	m.Set("key", "value")
-	m.Delete("key")
+	_ = m.Set("key", "value")
+	_ = m.Delete("key")
 
 	result := m.Get("key")
 	if result != nil {
@@ -95,11 +95,11 @@ func TestSettingsDelete(t *testing.T) {
 // TestSettingsClear tests clearing all settings
 func TestSettingsClear(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
-	m.Set("key1", "value1")
-	m.Set("key2", "value2")
-	m.Clear()
+	_ = m.Set("key1", "value1")
+	_ = m.Set("key2", "value2")
+	_ = m.Clear()
 
 	if len(m.GetAll()) != 0 {
 		t.Errorf("GetAll after Clear returned %d items, want 0", len(m.GetAll()))
@@ -109,11 +109,11 @@ func TestSettingsClear(t *testing.T) {
 // TestSettingsGetAll tests getting all settings
 func TestSettingsGetAll(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
-	m.Set("key1", "value1")
-	m.Set("key2", 42)
-	m.Set("key3", true)
+	_ = m.Set("key1", "value1")
+	_ = m.Set("key2", 42)
+	_ = m.Set("key3", true)
 
 	all := m.GetAll()
 	if len(all) != 3 {
@@ -133,9 +133,9 @@ func TestSettingsPersistence(t *testing.T) {
 
 	// Create manager and set values
 	m1 := NewManager(filepath)
-	m1.Set("key1", "value1")
-	m1.Set("key2", 42)
-	m1.Set("key3", true)
+	_ = m1.Set("key1", "value1")
+	_ = m1.Set("key2", 42)
+	_ = m1.Set("key3", true)
 
 	// Create new manager with same file
 	m2 := NewManager(filepath)
@@ -158,8 +158,8 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	filepath := filepath.Join(tmpDir, "atomic_test.json")
 
 	m := NewManager(filepath)
-	m.Set("key", "value1")
-	m.Set("key", "value2")
+	_ = m.Set("key", "value1")
+	_ = m.Set("key", "value2")
 
 	// Verify file exists and contains correct data
 	data, err := os.ReadFile(filepath)
@@ -175,7 +175,7 @@ func TestSettingsAtomicWrite(t *testing.T) {
 // TestSettingsConcurrency tests concurrent access
 func TestSettingsConcurrency(t *testing.T) {
 	m := NewManager("")
-	defer m.Clear()
+	defer func() { _ = m.Clear() }()
 
 	done := make(chan bool)
 	errors := make(chan error, 10)

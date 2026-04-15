@@ -418,7 +418,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	var req SettingsUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
 		return
 	}
 
@@ -426,13 +426,13 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	for key, value := range req.Settings {
 		if err := fm.settingsM.Set(key, value); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "failed to save setting: " + key})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save setting: " + key})
 			return
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "ok",
 		"message": fmt.Sprintf("saved %d settings", len(req.Settings)),
 	})
