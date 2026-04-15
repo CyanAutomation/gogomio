@@ -470,6 +470,7 @@
                 this.imageElement.style.display = "none";
                 this.updateStatus("Starting...", false);
                 this.imageElement.src = "/stream.mjpg";
+                this.startStatsPolling();
             }
 
             stopStream() {
