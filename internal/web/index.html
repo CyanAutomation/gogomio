@@ -473,14 +473,19 @@
             }
 
             stopStream() {
-                this.imageElement.removeAttribute("src");
                 this.isStreaming = false;
+                this.imageElement.removeAttribute("src");
                 this.imageElement.style.display = "none";
                 this.loadingElement.style.display = "block";
                 this.spinnerElement.style.display = "none";
                 this.placeholderText.textContent = "⏹️ Stream stopped";
                 this.updateStreamControls();
                 this.updateStatus("Stopped", false);
+                if (this.statsInterval !== null) {
+                    clearInterval(this.statsInterval);
+                    this.statsInterval = null;
+                }
+                document.getElementById("stat-connections").textContent = "0";
             }
 
             updateStreamControls() {
