@@ -13,6 +13,10 @@ on:
         required: false
         default: 'latest'
 
+env:
+  # Opt into Node.js 24 to proactively support the latest runtime
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
