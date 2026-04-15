@@ -100,6 +100,12 @@
             text-align: center;
         }
 
+        .stream-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
         .status-indicator {
             display: inline-block;
             width: 10px;
@@ -311,17 +317,21 @@
             <div class="card video-section">
                 <h2>Live Stream</h2>
                 <div id="stream-container">
-                    <img id="stream-img" src="/stream.mjpg" alt="Loading stream..." style="display:none;">
+                    <img id="stream-img" alt="Live stream" style="display:none;">
                     <div id="stream-loading">
                         <div style="text-align: center; color: #999;">
-                            <p style="margin-bottom: 10px;">📡 Connecting to stream...</p>
-                            <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #667eea; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                            <p id="stream-placeholder-text" style="margin-bottom: 10px;">▶️ Stream is stopped</p>
+                            <div id="stream-spinner" style="display: none; width: 40px; height: 40px; border: 4px solid #667eea; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
                         </div>
                     </div>
                 </div>
+                <div class="stream-controls">
+                    <button class="btn-primary" id="start-stream">Start Stream</button>
+                    <button class="btn-secondary" id="stop-stream" disabled>Stop Stream</button>
+                </div>
                 <div class="stream-status">
                     <span class="status-indicator inactive" id="status-indicator"></span>
-                    <span id="status-text">Connecting...</span>
+                    <span id="status-text">Stopped</span>
                 </div>
             </div>
 
@@ -391,37 +401,44 @@
             constructor() {
                 this.imageElement = document.getElementById("stream-img");
                 this.loadingElement = document.getElementById("stream-loading");
+                this.placeholderText = document.getElementById("stream-placeholder-text");
+                this.spinnerElement = document.getElementById("stream-spinner");
                 this.statusIndicator = document.getElementById("status-indicator");
                 this.statusText = document.getElementById("status-text");
                 this.messageBox = document.getElementById("message");
+                this.startButton = document.getElementById("start-stream");
+                this.stopButton = document.getElementById("stop-stream");
                 this.isStreaming = false;
+                this.statsInterval = null;
 
                 this.initializeStream();
                 this.attachEventListeners();
                 this.loadStats();
                 this.loadSettings();
-
-                // Refresh stats every 2 seconds
-                setInterval(() => this.loadStats(), 2000);
+                this.startStatsPolling();
             }
 
             initializeStream() {
                 this.imageElement.onload = () => {
                     this.isStreaming = true;
                     this.loadingElement.style.display = "none";
+                    this.spinnerElement.style.display = "none";
                     this.imageElement.style.display = "block";
-                    this.updateStatus("Connected", true);
+                    this.updateStreamControls();
+                    this.updateStatus("Streaming", true);
                 };
 
                 this.imageElement.onerror = () => {
                     this.isStreaming = false;
+                    this.imageElement.removeAttribute("src");
                     this.loadingElement.style.display = "block";
+                    this.spinnerElement.style.display = "none";
                     this.imageElement.style.display = "none";
-                    this.updateStatus("Stream disconnected", false);
+                    this.placeholderText.textContent = "⚠️ Stream disconnected";
+                    this.updateStreamControls();
+                    this.updateStatus("Disconnected", false);
                 };
-
-                // Display image to trigger loading
-                this.imageElement.style.display = "block";
+                this.updateStreamControls();
             }
 
             updateStatus(text, isActive) {
@@ -432,6 +449,8 @@
             attachEventListeners() {
                 document.getElementById("save-settings").addEventListener("click", () => this.saveSettings());
                 document.getElementById("reset-settings").addEventListener("click", () => this.resetSettings());
+                this.startButton.addEventListener("click", () => this.startStream());
+                this.stopButton.addEventListener("click", () => this.stopStream());
 
                 // Update range display values
                 ["brightness", "contrast", "saturation"].forEach(id => {
@@ -440,6 +459,51 @@
                         document.getElementById(id + "-value").textContent = e.target.value;
                     });
                 });
+            }
+
+            startStream() {
+                if (this.isStreaming) return;
+
+                this.placeholderText.textContent = "📡 Connecting to stream...";
+                this.loadingElement.style.display = "block";
+                this.spinnerElement.style.display = "inline-block";
+                this.imageElement.style.display = "none";
+                this.updateStatus("Starting...", false);
+                this.imageElement.src = "/stream.mjpg";
+                this.startStatsPolling();
+            }
+
+            stopStream() {
+                this.isStreaming = false;
+                this.imageElement.removeAttribute("src");
+                this.imageElement.style.display = "none";
+                this.loadingElement.style.display = "block";
+                this.spinnerElement.style.display = "none";
+                this.placeholderText.textContent = "⏹️ Stream stopped";
+                this.updateStreamControls();
+                this.updateStatus("Stopped", false);
+                if (this.statsInterval !== null) {
+                    clearInterval(this.statsInterval);
+                    this.statsInterval = null;
+                }
+                document.getElementById("stat-connections").textContent = "0";
+            }
+
+            updateStreamControls() {
+                this.startButton.disabled = this.isStreaming;
+                this.stopButton.disabled = !this.isStreaming;
+            }
+
+            startStatsPolling() {
+                if (this.statsInterval !== null) return;
+                this.statsInterval = setInterval(() => {
+                    if (this.isStreaming) {
+                        this.loadStats();
+                        return;
+                    }
+
+                    document.getElementById("stat-connections").textContent = "0";
+                }, 2000);
             }
 
             async loadSettings() {
