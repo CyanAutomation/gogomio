@@ -3,6 +3,7 @@
 ## The Problem
 
 Your dev container environment **cannot build ARM64 images** because:
+
 - ❌ QEMU ARM64 emulation is not available
 - ❌ This container only supports `linux/amd64`
 - ❌ The buildx builder claims ARM64 support but QEMU isn't actually installed
@@ -14,6 +15,7 @@ When you tried to build, it hung indefinitely trying to emulate ARM64 cross-comp
 ### ✅ Recommended: Use GitHub Actions (Automatic Multi-Arch Builds)
 
 I've created `.github/workflows/build-multiarch.yml` which:
+
 - Builds both `linux/amd64` and `linux/arm64` automatically
 - Uses GitHub Actions' native multi-arch builders
 - Pushes to Docker Hub with proper manifests
@@ -22,19 +24,20 @@ I've created `.github/workflows/build-multiarch.yml` which:
 **Setup required (one-time):**
 
 1. Go to your GitHub repo settings:
-   https://github.com/CyanAutomation/gogomio/settings/secrets/actions
+   <https://github.com/CyanAutomation/gogomio/settings/secrets/actions>
 
 2. Add two secrets:
    - **DOCKER_USERNAME** = your Docker Hub username
    - **DOCKER_PASSWORD** = your Docker Hub access token (or password)
 
    To get an access token:
-   - Go to https://hub.docker.com/settings/security
+   - Go to <https://hub.docker.com/settings/security>
    - Click "New Access Token"
    - Name: `github-actions-build`
    - Permissions: Select "Read & Write"
 
 3. Commit and push the workflow file (already created):
+
    ```bash
    git add .github/workflows/build-multiarch.yml
    git commit -m "Add GitHub Actions multi-arch build workflow"
@@ -58,12 +61,14 @@ git push origin v0.2.0
 ```
 
 **Monitor the build:**
-- https://github.com/CyanAutomation/gogomio/actions
+
+- <https://github.com/CyanAutomation/gogomio/actions>
 - Look for "Build Multi-Architecture Docker Image" workflow
 
 ## What Gets Built
 
 After setup, you'll have:
+
 - ✅ `cyanautomation/gogomio:latest` (both amd64 + arm64)
 - ✅ `cyanautomation/gogomio:0.2.0` (tagged releases)
 - ✅ Automatic manifest handling for multi-arch support
