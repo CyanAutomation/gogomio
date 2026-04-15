@@ -80,10 +80,11 @@ func (fm *FrameManager) startCapture() {
 		fm.captureMu.Unlock()
 		return
 	}
+	done := make(chan struct{})
 	fm.captureStarted = true
-	fm.doneChan = make(chan struct{})
+	fm.doneChan = done
 	fm.captureMu.Unlock()
-	go fm.captureLoop()
+	go fm.captureLoop(done)
 }
 
 // stopCapture stops the capture loop if currently running.
@@ -94,13 +95,14 @@ func (fm *FrameManager) stopCapture() {
 		return
 	}
 	fm.captureStarted = false
-	close(fm.doneChan)
+	done := fm.doneChan
 	fm.captureMu.Unlock()
+	close(done)
 	time.Sleep(50 * time.Millisecond) // Allow goroutine to exit cleanly
 }
 
 // captureLoop continuously captures frames from the camera and writes to the frame buffer.
-func (fm *FrameManager) captureLoop() {
+func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	defer func() {
 		fm.captureMu.Lock()
 		fm.captureStarted = false
@@ -109,7 +111,7 @@ func (fm *FrameManager) captureLoop() {
 
 	for {
 		select {
-		case <-fm.doneChan:
+		case <-done:
 			return
 		default:
 		}
