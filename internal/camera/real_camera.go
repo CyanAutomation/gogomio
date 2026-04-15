@@ -82,16 +82,23 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 		return nil, fmt.Errorf("camera stopped")
 	}
 
-	rc.captureMutex.Lock()
-	defer rc.captureMutex.Unlock()
-
 	// FPS throttling: ensure minimum time between frames
+	// Do rate limiting outside the lock to avoid blocking other readers
 	frameInterval := time.Duration(1e9/int64(rc.fps)) * time.Nanosecond
+
+	rc.captureMutex.Lock()
 	since := time.Since(rc.lastCapture)
+	rc.captureMutex.Unlock()
+
+	// Sleep outside the lock if needed
 	if since < frameInterval {
 		time.Sleep(frameInterval - since)
 	}
+
+	// Update lastCapture with minimal lock time
+	rc.captureMutex.Lock()
 	rc.lastCapture = time.Now()
+	rc.captureMutex.Unlock()
 
 	// Capture frame using ffmpeg from V4L2 device
 	frameData, err := rc.captureViaFFmpeg()
