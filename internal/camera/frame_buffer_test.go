@@ -212,10 +212,16 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	fb := NewFrameBuffer(stats, 0)
 	testFrame := []byte{1, 2, 3, 4, 5}
 
-	done := make(chan []byte)
+	done := make(chan struct {
+		frame []byte
+		seq   uint64
+	})
 	go func() {
-		frame, _ := fb.WaitFrame(0, 2*time.Second)
-		done <- frame
+		frame, seq := fb.WaitFrame(0, 2*time.Second)
+		done <- struct {
+			frame []byte
+			seq   uint64
+		}{frame: frame, seq: seq}
 	}()
 
 	// Give goroutine time to start waiting
@@ -225,12 +231,39 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	_, _ = fb.Write(testFrame)
 
 	select {
-	case frame := <-done:
-		if !bytes.Equal(frame, testFrame) {
-			t.Errorf("WaitFrame got %v, want %v", frame, testFrame)
+	case result := <-done:
+		if !bytes.Equal(result.frame, testFrame) {
+			t.Errorf("WaitFrame got %v, want %v", result.frame, testFrame)
+		}
+		if result.seq == 0 {
+			t.Error("WaitFrame returned zero sequence after write")
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timeout waiting for frame")
+	}
+}
+
+// TestFrameBufferWaitFrameIgnoresUnchangedFrame ensures no duplicate immediate return
+// when waiting with the current sequence value.
+func TestFrameBufferWaitFrameIgnoresUnchangedFrame(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+
+	_, _ = fb.Write([]byte{9, 9, 9})
+	currentSeq := fb.CurrentSequence()
+
+	start := time.Now()
+	frame, seq := fb.WaitFrame(currentSeq, 120*time.Millisecond)
+	elapsed := time.Since(start)
+
+	if frame != nil {
+		t.Fatalf("WaitFrame returned frame for unchanged sequence: %v", frame)
+	}
+	if seq != currentSeq {
+		t.Fatalf("WaitFrame returned seq %d, want %d on timeout", seq, currentSeq)
+	}
+	if elapsed < 100*time.Millisecond {
+		t.Fatalf("WaitFrame returned too quickly for unchanged sequence: elapsed=%v", elapsed)
 	}
 }
 
@@ -239,16 +272,25 @@ func TestFrameBufferWaitFrameTimeout(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 0)
 
-	done := make(chan []byte)
+	done := make(chan struct {
+		frame []byte
+		seq   uint64
+	})
 	go func() {
-		frame, _ := fb.WaitFrame(0, 100*time.Millisecond)
-		done <- frame
+		frame, seq := fb.WaitFrame(0, 100*time.Millisecond)
+		done <- struct {
+			frame []byte
+			seq   uint64
+		}{frame: frame, seq: seq}
 	}()
 
 	select {
-	case frame := <-done:
-		if frame != nil {
-			t.Errorf("WaitFrame got %v on timeout, want nil", frame)
+	case result := <-done:
+		if result.frame != nil {
+			t.Errorf("WaitFrame got %v on timeout, want nil", result.frame)
+		}
+		if result.seq != 0 {
+			t.Errorf("WaitFrame returned seq %d on initial timeout, want 0", result.seq)
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("timeout in test")
