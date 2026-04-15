@@ -25,25 +25,13 @@ func main() {
 	log.Printf("🌊 Motion In Ocean - Go Edition v%s", Version)
 	log.Printf("Configuration: %s", cfg.String())
 
-	// Initialize camera
-	var cam camera.Camera
-	if cfg.MockCamera {
-		log.Println("Using mock camera (development mode)")
-		cam = camera.NewMockCamera()
-	} else {
-		// Try real camera first if device is available
-		realCam := camera.NewRealCamera()
-		if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-			log.Printf("Real camera unavailable (%v), falling back to mock camera", err)
-			cam = camera.NewMockCamera()
-		} else {
-			log.Println("Using real camera (Raspberry Pi CSI)")
-			cam = realCam
-		}
-	}
-
-	// Start camera
-	if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+	// Initialize and start camera
+	cam, err := initializeCamera(
+		cfg,
+		func() camera.Camera { return camera.NewRealCamera() },
+		func() camera.Camera { return camera.NewMockCamera() },
+	)
+	if err != nil {
 		log.Fatalf("Failed to initialize camera: %v", err)
 	}
 	defer func() {
@@ -91,4 +79,34 @@ func main() {
 	}
 
 	log.Println("Server stopped")
+}
+
+func initializeCamera(
+	cfg *config.Config,
+	newRealCamera func() camera.Camera,
+	newMockCamera func() camera.Camera,
+) (camera.Camera, error) {
+	if cfg.MockCamera {
+		log.Println("Using mock camera (development mode)")
+		cam := newMockCamera()
+		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+			return nil, err
+		}
+		return cam, nil
+	}
+
+	// Try real camera first if device is available.
+	realCam := newRealCamera()
+	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+		log.Printf("Real camera unavailable (%v), falling back to mock camera", err)
+		cam := newMockCamera()
+		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+			return nil, err
+		}
+		log.Println("Using mock camera fallback (development mode)")
+		return cam, nil
+	}
+
+	log.Println("Using real camera (Raspberry Pi CSI)")
+	return realCam, nil
 }
