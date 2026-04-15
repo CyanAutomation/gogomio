@@ -46,17 +46,22 @@ jobs:
             TAGS="latest"
           fi
           
-          # Convert comma-separated tags to docker/metadata format
+          # Convert comma-separated tags to docker/metadata format (newline-separated for docker/build-push-action)
           # Include both standard tags and arm64-specific tags for easy Raspberry Pi identification
           DOCKER_TAGS=""
           for tag in ${TAGS//,/ }; do
-            DOCKER_TAGS="$DOCKER_TAGS cyanautomation/gogomio:$tag"
+            DOCKER_TAGS="${DOCKER_TAGS}cyanautomation/gogomio:$tag"$'\n'
             # Add arm64-specific tag for Raspberry Pi convenience
-            DOCKER_TAGS="$DOCKER_TAGS cyanautomation/gogomio:$tag-arm64"
+            DOCKER_TAGS="${DOCKER_TAGS}cyanautomation/gogomio:$tag-arm64"$'\n'
           done
           
-          echo "tags=$DOCKER_TAGS" >> $GITHUB_OUTPUT
-          echo "📦 Building tags (multi-arch + arm64-specific): $DOCKER_TAGS"
+          # Remove trailing newline and save to output
+          DOCKER_TAGS="${DOCKER_TAGS%$'\n'}"
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$DOCKER_TAGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "📦 Building tags (multi-arch + arm64-specific):"
+          echo "$DOCKER_TAGS"
 
       - name: Build and push
         uses: docker/build-push-action@v5
