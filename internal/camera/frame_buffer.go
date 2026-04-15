@@ -110,10 +110,8 @@ func (fb *FrameBuffer) WaitFrame(lastSeenVersion uint64, timeout time.Duration) 
 
 		select {
 		case <-timer.C:
-			fb.condition.L.Lock()
 			timedOut = true
 			fb.condition.Broadcast()
-			fb.condition.L.Unlock()
 		case <-stopTimer:
 		}
 	}()
