@@ -46,7 +46,11 @@ func main() {
 	if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 		log.Fatalf("Failed to initialize camera: %v", err)
 	}
-	defer cam.Stop()
+	defer func() {
+		if err := cam.Stop(); err != nil {
+			log.Printf("Error stopping camera: %v", err)
+		}
+	}()
 
 	log.Printf("Camera started: %dx%d @ %d FPS", cfg.Resolution[0], cfg.Resolution[1], cfg.FPS)
 

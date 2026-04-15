@@ -258,7 +258,7 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 
 	// Read response body - httptest.ResponseRecorder buffers everything
 	responseBody := w.Body.String()
-	
+
 	// Verify MJPEG boundary markers are present
 	if len(responseBody) == 0 {
 		t.Fatal("no response body from stream")
