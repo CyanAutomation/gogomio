@@ -127,7 +127,7 @@ func TestMockCameraDifferentResolutions(t *testing.T) {
 			t.Errorf("frame with %dx%d is empty", test.width, test.height)
 		}
 
-		mc.Stop()
+		_ = mc.Stop()
 	}
 }
 
@@ -153,7 +153,7 @@ func TestMockCameraQualitySettings(t *testing.T) {
 			t.Errorf("frame with quality %d is empty", quality)
 		}
 
-		mc.Stop()
+		_ = mc.Stop()
 	}
 }
 
@@ -165,7 +165,7 @@ func TestMockCameraMultipleCapturesConcurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer mc.Stop()
+	defer func() { _ = mc.Stop() }()
 
 	var wg sync.WaitGroup
 	numGoroutines := 5
@@ -248,7 +248,7 @@ func TestMockCameraFrameIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer mc.Stop()
+	defer func() { _ = mc.Stop() }()
 
 	for i := 0; i < 5; i++ {
 		frame, err := mc.CaptureFrame()
@@ -290,7 +290,7 @@ func TestMockCameraFPSAdjustment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
-	defer mc.Stop()
+	defer func() { _ = mc.Stop() }()
 
 	// Capture frames and measure time
 	start := time.Now()

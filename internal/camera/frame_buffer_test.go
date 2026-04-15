@@ -52,7 +52,7 @@ func TestFrameBufferConditionSignaling(t *testing.T) {
 
 	// Writer goroutine
 	go func() {
-		fb.Write(testFrame)
+		_, _ = fb.Write(testFrame)
 	}()
 
 	// Should receive frame within timeout
@@ -142,7 +142,7 @@ func TestFrameBufferConcurrentReads(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Write frame (should notify all readers)
-	fb.Write(testFrame)
+	_, _ = fb.Write(testFrame)
 
 	// Wait for all readers
 	done := make(chan struct{})
@@ -178,7 +178,7 @@ func TestFrameBufferMultipleWrites(t *testing.T) {
 	}
 
 	for _, frame := range frames {
-		fb.Write(frame)
+		_, _ = fb.Write(frame)
 	}
 
 	if !bytes.Equal(fb.frame, frames[len(frames)-1]) {
@@ -196,9 +196,9 @@ func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 		t.Errorf("initial frame count is %d, want 0", initialCount)
 	}
 
-	fb.Write([]byte{1})
-	fb.Write([]byte{2})
-	fb.Write([]byte{3})
+	_, _ = fb.Write([]byte{1})
+	_, _ = fb.Write([]byte{2})
+	_, _ = fb.Write([]byte{3})
 
 	finalCount, _, _ := stats.Snapshot()
 	if finalCount != 3 {
@@ -222,7 +222,7 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Write frame
-	fb.Write(testFrame)
+	_, _ = fb.Write(testFrame)
 
 	select {
 	case frame := <-done:

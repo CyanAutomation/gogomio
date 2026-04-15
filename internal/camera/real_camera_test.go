@@ -141,7 +141,7 @@ func TestRealCameraJPEGQualityValidation(t *testing.T) {
 	rc := NewRealCamera()
 
 	// Quality 0 should be adjusted
-	rc.Start(640, 480, 24, 0)
+	_ = rc.Start(640, 480, 24, 0)
 	// We don't actually expect Start to succeed without device
 
 	// Valid quality range
