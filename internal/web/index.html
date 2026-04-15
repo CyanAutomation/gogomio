@@ -415,11 +415,11 @@
                 this.attachEventListeners();
                 this.loadStats();
                 this.loadSettings();
-                this.startStatsPolling();
             }
 
             initializeStream() {
                 this.imageElement.onload = () => {
+                    if (!this.imageElement.getAttribute("src")) return;
                     this.isStreaming = true;
                     this.loadingElement.style.display = "none";
                     this.spinnerElement.style.display = "none";
@@ -437,6 +437,8 @@
                     this.placeholderText.textContent = "⚠️ Stream disconnected";
                     this.updateStreamControls();
                     this.updateStatus("Disconnected", false);
+                    this.stopStatsPolling();
+                    document.getElementById("stat-connections").textContent = "0";
                 };
                 this.updateStreamControls();
             }
@@ -474,18 +476,15 @@
             }
 
             stopStream() {
-                this.isStreaming = false;
                 this.imageElement.removeAttribute("src");
+                this.isStreaming = false;
                 this.imageElement.style.display = "none";
                 this.loadingElement.style.display = "block";
                 this.spinnerElement.style.display = "none";
                 this.placeholderText.textContent = "⏹️ Stream stopped";
                 this.updateStreamControls();
                 this.updateStatus("Stopped", false);
-                if (this.statsInterval !== null) {
-                    clearInterval(this.statsInterval);
-                    this.statsInterval = null;
-                }
+                this.stopStatsPolling();
                 document.getElementById("stat-connections").textContent = "0";
             }
 
@@ -497,13 +496,14 @@
             startStatsPolling() {
                 if (this.statsInterval !== null) return;
                 this.statsInterval = setInterval(() => {
-                    if (this.isStreaming) {
-                        this.loadStats();
-                        return;
-                    }
-
-                    document.getElementById("stat-connections").textContent = "0";
+                    this.loadStats();
                 }, 2000);
+            }
+
+            stopStatsPolling() {
+                if (this.statsInterval === null) return;
+                clearInterval(this.statsInterval);
+                this.statsInterval = null;
             }
 
             async loadSettings() {
