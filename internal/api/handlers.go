@@ -160,7 +160,8 @@ func (fm *FrameManager) GetFrame() []byte {
 	defer fm.DecrementClients()
 
 	// Wait briefly for a frame to become available
-	frame, _ := fm.frameBuffer.WaitFrame(0, 100*time.Millisecond)
+	lastSeenSeq := fm.frameBuffer.CurrentSequence()
+	frame, _ := fm.frameBuffer.WaitFrame(lastSeenSeq, 100*time.Millisecond)
 	if frame != nil {
 		return frame
 	}
@@ -198,7 +199,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 	}
 
 	frameTimeout := fm.cfg.FrameTimeout()
-	lastSeenVersion := fm.frameBuffer.CurrentVersion()
+	lastSeenSeq := fm.frameBuffer.CurrentSequence()
 	fm.captureMu.Lock()
 	streamDone := fm.doneChan
 	fm.captureMu.Unlock()
@@ -211,12 +212,12 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 		}
 
 		// Wait for new frame with timeout
-		frame, version := fm.frameBuffer.WaitFrame(lastSeenVersion, frameTimeout)
+		frame, seq := fm.frameBuffer.WaitFrame(lastSeenSeq, frameTimeout)
 		if frame == nil {
 			// Timeout waiting for frame, keep connection open or retry
 			continue
 		}
-		lastSeenVersion = version
+		lastSeenSeq = seq
 
 		// Write MJPEG boundary and frame
 		boundary := []byte("--frame\r\n")
