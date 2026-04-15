@@ -161,7 +161,7 @@ func (fm *FrameManager) GetFrame() []byte {
 
 	// Wait briefly for a frame to become available
 	// Wait briefly for a frame to become available
-	frame, _ := fm.frameBuffer.WaitFrame(0, 100*time.Millisecond)
+	frame, _ := fm.frameBuffer.WaitFrame(100*time.Millisecond, 0)
 	if frame != nil {
 		return frame
 	}
@@ -212,7 +212,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 		}
 
 		// Wait for new frame with timeout
-		frame, seq := fm.frameBuffer.WaitFrame(lastSeenSeq, frameTimeout)
+		frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, lastSeenSeq)
 		if frame == nil {
 			// Timeout waiting for frame, keep connection open or retry
 			continue
