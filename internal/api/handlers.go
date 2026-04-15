@@ -160,8 +160,8 @@ func (fm *FrameManager) GetFrame() []byte {
 	defer fm.DecrementClients()
 
 	// Wait briefly for a frame to become available
-	lastSeenSeq := fm.frameBuffer.CurrentSequence()
-	frame, _ := fm.frameBuffer.WaitFrame(lastSeenSeq, 100*time.Millisecond)
+	// Wait briefly for a frame to become available
+	frame, _ := fm.frameBuffer.WaitFrame(0, 100*time.Millisecond)
 	if frame != nil {
 		return frame
 	}
