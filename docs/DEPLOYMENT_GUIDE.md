@@ -9,10 +9,12 @@ Motion In Ocean is now deployed to Docker Hub and ready for production use on an
 **Image**: `docker.io/cyanautomation/gogomio:latest`
 
 **Platforms Supported**:
+
 - ✅ linux/amd64 (Intel/AMD processors)
 - ✅ linux/arm64 (Raspberry Pi, ARM64 systems)
 
 **Tags Available**:
+
 - `latest` - Latest version (recommended)
 - `phase3` - Phase 3 version (current version)
 
@@ -21,22 +23,24 @@ Motion In Ocean is now deployed to Docker Hub and ready for production use on an
 ## 1. Docker Run (Quick Test)
 
 ### With Mock Camera (Development)
+
 ```bash
 docker run -p 8000:8000 \
   -e MOCK_CAMERA=true \
   docker.io/cyanautomation/gogomio:latest
 ```
 
-**Access**: http://localhost:8000/
+**Access**: <http://localhost:8000/>
 
 ### With Real Camera (Raspberry Pi)
+
 ```bash
 docker run -p 8000:8000 \
   --device /dev/video0:/dev/video0 \
   docker.io/cyanautomation/gogomio:latest
 ```
 
-**Access**: http://raspberrypi.local:8000/
+**Access**: <http://raspberrypi.local:8000/>
 
 ---
 
@@ -59,7 +63,7 @@ docker-compose -f docker-compose.mock.yml logs -f
 ```
 
 **Resolution**: 1280x720 @ 30 FPS  
-**Access**: http://localhost:8000/
+**Access**: <http://localhost:8000/>
 
 ### For Raspberry Pi (Real Camera)
 
@@ -78,11 +82,12 @@ docker-compose logs -f
 ```
 
 **Resolution**: 640x480 @ 24 FPS  
-**Access**: http://raspberrypi.local:8000/
+**Access**: <http://raspberrypi.local:8000/>
 
 ### For Docker Hub Registry Pull
 
 Both `docker-compose.yml` and `docker-compose.mock.yml` now pull from Docker Hub:
+
 - No local build required
 - Automatic multi-architecture selection
 - Ensures consistency across deployments
@@ -108,6 +113,7 @@ environment:
 ## 4. Raspberry Pi Setup
 
 ### Prerequisites
+
 - Raspberry Pi 3/4/5 with 64-bit OS
 - Docker and Docker Compose installed
 - Raspberry Pi Camera Module (CSI or USB)
@@ -149,6 +155,7 @@ docker-compose down
 ### Access Web UI
 
 From another device on the network:
+
 ```bash
 # Replace raspberrypi with your Pi's hostname or IP
 curl http://raspberrypi:8000/
@@ -223,11 +230,13 @@ firefox http://localhost:8000/
 ### With Domain/Public IP
 
 Use reverse proxy (nginx/Caddy) or expose via:
+
 - Cloudflare Tunnel
 - Tailscale
 - ngrok
 
 Example with ngrok:
+
 ```bash
 # On Pi terminal
 ssh raspberrypi 'docker exec gogomio-gogomio-1 ngrok http 8000'
@@ -238,12 +247,14 @@ ssh raspberrypi 'docker exec gogomio-gogomio-1 ngrok http 8000'
 ## 7. Resource Allocation
 
 ### Default Limits (docker-compose.yml)
+
 - **CPU**: 1 core (limit), 0.5 core (reservation)
 - **Memory**: 256MB (limit), 128MB (reservation)
 
 ### Adjust for Your Pi
 
 Edit `docker-compose.yml`:
+
 ```yaml
 deploy:
   resources:
@@ -347,6 +358,7 @@ docker stack deploy -c docker-compose.yml gogomio
 ### Using Kubernetes
 
 Convert docker-compose to Kubernetes manifests:
+
 ```bash
 kompose convert --volumes hostPath docker-compose.yml
 kubectl apply -f *.yaml
@@ -389,6 +401,7 @@ docker-compose logs > gogomio.log
 ### Debug Mode
 
 Add to docker-compose.yml:
+
 ```yaml
 environment:
   # ... existing vars ...
@@ -415,6 +428,7 @@ docker-compose up -d
 ### Pin Specific Version
 
 Edit `docker-compose.yml`:
+
 ```yaml
 image: docker.io/cyanautomation/gogomio:phase3
 ```
@@ -453,9 +467,9 @@ firefox http://localhost:8000/
 
 ## Support
 
-- **GitHub**: https://github.com/CyanAutomation/gogomio
-- **Docker Hub**: https://hub.docker.com/r/cyanautomation/gogomio
-- **Issues**: https://github.com/CyanAutomation/gogomio/issues
+- **GitHub**: <https://github.com/CyanAutomation/gogomio>
+- **Docker Hub**: <https://hub.docker.com/r/cyanautomation/gogomio>
+- **Issues**: <https://github.com/CyanAutomation/gogomio/issues>
 
 ---
 
