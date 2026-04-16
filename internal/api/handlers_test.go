@@ -1,8 +1,8 @@
 package api
 
 import (
-	"errors"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -415,7 +415,7 @@ func TestStreamingConnectionLimit(t *testing.T) {
 func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
-	fm := NewFrameManager(cam, cfg)
+	fm := newFrameManager(cam, cfg, 40*time.Millisecond)
 	t.Cleanup(fm.Stop)
 
 	fm.startCapture()
@@ -442,7 +442,7 @@ func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T
 func TestFrameManagerCaptureLoopSingleGoroutineAcrossRapidClientFlaps(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
-	fm := NewFrameManager(cam, cfg)
+	fm := newFrameManager(cam, cfg, 40*time.Millisecond)
 	t.Cleanup(fm.Stop)
 
 	for i := 0; i < 15; i++ {
@@ -560,7 +560,7 @@ func TestFrameManagerDecrementClientsClampsAtZeroAndTracksImbalance(t *testing.T
 func TestFrameManagerClientLifecycleWithExtraDecrementRemainsStable(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
-	fm := NewFrameManager(cam, cfg)
+	fm := newFrameManager(cam, cfg, 40*time.Millisecond)
 	t.Cleanup(fm.Stop)
 
 	fm.IncrementClients()
@@ -583,6 +583,29 @@ func TestFrameManagerClientLifecycleWithExtraDecrementRemainsStable(t *testing.T
 	waitForCaptureState(t, fm, true)
 
 	fm.DecrementClients()
+	waitForCaptureState(t, fm, false)
+}
+
+func TestFrameManagerGetFrameBurstyAccessKeepsCaptureWarm(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 80*time.Millisecond)
+	t.Cleanup(fm.Stop)
+
+	for i := 0; i < 8; i++ {
+		frame := fm.GetFrame()
+		if len(frame) == 0 {
+			t.Fatalf("expected non-empty frame on iteration %d", i)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if starts := atomic.LoadInt64(&fm.captureStarts); starts != 1 {
+		t.Fatalf("expected one capture loop start during bursty snapshots, got %d", starts)
+	}
+
+	waitForCaptureState(t, fm, true)
+	time.Sleep(120 * time.Millisecond)
 	waitForCaptureState(t, fm, false)
 }
 
