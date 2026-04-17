@@ -52,11 +52,11 @@ func TestRealCameraProcessLifecycle(t *testing.T) {
 		startedCmd = cmd
 
 		go func() {
-			defer stdoutW.Close()
+			defer func() { _ = stdoutW.Close() }()
 			_, _ = stdoutW.Write([]byte{0xFF, 0xD8, 0x00, 0x01, 0xFF, 0xD9})
 		}()
 		go func() {
-			defer stderrW.Close()
+			defer func() { _ = stderrW.Close() }()
 		}()
 
 		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
@@ -98,13 +98,13 @@ func TestRealCameraCaptureFrameReturnsBufferedLatest(t *testing.T) {
 		}
 
 		go func() {
-			defer stdoutW.Close()
+			defer func() { _ = stdoutW.Close() }()
 			frame1 := []byte{0xFF, 0xD8, 0x01, 0xFF, 0xD9}
 			frame2 := []byte{0xFF, 0xD8, 0x02, 0xFF, 0xD9}
 			_, _ = stdoutW.Write(append(append([]byte("noise"), frame1...), frame2...))
 		}()
 		go func() {
-			defer stderrW.Close()
+			defer func() { _ = stderrW.Close() }()
 		}()
 
 		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
@@ -113,7 +113,7 @@ func TestRealCameraCaptureFrameReturnsBufferedLatest(t *testing.T) {
 	if err := rc.Start(640, 480, 24, 80); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer rc.Stop()
+	defer func() { _ = rc.Stop() }()
 
 	frame, err := rc.CaptureFrame()
 	if err != nil {
@@ -139,8 +139,8 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 			return nil, nil, nil, nil, err
 		}
 		go func() {
-			defer stderrW.Close()
-			defer stdoutW.Close()
+			defer func() { _ = stderrW.Close() }()
+			defer func() { _ = stdoutW.Close() }()
 			time.Sleep(500 * time.Millisecond)
 		}()
 		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
@@ -149,7 +149,7 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 	if err := rc.Start(640, 480, 24, 80); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer rc.Stop()
+	defer func() { _ = rc.Stop() }()
 
 	_, err := rc.CaptureFrame()
 	if err == nil || !strings.Contains(err.Error(), "timed out waiting for frame") {
