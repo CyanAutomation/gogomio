@@ -24,6 +24,7 @@ type RealCamera struct {
 	isStopping   atomic.Bool
 	captureMutex sync.Mutex
 	lastCapture  time.Time
+	capturing    bool
 
 	// Process management
 	proc *exec.Cmd
@@ -78,37 +79,56 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 // Uses ffmpeg to read from V4L2 device and encode to JPEG.
 func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 	rc.captureMutex.Lock()
-	defer rc.captureMutex.Unlock()
 
 	// Re-check state under lock to avoid stale reads while stopping/starting.
 	if !rc.isReady.Load() {
+		rc.captureMutex.Unlock()
 		return nil, fmt.Errorf("camera not ready")
 	}
 	if rc.isStopping.Load() {
+		rc.captureMutex.Unlock()
 		return nil, fmt.Errorf("camera stopped")
 	}
+	if rc.capturing {
+		rc.captureMutex.Unlock()
+		return nil, fmt.Errorf("capture already in progress")
+	}
 
-	// FPS throttling and capture are serialized in the same critical section
-	// to enforce single-flight capture semantics.
+	// Mark capture as in-flight so concurrent callers fail fast instead of queueing.
+	rc.capturing = true
+
+	// Compute throttle delay under lock using monotonic time state.
+	sleepFor := time.Duration(0)
 	if rc.fps > 0 {
 		frameInterval := time.Second / time.Duration(rc.fps)
 		since := time.Since(rc.lastCapture)
 		if since < frameInterval {
-			time.Sleep(frameInterval - since)
+			sleepFor = frameInterval - since
 		}
 	}
-	rc.lastCapture = time.Now()
 
-	// Capture frame using ffmpeg from V4L2 device
 	runner := rc.captureRunner
 	if runner == nil {
 		runner = rc.captureViaFFmpeg
 	}
+	rc.captureMutex.Unlock()
+
+	// Sleep outside the lock to avoid convoying blocked callers.
+	if sleepFor > 0 {
+		time.Sleep(sleepFor)
+	}
+
+	// Capture frame using ffmpeg from V4L2 device.
 	frameData, err := runner()
+
+	rc.captureMutex.Lock()
+	rc.lastCapture = time.Now()
+	rc.capturing = false
+	rc.captureMutex.Unlock()
+
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg capture failed: %w", err)
 	}
-
 	return frameData, nil
 }
 
