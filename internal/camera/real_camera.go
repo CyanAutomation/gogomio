@@ -2,9 +2,11 @@ package camera
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -12,44 +14,72 @@ import (
 	"time"
 )
 
-// RealCamera captures frames from a Raspberry Pi CSI camera via V4L2 device.
-// Falls back to mock camera if device is unavailable.
+const (
+	defaultCaptureWaitTimeout = 2 * time.Second
+	readChunkSize             = 32 * 1024
+)
+
+// RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
+// process that emits an MJPEG byte stream.
 type RealCamera struct {
-	width        int
-	height       int
-	fps          int
-	jpegQuality  int
-	devicePath   string
-	isReady      atomic.Bool
-	isStopping   atomic.Bool
+	width       int
+	height      int
+	fps         int
+	jpegQuality int
+	devicePath  string
+
+	isReady    atomic.Bool
+	isStopping atomic.Bool
+
 	captureMutex sync.Mutex
-	lastCapture  time.Time
-	capturing    bool
 
 	// Process management
-	proc *exec.Cmd
+	proc       *exec.Cmd
+	procStdin  io.WriteCloser
+	procStdout io.ReadCloser
+	procStderr io.ReadCloser
 
-	// test hook for capture behavior override
-	captureRunner func() ([]byte, error)
+	// Frame stream management
+	frameMutex         sync.Mutex
+	latestFrame        []byte
+	frameSeq           uint64
+	readerErr          error
+	readBuffer         []byte
+	captureWaitTimeout time.Duration
+
+	readerDone chan struct{}
+	stderrDone chan struct{}
+
+	// test hooks
+	lookPath func(string) (string, error)
+	statFn   func(string) (os.FileInfo, error)
+	launchFn func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 }
 
 // NewRealCamera creates a new camera instance for Raspberry Pi CSI camera.
 func NewRealCamera() *RealCamera {
 	rc := &RealCamera{
-		width:       640,
-		height:      480,
-		fps:         24,
-		jpegQuality: 80,
-		devicePath:  "/dev/video0",
+		width:              640,
+		height:             480,
+		fps:                24,
+		jpegQuality:        80,
+		devicePath:         "/dev/video0",
+		captureWaitTimeout: defaultCaptureWaitTimeout,
 	}
+	rc.lookPath = exec.LookPath
+	rc.statFn = os.Stat
+	rc.launchFn = rc.launchContinuousProducer
 	return rc
 }
 
-// Start initializes the camera and begins capture preparation.
-// Returns error if camera device not found, but doesn't fail - falls back to mock in main.
+// Start initializes camera configuration and starts the long-lived capture process.
 func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Lock()
 	defer rc.captureMutex.Unlock()
+
+	if rc.isReady.Load() {
+		return fmt.Errorf("camera already started")
+	}
 
 	rc.width = width
 	rc.height = height
@@ -59,138 +89,105 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	}
 	rc.jpegQuality = jpegQuality
 
-	// Check if device exists
-	if _, err := os.Stat(rc.devicePath); err != nil {
+	if _, err := rc.statFn(rc.devicePath); err != nil {
 		return fmt.Errorf("camera device not found at %s: %w", rc.devicePath, err)
 	}
 
-	// Verify ffmpeg is available
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return fmt.Errorf("ffmpeg not found in PATH: %w", err)
+	rc.frameMutex.Lock()
+	rc.latestFrame = nil
+	rc.frameSeq = 0
+	rc.readerErr = nil
+	rc.readBuffer = nil
+	rc.frameMutex.Unlock()
+
+	cmd, stdin, stdout, stderr, err := rc.launchFn()
+	if err != nil {
+		return err
 	}
 
+	rc.proc = cmd
+	rc.procStdin = stdin
+	rc.procStdout = stdout
+	rc.procStderr = stderr
+	rc.readerDone = make(chan struct{})
+	rc.stderrDone = make(chan struct{})
+
+	rc.isStopping.Store(false)
 	rc.isReady.Store(true)
-	rc.lastCapture = time.Now()
+
+	go rc.readMJPEGStream()
+	go rc.drainStderr()
 
 	return nil
 }
 
-// CaptureFrame captures a single JPEG frame from the camera device.
-// Uses ffmpeg to read from V4L2 device and encode to JPEG.
+// CaptureFrame returns the latest buffered frame, waiting for an initial frame
+// when necessary.
 func (rc *RealCamera) CaptureFrame() ([]byte, error) {
-	rc.captureMutex.Lock()
-
-	// Re-check state under lock to avoid stale reads while stopping/starting.
 	if !rc.isReady.Load() {
-		rc.captureMutex.Unlock()
 		return nil, fmt.Errorf("camera not ready")
 	}
 	if rc.isStopping.Load() {
-		rc.captureMutex.Unlock()
 		return nil, fmt.Errorf("camera stopped")
 	}
-	if rc.capturing {
-		rc.captureMutex.Unlock()
-		return nil, fmt.Errorf("capture already in progress")
-	}
 
-	// Mark capture as in-flight so concurrent callers fail fast instead of queueing.
-	rc.capturing = true
-
-	// Compute throttle delay under lock using monotonic time state.
-	sleepFor := time.Duration(0)
-	if rc.fps > 0 {
-		frameInterval := time.Second / time.Duration(rc.fps)
-		since := time.Since(rc.lastCapture)
-		if since < frameInterval {
-			sleepFor = frameInterval - since
+	deadline := time.Now().Add(rc.captureWaitTimeout)
+	for {
+		rc.frameMutex.Lock()
+		if len(rc.latestFrame) > 0 {
+			frame := append([]byte(nil), rc.latestFrame...)
+			rc.frameMutex.Unlock()
+			return frame, nil
 		}
-	}
+		readerErr := rc.readerErr
+		rc.frameMutex.Unlock()
 
-	runner := rc.captureRunner
-	if runner == nil {
-		runner = rc.captureViaFFmpeg
+		if readerErr != nil {
+			return nil, fmt.Errorf("frame stream stopped: %w", readerErr)
+		}
+		if !rc.isReady.Load() || rc.isStopping.Load() {
+			return nil, fmt.Errorf("camera stopped")
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("timed out waiting for frame")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	rc.captureMutex.Unlock()
-
-	// Sleep outside the lock to avoid convoying blocked callers.
-	if sleepFor > 0 {
-		time.Sleep(sleepFor)
-	}
-
-	// Capture frame using ffmpeg from V4L2 device.
-	frameData, err := runner()
-
-	rc.captureMutex.Lock()
-	rc.capturing = false
-	if err == nil {
-		rc.lastCapture = time.Now()
-	}
-	rc.captureMutex.Unlock()
-
-	if err != nil {
-		return nil, fmt.Errorf("ffmpeg capture failed: %w", err)
-	}
-	return frameData, nil
 }
 
-// captureViaFFmpeg reads a frame from V4L2 device using ffmpeg
-func (rc *RealCamera) captureViaFFmpeg() ([]byte, error) {
-	// ffmpeg command to read from V4L2 device and output single JPEG
-	cmd := exec.Command(
-		"ffmpeg",
-		"-f", "video4linux2", // Input format
-		"-input_format", "mjpeg", // Request MJPEG if available
-		"-i", rc.devicePath, // Input device
-		"-frames:v", "1", // Capture 1 frame
-		"-c:v", "mjpeg", // Encode to JPEG
-		"-q:v", fmt.Sprintf("%d", rc.jpegQuality), // JPEG quality (2-31, inverse)
-		"-f", "image2", // Output format
-		"-", // Output to stdout
-	)
-
-	// Capture output
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// Run with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Run()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			return nil, fmt.Errorf("ffmpeg error: %w (stderr: %s)", err, stderr.String())
-		}
-	case <-time.After(2 * time.Second):
-		if err := cmd.Process.Kill(); err != nil {
-			// Process may already be dead, ignore error
-			_ = err
-		}
-		return nil, fmt.Errorf("ffmpeg capture timeout")
-	}
-
-	if stdout.Len() == 0 {
-		return nil, fmt.Errorf("no frame data captured")
-	}
-
-	return stdout.Bytes(), nil
-}
-
-// Stop stops the camera capture.
+// Stop stops the camera process and reader goroutines.
 func (rc *RealCamera) Stop() error {
 	rc.isStopping.Store(true)
 	rc.isReady.Store(false)
 
 	rc.captureMutex.Lock()
-	defer rc.captureMutex.Unlock()
+	proc := rc.proc
+	stdin := rc.procStdin
+	readerDone := rc.readerDone
+	stderrDone := rc.stderrDone
 
-	if rc.proc != nil && rc.proc.Process != nil {
-		_ = rc.proc.Process.Kill()
+	rc.proc = nil
+	rc.procStdin = nil
+	rc.procStdout = nil
+	rc.procStderr = nil
+	rc.captureMutex.Unlock()
+
+	if stdin != nil {
+		_ = stdin.Close()
+	}
+
+	if proc != nil {
+		if proc.Process != nil {
+			_ = proc.Process.Kill()
+		}
+		_ = proc.Wait()
+	}
+
+	if readerDone != nil {
+		<-readerDone
+	}
+	if stderrDone != nil {
+		<-stderrDone
 	}
 
 	return nil
@@ -199,6 +196,140 @@ func (rc *RealCamera) Stop() error {
 // IsReady returns true if camera is initialized and ready to capture.
 func (rc *RealCamera) IsReady() bool {
 	return rc.isReady.Load() && !rc.isStopping.Load()
+}
+
+func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+	if _, err := rc.lookPath("libcamera-vid"); err == nil {
+		cmd := exec.Command(
+			"libcamera-vid",
+			"--codec", "mjpeg",
+			"--nopreview",
+			"--timeout", "0",
+			"--width", fmt.Sprintf("%d", rc.width),
+			"--height", fmt.Sprintf("%d", rc.height),
+			"--framerate", fmt.Sprintf("%d", rc.fps),
+			"-o", "-",
+		)
+		return rc.startCommand(cmd)
+	}
+
+	if _, err := rc.lookPath("ffmpeg"); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("neither libcamera-vid nor ffmpeg found in PATH")
+	}
+
+	cmd := exec.Command(
+		"ffmpeg",
+		"-f", "video4linux2",
+		"-input_format", "mjpeg",
+		"-i", rc.devicePath,
+		"-c:v", "mjpeg",
+		"-q:v", fmt.Sprintf("%d", rc.jpegQuality),
+		"-f", "mjpeg",
+		"pipe:1",
+	)
+	return rc.startCommand(cmd)
+}
+
+func (rc *RealCamera) startCommand(cmd *exec.Cmd) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed creating stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed creating stderr pipe: %w", err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed creating stdin pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to start capture process: %w", err)
+	}
+	return cmd, stdin, stdout, stderr, nil
+}
+
+func (rc *RealCamera) readMJPEGStream() {
+	defer close(rc.readerDone)
+
+	buf := make([]byte, readChunkSize)
+	for {
+		rc.captureMutex.Lock()
+		stdout := rc.procStdout
+		rc.captureMutex.Unlock()
+
+		if stdout == nil {
+			return
+		}
+
+		n, err := stdout.Read(buf)
+		if n > 0 {
+		rc.frameMutex.Lock()
+		rc.readBuffer = append(rc.readBuffer, buf[:n]...)
+		const maxBufferSize = 10 * 1024 * 1024 // 10MB limit
+		if len(rc.readBuffer) > maxBufferSize {
+			rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
+			rc.frameMutex.Unlock()
+			return
+		}
+		for {
+			frame, remaining, found := extractJPEGFrame(rc.readBuffer)
+			if !found {
+				break
+			}
+			rc.latestFrame = append(rc.latestFrame[:0], frame...)
+			rc.frameSeq++
+			rc.readBuffer = remaining
+		}
+		rc.frameMutex.Unlock()
+		}
+
+		if err != nil {
+			if errors.Is(err, io.EOF) && rc.isStopping.Load() {
+				return
+			}
+			rc.frameMutex.Lock()
+			if rc.readerErr == nil {
+				rc.readerErr = err
+			}
+			rc.frameMutex.Unlock()
+			return
+		}
+	}
+}
+
+func (rc *RealCamera) drainStderr() {
+	defer close(rc.stderrDone)
+
+	rc.captureMutex.Lock()
+	stderr := rc.procStderr
+	rc.captureMutex.Unlock()
+	if stderr == nil {
+		return
+	}
+
+	_, _ = io.Copy(io.Discard, stderr)
+}
+
+func extractJPEGFrame(stream []byte) (frame []byte, remaining []byte, found bool) {
+	start := bytes.Index(stream, []byte{0xFF, 0xD8})
+	if start == -1 {
+		if len(stream) > 2 {
+			return nil, stream[len(stream)-2:], false
+		}
+		return nil, stream, false
+	}
+
+	endRel := bytes.Index(stream[start+2:], []byte{0xFF, 0xD9})
+	if endRel == -1 {
+		if start > 0 {
+			return nil, stream[start:], false
+		}
+		return nil, stream, false
+	}
+
+	end := start + 2 + endRel + 2
+	return stream[start:end], stream[end:], true
 }
 
 // encodeFrameToJPEG converts an image.Image to JPEG bytes.
