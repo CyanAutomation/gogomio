@@ -26,7 +26,7 @@ func main() {
 	log.Printf("Configuration: %s", cfg.String())
 
 	// Initialize and start camera
-	cam, err := initializeCamera(
+	cam, backend, err := initializeCamera(
 		cfg,
 		func() camera.Camera { return camera.NewRealCamera() },
 		func() camera.Camera { return camera.NewMockCamera() },
@@ -40,7 +40,8 @@ func main() {
 		}
 	}()
 
-	log.Printf("Camera started: %dx%d @ %d FPS", cfg.Resolution[0], cfg.Resolution[1], cfg.FPS)
+	log.Printf("Camera backend initialized: %s", backend)
+	log.Printf("Camera capture started: %dx%d @ %d FPS", cfg.Resolution[0], cfg.Resolution[1], cfg.FPS)
 
 	// Create HTTP router and register handlers
 	router := chi.NewRouter()
@@ -85,28 +86,28 @@ func initializeCamera(
 	cfg *config.Config,
 	newRealCamera func() camera.Camera,
 	newMockCamera func() camera.Camera,
-) (camera.Camera, error) {
+) (camera.Camera, string, error) {
 	if cfg.MockCamera {
-		log.Println("Using mock camera (development mode)")
+		log.Println("Initializing camera backend: mock (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return cam, nil
+		return cam, "mock", nil
 	}
 
 	// Try real camera first if device is available.
+	log.Println("Initializing camera backend: real (Raspberry Pi CSI)")
 	realCam := newRealCamera()
 	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-		log.Printf("Real camera unavailable (%v), falling back to mock camera", err)
+		log.Printf("Real camera initialization failed (%v), falling back to mock camera", err)
+		log.Println("Initializing camera backend: mock fallback (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		log.Println("Using mock camera fallback (development mode)")
-		return cam, nil
+		return cam, "mock-fallback", nil
 	}
 
-	log.Println("Using real camera (Raspberry Pi CSI)")
-	return realCam, nil
+	return realCam, "real", nil
 }
