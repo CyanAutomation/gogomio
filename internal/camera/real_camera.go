@@ -27,6 +27,9 @@ type RealCamera struct {
 
 	// Process management
 	proc *exec.Cmd
+
+	// test hook for capture behavior override
+	captureRunner func() ([]byte, error)
 }
 
 // NewRealCamera creates a new camera instance for Raspberry Pi CSI camera.
@@ -74,34 +77,34 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 // CaptureFrame captures a single JPEG frame from the camera device.
 // Uses ffmpeg to read from V4L2 device and encode to JPEG.
 func (rc *RealCamera) CaptureFrame() ([]byte, error) {
+	rc.captureMutex.Lock()
+	defer rc.captureMutex.Unlock()
+
+	// Re-check state under lock to avoid stale reads while stopping/starting.
 	if !rc.isReady.Load() {
 		return nil, fmt.Errorf("camera not ready")
 	}
-
 	if rc.isStopping.Load() {
 		return nil, fmt.Errorf("camera stopped")
 	}
 
-	// FPS throttling: ensure minimum time between frames
-	// Do rate limiting outside the lock to avoid blocking other readers
-	frameInterval := time.Duration(1e9/int64(rc.fps)) * time.Nanosecond
-
-	rc.captureMutex.Lock()
-	since := time.Since(rc.lastCapture)
-	rc.captureMutex.Unlock()
-
-	// Sleep outside the lock if needed
-	if since < frameInterval {
-		time.Sleep(frameInterval - since)
+	// FPS throttling and capture are serialized in the same critical section
+	// to enforce single-flight capture semantics.
+	if rc.fps > 0 {
+		frameInterval := time.Second / time.Duration(rc.fps)
+		since := time.Since(rc.lastCapture)
+		if since < frameInterval {
+			time.Sleep(frameInterval - since)
+		}
 	}
-
-	// Update lastCapture with minimal lock time
-	rc.captureMutex.Lock()
 	rc.lastCapture = time.Now()
-	rc.captureMutex.Unlock()
 
 	// Capture frame using ffmpeg from V4L2 device
-	frameData, err := rc.captureViaFFmpeg()
+	runner := rc.captureRunner
+	if runner == nil {
+		runner = rc.captureViaFFmpeg
+	}
+	frameData, err := runner()
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg capture failed: %w", err)
 	}

@@ -3,6 +3,8 @@ package camera
 import (
 	"image"
 	"os/exec"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -237,5 +239,65 @@ func TestRealCameraThreadSafety(t *testing.T) {
 	// If we get here without deadlock, test passed
 	if rc.width == 0 {
 		t.Error("camera mutex lock failed")
+	}
+}
+
+func TestRealCameraCaptureFrameSingleFlight(t *testing.T) {
+	rc := NewRealCamera()
+	rc.isReady.Store(true)
+	rc.fps = 10_000 // Effectively disable throttling for this concurrency test.
+	rc.lastCapture = time.Now().Add(-time.Second)
+
+	var inFlight int32
+	var maxInFlight int32
+	var calls int32
+
+	rc.captureRunner = func() ([]byte, error) {
+		current := atomic.AddInt32(&inFlight, 1)
+		defer atomic.AddInt32(&inFlight, -1)
+
+		for {
+			previous := atomic.LoadInt32(&maxInFlight)
+			if current <= previous {
+				break
+			}
+			if atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+				break
+			}
+		}
+
+		atomic.AddInt32(&calls, 1)
+		time.Sleep(25 * time.Millisecond)
+		return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil
+	}
+
+	const goroutines = 8
+	var wg sync.WaitGroup
+	errCh := make(chan error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := rc.CaptureFrame()
+			errCh <- err
+		}()
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("CaptureFrame returned error: %v", err)
+		}
+	}
+
+	if got := atomic.LoadInt32(&calls); got != goroutines {
+		t.Fatalf("capture runner calls mismatch: got %d want %d", got, goroutines)
+	}
+
+	if got := atomic.LoadInt32(&maxInFlight); got != 1 {
+		t.Fatalf("capture overlap detected: max in-flight=%d, want 1", got)
 	}
 }
