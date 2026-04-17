@@ -35,23 +35,22 @@ func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	size := len(buf)
 
-	// Check if we should throttle based on target FPS
+	fb.condition.L.Lock()
+	defer fb.condition.L.Unlock()
+
+	// Check if we should throttle based on target FPS.
 	now := time.Now().UnixNano()
 	if fb.targetFrameIntervalNS > 0 && fb.lastFrameMonotonic > 0 {
 		elapsed := now - fb.lastFrameMonotonic
 		if elapsed < fb.targetFrameIntervalNS {
-			// Too soon, skip this frame
+			// Too soon, skip this frame.
 			return size, nil
 		}
 	}
 
-	fb.condition.L.Lock()
-	defer fb.condition.L.Unlock()
-
 	// Store frame and update timestamp
 	fb.frame = make([]byte, len(buf))
 	copy(fb.frame, buf)
-	now = time.Now().UnixNano()
 	fb.frameSeq++
 	fb.lastFrameMonotonic = now
 	fb.stats.RecordFrame(now)
