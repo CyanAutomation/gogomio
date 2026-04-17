@@ -228,15 +228,23 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 
 	if _, err := rc.lookPath("ffmpeg"); err != nil {
 		log.Printf("❌ Neither libcamera-vid nor ffmpeg found in PATH")
+		log.Printf("   libcamera-vid: Check if libcamera-apps package is installed in container")
+		log.Printf("   ffmpeg: Check if ffmpeg package is installed in container")
 		return nil, nil, nil, nil, fmt.Errorf("neither libcamera-vid nor ffmpeg found in PATH")
 	}
 
 	log.Printf("⚠️  libcamera-vid not available, falling back to ffmpeg (V4L2 mode)")
+	log.Printf("  Note: libcamera-apps may not be installed or available in container")
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
+	
+	// Use YUV420P format which is more universally supported by V4L2 devices
+	// FFmpeg will encode this to MJPEG for streaming
 	cmd := exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
-		"-input_format", "mjpeg",
+		"-pixel_format", "yuyv422",          // Common V4L2 format
+		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
+		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
 		"-c:v", "mjpeg",
 		"-q:v", fmt.Sprintf("%d", rc.jpegQuality),
