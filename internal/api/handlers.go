@@ -339,6 +339,21 @@ type HealthResponse struct {
 	FramesPerSecond   float64 `json:"fps"`
 }
 
+// DiagnosticsResponse is the JSON response for /api/diagnostics endpoint.
+type DiagnosticsResponse struct {
+	Status              string  `json:"status"`
+	CameraReady         bool    `json:"camera_ready"`
+	FramesPerSecond     float64 `json:"fps"`
+	UptimeSeconds       int64   `json:"uptime_seconds"`
+	StreamConnections   int     `json:"stream_connections"`
+	FramesCaptured      int64   `json:"frames_captured"`
+	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds"`
+	Resolution          string  `json:"resolution"`
+	JPEGQuality         int     `json:"jpeg_quality"`
+	MaxConnections      int     `json:"max_stream_connections"`
+	Message             string  `json:"message"`
+}
+
 // RegisterHandlers registers all API endpoints with the Chi router.
 func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	startTime := time.Now()
@@ -390,6 +405,11 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 
 	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsUpdate(w, r, fm)
+	})
+
+	// Diagnostics endpoint
+	router.Get("/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+		handleDiagnostics(w, r, fm, cfg, startTime)
 	})
 }
 
@@ -496,6 +516,38 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager)
 // SettingsUpdateRequest represents a request body for updating settings
 type SettingsUpdateRequest struct {
 	Settings map[string]interface{} `json:"settings"`
+}
+
+func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+	frameCount, _, fps := fm.streamStats.Snapshot()
+
+	status := "ok"
+	message := "Camera is functioning normally"
+	if !fm.cam.IsReady() {
+		status = "error"
+		message = "Camera is not ready or failed to initialize"
+	}
+
+	resolution := fmt.Sprintf("%dx%d", cfg.Resolution[0], cfg.Resolution[1])
+
+	response := DiagnosticsResponse{
+		Status:              status,
+		CameraReady:         fm.cam.IsReady(),
+		FramesPerSecond:     fps,
+		UptimeSeconds:       int64(time.Since(startTime).Seconds()),
+		StreamConnections:   fm.connTracker.Count(),
+		FramesCaptured:      frameCount,
+		LastFrameAgeSeconds: fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		Resolution:          resolution,
+		JPEGQuality:         cfg.JPEGQuality,
+		MaxConnections:      cfg.MaxStreamConnections,
+		Message:             message,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		_ = err
+	}
 }
 
 func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManager) {

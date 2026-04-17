@@ -363,6 +363,8 @@
                     <button class="btn-secondary" id="reset-settings">Reset</button>
                 </div>
 
+                <button class="btn-secondary" id="diagnostics-btn" style="margin-top: 10px; width: 100%;" onclick="openDiagnosticsModal()">📊 Diagnostics</button>
+
                 <div class="stats">
                     <div class="stat-item">
                         <div class="stat-label">FPS</div>
@@ -387,6 +389,20 @@
         <footer>
             <p>Motion In Ocean v0.1.0-dev | Raspberry Pi Camera Streaming</p>
         </footer>
+    </div>
+
+    <!-- Diagnostics Modal -->
+    <div id="diagnostics-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; border-radius: 12px; padding: 30px; max-width: 500px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-height: 80vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #667eea;">System Diagnostics</h2>
+                <button onclick="closeDiagnosticsModal()" style="background: none; border: none; font-size: 1.5em; cursor: pointer; color: #999;">&times;</button>
+            </div>
+            
+            <div id="diagnostics-content" style="display: grid; gap: 15px;">
+                <!-- Diagnostics will be populated here -->
+            </div>
+        </div>
     </div>
 
     <style>
@@ -586,6 +602,101 @@
                 }, 3000);
             }
         }
+
+        // Diagnostics functions
+        function openDiagnosticsModal() {
+            document.getElementById('diagnostics-modal').style.display = 'flex';
+            fetchDiagnostics();
+        }
+
+        function closeDiagnosticsModal() {
+            document.getElementById('diagnostics-modal').style.display = 'none';
+        }
+
+        function fetchDiagnostics() {
+            fetch('/api/diagnostics')
+                .then(res => res.json())
+                .then(data => {
+                    const content = document.getElementById('diagnostics-content');
+                    content.innerHTML = `
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div style="background: ${data.camera_ready ? '#d4edda' : '#f8d7da'}; padding: 12px; border-radius: 6px;">
+                                <div style="font-size: 0.9em; color: ${data.camera_ready ? '#155724' : '#721c24'}; font-weight: 500;">Camera Status</div>
+                                <div style="font-size: 1.3em; font-weight: bold; color: ${data.camera_ready ? '#155724' : '#721c24'}; margin-top: 5px;">
+                                    ${data.camera_ready ? '✓ Ready' : '✗ Error'}
+                                </div>
+                            </div>
+                            <div style="background: #d1ecf1; padding: 12px; border-radius: 6px;">
+                                <div style="font-size: 0.9em; color: #0c5460; font-weight: 500;">System Status</div>
+                                <div style="font-size: 1.3em; font-weight: bold; color: #0c5460; margin-top: 5px;">
+                                    ${data.status.toUpperCase()}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="border-top: 1px solid #eee; padding-top: 15px;">
+                            <div style="font-weight: 600; margin-bottom: 10px; color: #333;">Details</div>
+                            <table style="width: 100%; font-size: 0.95em;">
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">Uptime</td>
+                                    <td style="text-align: right; font-weight: 500;">${formatUptime(data.uptime_seconds)}</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">Frames/Second</td>
+                                    <td style="text-align: right; font-weight: 500;">${data.fps.toFixed(1)} fps</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">Frames Captured</td>
+                                    <td style="text-align: right; font-weight: 500;">${data.frames_captured}</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">Last Frame Age</td>
+                                    <td style="text-align: right; font-weight: 500;">${data.last_frame_age_seconds.toFixed(2)}s ago</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">Resolution</td>
+                                    <td style="text-align: right; font-weight: 500;">${data.resolution}</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">JPEG Quality</td>
+                                    <td style="text-align: right; font-weight: 500;">${data.jpeg_quality}%</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 8px 0; color: #666;">Active Streams</td>
+                                    <td style="text-align: right; font-weight: 500;">${data.stream_connections}/${data.max_stream_connections}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <div style="background: ${data.camera_ready ? '#d4edda' : '#fff3cd'}; padding: 12px; border-radius: 6px; margin-top: 15px; border-left: 4px solid ${data.camera_ready ? '#28a745' : '#ffc107'};">
+                            <div style="font-size: 0.9em; color: ${data.camera_ready ? '#155724' : '#856404'};">
+                                <strong>Message:</strong> ${data.message}
+                            </div>
+                        </div>
+                    `;
+                })
+                .catch(err => {
+                    const content = document.getElementById('diagnostics-content');
+                    content.innerHTML = '<div style="color: #721c24; background: #f8d7da; padding: 12px; border-radius: 6px;">Failed to fetch diagnostics: ' + err + '</div>';
+                });
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            if (mins > 0) return `${mins}m ${secs}s`;
+            return `${secs}s`;
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('diagnostics-modal')?.addEventListener('click', function(e) {
+            if (e.target === this) closeDiagnosticsModal();
+        });
 
         // Initialize when DOM is ready
         document.addEventListener("DOMContentLoaded", () => {
