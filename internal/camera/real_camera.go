@@ -264,18 +264,24 @@ func (rc *RealCamera) readMJPEGStream() {
 
 		n, err := stdout.Read(buf)
 		if n > 0 {
-			rc.frameMutex.Lock()
-			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
-			for {
-				frame, remaining, found := extractJPEGFrame(rc.readBuffer)
-				if !found {
-					break
-				}
-				rc.latestFrame = append(rc.latestFrame[:0], frame...)
-				rc.frameSeq++
-				rc.readBuffer = remaining
-			}
+		rc.frameMutex.Lock()
+		rc.readBuffer = append(rc.readBuffer, buf[:n]...)
+		const maxBufferSize = 10 * 1024 * 1024 // 10MB limit
+		if len(rc.readBuffer) > maxBufferSize {
+			rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
 			rc.frameMutex.Unlock()
+			return
+		}
+		for {
+			frame, remaining, found := extractJPEGFrame(rc.readBuffer)
+			if !found {
+				break
+			}
+			rc.latestFrame = append(rc.latestFrame[:0], frame...)
+			rc.frameSeq++
+			rc.readBuffer = remaining
+		}
+		rc.frameMutex.Unlock()
 		}
 
 		if err != nil {
