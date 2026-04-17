@@ -245,7 +245,7 @@ func TestRealCameraThreadSafety(t *testing.T) {
 func TestRealCameraCaptureFrameSingleFlight(t *testing.T) {
 	rc := NewRealCamera()
 	rc.isReady.Store(true)
-	rc.fps = 10_000 // Effectively disable throttling for this concurrency test.
+	rc.fps = 0 // Disable throttling to test pure single-flight semantics
 	rc.lastCapture = time.Now().Add(-time.Second)
 
 	var inFlight int32
