@@ -237,8 +237,12 @@ func TestFrameBufferConcurrentWrites(t *testing.T) {
 		t.Fatalf("last frame length is %d, want 1", len(gotFrame))
 	}
 
-	if fb.lastFrameMonotonic <= 0 {
-		t.Fatalf("lastFrameMonotonic is %d, want > 0", fb.lastFrameMonotonic)
+	fb.condition.L.Lock()
+	lastMonotonic := fb.lastFrameMonotonic
+	fb.condition.L.Unlock()
+
+	if lastMonotonic <= 0 {
+		t.Fatalf("lastFrameMonotonic is %d, want > 0", lastMonotonic)
 	}
 
 	count, _, _ := stats.Snapshot()
