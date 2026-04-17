@@ -33,7 +33,7 @@ RUN CGO_ENABLED=0 go build \
     ./cmd/gogomio
 
 # Stage 2: Runtime
-FROM alpine:3.19
+FROM debian:bookworm-slim
 
 # Build arguments for runtime stage
 ARG VERSION
@@ -47,18 +47,21 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.authors="CyanAutomation" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata curl
-
-# Install ffmpeg for real camera support (V4L2 camera access on Raspberry Pi)
-# Install libcamera-tools for native CSI camera support (Raspberry Pi 4/5)
-RUN apk add --no-cache ffmpeg libcamera-tools
+# Update package lists and install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    curl \
+    ffmpeg \
+    libcamera-tools \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
-RUN adduser -D -u 1000 gogomio && \
+RUN useradd -m -u 1000 -s /bin/bash gogomio && \
+    usermod -a -G video gogomio && \
+    mkdir -p /etc/profile.d && \
     echo "umask 0077" >> /etc/profile.d/gogomio.sh && \
-    chmod 755 /etc/profile.d/gogomio.sh && \
-    addgroup gogomio video
+    chmod 755 /etc/profile.d/gogomio.sh
 
 WORKDIR /app
 
