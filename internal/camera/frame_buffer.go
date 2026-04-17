@@ -99,16 +99,27 @@ func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]b
 		return nil, lastSeenSeq
 	}
 
-	timedOut := false
-	timer := time.AfterFunc(timeout, func() {
+	// Use WaitWithTimeout by creating a goroutine that broadcasts after timeout
+	deadline := time.Now().Add(timeout)
+	timeoutCh := make(chan struct{})
+
+	go func() {
+		remaining := time.Until(deadline)
+		if remaining > 0 {
+			time.Sleep(remaining)
+		}
 		fb.condition.L.Lock()
-		timedOut = true
 		fb.condition.Broadcast()
 		fb.condition.L.Unlock()
-	})
-	defer timer.Stop()
+		close(timeoutCh)
+	}()
 
-	for fb.frameSeq <= lastSeenSeq && !timedOut {
+	for fb.frameSeq <= lastSeenSeq {
+		// Check if timeout has occurred
+		if time.Now().After(deadline) {
+			return nil, lastSeenSeq
+		}
+
 		fb.condition.Wait()
 	}
 
