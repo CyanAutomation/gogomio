@@ -33,7 +33,7 @@ RUN CGO_ENABLED=0 go build \
     ./cmd/gogomio
 
 # Stage 2: Runtime
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 
 # Build arguments for runtime stage
 ARG VERSION
@@ -48,12 +48,13 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
 
 # Update package lists and install runtime dependencies
+# Ubuntu 24.04 LTS has newer libcamera packages (v0.2+) with libcamera-vid support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     curl \
     ffmpeg \
-    libcamera-tools \
+    libcamera-apps \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
