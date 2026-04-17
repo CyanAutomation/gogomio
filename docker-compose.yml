@@ -13,6 +13,10 @@ services:
 
     platform: linux/arm64
 
+    # Enable privileged mode for full device access (required for CSI camera on Raspberry Pi)
+    # This grants access to camera ISP, hardware memory, and media controllers
+    privileged: true
+
     environment:
       TZ: ${TZ}
       MIO_RESOLUTION: ${MIO_RESOLUTION}
@@ -29,9 +33,30 @@ services:
 
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      # Provide udev information for device discovery and permission management
+      - /run/udev:/run/udev:ro
 
     devices:
+      # Camera ISP control - Required for camera initialization on Raspberry Pi
+      - /dev/vchiq:/dev/vchiq
+      # Memory devices - Required for libcamera memory management on modern Pi OS
+      - /dev/mem:/dev/mem
+      - /dev/dma_heap:/dev/dma_heap
+      # Media controller device - Required for libcamera camera enumeration
+      - /dev/media0:/dev/media0
+      - /dev/media1:/dev/media1
+      # V4L2 sub-device - Used for camera sensor control on unicam driver
+      - /dev/v4l-subdev0:/dev/v4l-subdev0
+      # Video device nodes - Pi 4/5 typically use video0, plus numbered nodes for ISP (10-23)
       - /dev/video0:/dev/video0
+      - /dev/video10:/dev/video10
+      - /dev/video11:/dev/video11
+      - /dev/video12:/dev/video12
+      - /dev/video13:/dev/video13
+      - /dev/video14:/dev/video14
+      - /dev/video15:/dev/video15
+      - /dev/video16:/dev/video16
+      - /dev/video18:/dev/video18
 
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${GOGOMIO_PORT}/ready >/dev/null || exit 1"]
