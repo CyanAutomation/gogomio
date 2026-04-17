@@ -122,8 +122,10 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 	frameData, err := runner()
 
 	rc.captureMutex.Lock()
-	rc.lastCapture = time.Now()
 	rc.capturing = false
+	if err == nil {
+		rc.lastCapture = time.Now()
+	}
 	rc.captureMutex.Unlock()
 
 	if err != nil {
