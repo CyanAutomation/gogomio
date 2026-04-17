@@ -191,14 +191,39 @@ func (rc *RealCamera) Stop() error {
 		if proc.Process != nil {
 			_ = proc.Process.Kill()
 		}
-		_ = proc.Wait()
+		// Use a timeout to prevent indefinite blocking on proc.Wait()
+		waitDone := make(chan error, 1)
+		go func() {
+			waitDone <- proc.Wait()
+		}()
+
+		select {
+		case <-waitDone:
+			// Process exited cleanly
+		case <-time.After(5 * time.Second):
+			// Timeout waiting for process to exit
+			log.Printf("⚠️  Timeout waiting for camera process to exit")
+		}
 	}
 
+	// Wait for reader goroutines to exit, with timeout
 	if readerDone != nil {
-		<-readerDone
+		select {
+		case <-readerDone:
+			// Reader exited
+		case <-time.After(5 * time.Second):
+			// Timeout waiting for reader
+			log.Printf("⚠️  Timeout waiting for reader goroutine to exit")
+		}
 	}
 	if stderrDone != nil {
-		<-stderrDone
+		select {
+		case <-stderrDone:
+			// Stderr drainer exited
+		case <-time.After(5 * time.Second):
+			// Timeout waiting for stderr drainer
+			log.Printf("⚠️  Timeout waiting for stderr drainer goroutine to exit")
+		}
 	}
 
 	return nil
@@ -282,11 +307,17 @@ func (rc *RealCamera) readMJPEGStream() {
 
 	buf := make([]byte, readChunkSize)
 	for {
+		// Check if stopping before attempting read
+		if rc.isStopping.Load() {
+			return
+		}
+
 		rc.captureMutex.Lock()
 		stdout := rc.procStdout
+		isStopping := rc.isStopping.Load()
 		rc.captureMutex.Unlock()
 
-		if stdout == nil {
+		if stdout == nil || isStopping {
 			return
 		}
 
@@ -328,15 +359,26 @@ func (rc *RealCamera) readMJPEGStream() {
 func (rc *RealCamera) drainStderr() {
 	defer close(rc.stderrDone)
 
+	// Check if stopping before attempting to access stderr
+	if rc.isStopping.Load() {
+		return
+	}
+
 	rc.captureMutex.Lock()
 	stderr := rc.procStderr
+	isStopping := rc.isStopping.Load()
 	rc.captureMutex.Unlock()
-	if stderr == nil {
+
+	if stderr == nil || isStopping {
 		return
 	}
 
 	scanner := bufio.NewScanner(stderr)
 	for scanner.Scan() {
+		// Check if stopping during scan loop
+		if rc.isStopping.Load() {
+			return
+		}
 		line := scanner.Text()
 		if line != "" {
 			log.Printf("[camera stderr] %s", line)

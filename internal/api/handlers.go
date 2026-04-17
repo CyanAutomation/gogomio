@@ -30,8 +30,9 @@ type FrameManager struct {
 	clientImbalance int64 // atomic counter for decrement calls when clientCount is already 0
 
 	// Channel to signal goroutine to stop
-	doneChan      chan struct{}
-	stopTimer     *time.Timer
+	doneChan    chan struct{}
+	stopChancel chan struct{} // Channel to cancel pending stop
+
 	idleStopDelay time.Duration
 	captureStarts int64
 }
@@ -58,6 +59,7 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		connTracker:   camera.NewConnectionTracker(),
 		settingsM:     settings.NewManager("/tmp/gogomio/settings.json"),
 		doneChan:      make(chan struct{}),
+		stopChancel:   make(chan struct{}),
 		clientCount:   0,
 		idleStopDelay: idleStopDelay,
 	}
@@ -70,6 +72,11 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 func (fm *FrameManager) IncrementClients() {
 	new := atomic.AddInt64(&fm.clientCount, 1)
 	if new == 1 {
+		fm.captureMu.Lock()
+		// Cancel any pending stop by closing the stopChancel
+		close(fm.stopChancel)
+		fm.stopChancel = make(chan struct{})
+		fm.captureMu.Unlock()
 		fm.startCapture()
 	}
 }
@@ -101,11 +108,11 @@ func (fm *FrameManager) DecrementClients() {
 // startCapture starts the capture loop if not already running.
 func (fm *FrameManager) startCapture() {
 	fm.captureMu.Lock()
-	fm.cancelPendingStopLocked()
 	if fm.captureStarted {
 		fm.captureMu.Unlock()
 		return
 	}
+
 	done := make(chan struct{})
 	fm.captureStarted = true
 	fm.doneChan = done
@@ -114,49 +121,50 @@ func (fm *FrameManager) startCapture() {
 	go fm.captureLoop(done)
 }
 
-func (fm *FrameManager) cancelPendingStopLocked() {
-	if fm.stopTimer != nil {
-		fm.stopTimer.Stop()
-		fm.stopTimer = nil
-	}
-}
-
 func (fm *FrameManager) scheduleStopCapture() {
 	fm.captureMu.Lock()
 	if !fm.captureStarted {
 		fm.captureMu.Unlock()
 		return
 	}
-	fm.cancelPendingStopLocked()
+
 	delay := fm.idleStopDelay
 	if delay <= 0 {
 		delay = defaultIdleStopDelay
 	}
-	var timer *time.Timer
-	timer = time.AfterFunc(delay, func() {
-		fm.captureMu.Lock()
-		if fm.stopTimer != timer {
-			fm.captureMu.Unlock()
-			return
-		}
-		fm.stopTimer = nil
-		if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 {
-			fm.captureMu.Unlock()
-			return
-		}
-		fm.captureStarted = false
-		done := fm.doneChan
-		fm.captureMu.Unlock()
-		close(done)
-	})
-	fm.stopTimer = timer
+
+	// Get current stopChancel and done to check against in the goroutine
+	stopChancel := fm.stopChancel
+	done := fm.doneChan
 	fm.captureMu.Unlock()
+
+	// Spawn a goroutine that will signal stop after the idle delay
+	// unless the stopChancel is replaced (indicating a new client connected)
+	go func() {
+		select {
+		case <-time.After(delay):
+			// Delay expired, proceed with stopping
+			fm.captureMu.Lock()
+			// Verify that the done channel is still the same and capture is still running
+			if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 || fm.doneChan != done {
+				fm.captureMu.Unlock()
+				return
+			}
+			// Still no clients, close capture
+			fm.captureStarted = false
+			fm.captureMu.Unlock()
+			// Safe to close because this goroutine owns this done channel
+			close(done)
+		case <-stopChancel:
+			// Stop was cancelled (new client connected)
+			return
+		}
+	}()
 }
 
 // stopCapture stops the capture loop if currently running.
 func (fm *FrameManager) stopCapture() {
 	fm.captureMu.Lock()
-	fm.cancelPendingStopLocked()
 	if !fm.captureStarted {
 		fm.captureMu.Unlock()
 		return
