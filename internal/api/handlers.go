@@ -224,7 +224,7 @@ func (fm *FrameManager) GetFrame() []byte {
 
 // StreamFrame writes frames to an HTTP response in MJPEG format.
 // Manages connection tracking and respects the max connection limit (max 2 concurrent streams).
-func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) error {
+func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxConnections int) error {
 	// Check connection limit
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -255,41 +255,65 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, maxConnections int) e
 	fm.captureMu.Lock()
 	streamDone := fm.doneChan
 	fm.captureMu.Unlock()
+	ctx := r.Context()
 
 	for {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-streamDone:
 			return fmt.Errorf("stream stopped")
 		default:
 		}
 
-		// Wait for new frame with timeout
-		frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, lastSeenSeq)
-		if frame == nil {
-			// Timeout waiting for frame, keep connection open or retry
-			continue
+		type frameResult struct {
+			frame []byte
+			seq   uint64
 		}
-		lastSeenSeq = seq
+		frameResultChan := make(chan frameResult, 1)
+	go func(last uint64) {
+		frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, last)
+		select {
+		case frameResultChan <- frameResult{frame: frame, seq: seq}:
+		case <-ctx.Done():
+		case <-streamDone:
+		}
+	}(lastSeenSeq)
 
-		// Write MJPEG boundary and frame
-		boundary := []byte("--frame\r\n")
-		headers := []byte("Content-Type: image/jpeg\r\nContent-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")
-		trailer := []byte("\r\n")
+		// Wait for new frame with timeout, stream stop, or client disconnect.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-streamDone:
+			return fmt.Errorf("stream stopped")
+		case frameResult := <-frameResultChan:
+			if frameResult.frame == nil {
+				// Timeout waiting for frame, keep connection open or retry
+				continue
+			}
+			lastSeenSeq = frameResult.seq
+			frame := frameResult.frame
 
-		if _, err := w.Write(boundary); err != nil {
-			return err
-		}
-		if _, err := w.Write(headers); err != nil {
-			return err
-		}
-		if _, err := w.Write(frame); err != nil {
-			return err
-		}
-		if _, err := w.Write(trailer); err != nil {
-			return err
-		}
+			// Write MJPEG boundary and frame
+			boundary := []byte("--frame\r\n")
+			headers := []byte("Content-Type: image/jpeg\r\nContent-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")
+			trailer := []byte("\r\n")
 
-		flusher.Flush()
+			if _, err := w.Write(boundary); err != nil {
+				return err
+			}
+			if _, err := w.Write(headers); err != nil {
+				return err
+			}
+			if _, err := w.Write(frame); err != nil {
+				return err
+			}
+			if _, err := w.Write(trailer); err != nil {
+				return err
+			}
+
+			flusher.Flush()
+		}
 	}
 }
 
@@ -336,7 +360,7 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 
 	// Stream endpoints
 	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
-		if err := fm.StreamFrame(w, cfg.MaxStreamConnections); err != nil {
+		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
 			// Client disconnected or error occurred - this is normal
 			_ = err
 		}
