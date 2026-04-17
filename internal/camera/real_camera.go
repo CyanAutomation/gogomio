@@ -237,12 +237,12 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 	log.Printf("  Note: libcamera-apps may not be installed or available in container")
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 
-	// Use YUV420P format which is more universally supported by V4L2 devices
-	// FFmpeg will encode this to MJPEG for streaming
+	// libcamera V4L2 device natively exposes MJPEG format
+	// Try MJPEG first, then fall back to auto-detection
 	cmd := exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
-		"-pixel_format", "yuyv422", // Common V4L2 format
+		"-input_format", "mjpeg",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
 		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
