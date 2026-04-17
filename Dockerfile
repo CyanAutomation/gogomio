@@ -49,12 +49,13 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
 
 # Update package lists and install runtime dependencies
 # Ubuntu 24.04 LTS has newer libcamera packages (v0.2+) with libcamera-vid support
+# libcamera-apps only available on ARM architectures; ffmpeg provides fallback for all architectures
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
     curl \
     ffmpeg \
-    libcamera-apps \
+    && apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || true \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
