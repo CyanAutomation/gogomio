@@ -59,7 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
-RUN useradd -m -u 1000 -s /bin/bash gogomio && \
+RUN useradd -m -u 1001 -s /bin/bash gogomio && \
     usermod -a -G video gogomio && \
     mkdir -p /etc/profile.d && \
     echo "umask 0077" >> /etc/profile.d/gogomio.sh && \
