@@ -237,12 +237,11 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 	log.Printf("  Note: libcamera-apps may not be installed or available in container")
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 
-	// libcamera V4L2 device requires special handling
-	// Use -pixel_format auto to let FFmpeg detect the device's actual format
+	// libcamera V4L2 device - use minimal parameters and let FFmpeg auto-detect
+	// This works with libcamera's /dev/video0 which has special behavior
 	cmd := exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
-		"-pixel_format", "auto",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
 		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
