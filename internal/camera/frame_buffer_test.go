@@ -206,6 +206,51 @@ func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 	}
 }
 
+// TestFrameBufferConcurrentWrites exercises concurrent writers and validates
+// state remains consistent when Write is called from many goroutines.
+func TestFrameBufferConcurrentWrites(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+
+	const writers = 64
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(writers)
+
+	for i := 0; i < writers; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			<-start
+			_, _ = fb.Write([]byte{byte(idx)})
+		}(i)
+	}
+
+	close(start)
+	wg.Wait()
+
+	if gotSeq := fb.CurrentSequence(); gotSeq != writers {
+		t.Fatalf("frame sequence is %d, want %d", gotSeq, writers)
+	}
+
+	if gotFrame := fb.GetFrame(); len(gotFrame) != 1 {
+		t.Fatalf("last frame length is %d, want 1", len(gotFrame))
+	}
+
+	fb.condition.L.Lock()
+	lastMonotonic := fb.lastFrameMonotonic
+	fb.condition.L.Unlock()
+
+	if lastMonotonic <= 0 {
+		t.Fatalf("lastFrameMonotonic is %d, want > 0", lastMonotonic)
+	}
+
+	count, _, _ := stats.Snapshot()
+	if count != writers {
+		t.Fatalf("stats frame count is %d, want %d", count, writers)
+	}
+}
+
 // TestFrameBufferWaitFrameSuccess tests WaitFrame returns frame when available
 func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	stats := NewStreamStats()
