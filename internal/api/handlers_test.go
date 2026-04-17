@@ -54,6 +54,17 @@ func (c *repeatedFrameCamera) CaptureFrame() ([]byte, error) {
 	return []byte{0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9}, nil
 }
 
+type readinessCamera struct {
+	ready bool
+}
+
+func (c *readinessCamera) Start(_, _, _, _ int) error { return nil }
+func (c *readinessCamera) Stop() error                { return nil }
+func (c *readinessCamera) IsReady() bool              { return c.ready }
+func (c *readinessCamera) CaptureFrame() ([]byte, error) {
+	return nil, nil
+}
+
 var errStopStream = errors.New("stop stream")
 
 type countingStreamWriter struct {
@@ -157,6 +168,58 @@ func TestReadyEndpoint(t *testing.T) {
 	// Should be 200 because camera is ready
 	if w.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Errorf("expected content type application/json, got %s", contentType)
+	}
+}
+
+func TestHandleReadyNotReady(t *testing.T) {
+	fm := NewFrameManager(&readinessCamera{ready: false}, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handleReady(w, req, fm)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status %d, got %d", http.StatusServiceUnavailable, w.Code)
+	}
+
+	if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Errorf("expected content type application/json, got %s", contentType)
+	}
+
+	var result map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to parse JSON response: %v", err)
+	}
+	if result["status"] != "initializing" {
+		t.Errorf("expected status initializing, got %q", result["status"])
+	}
+}
+
+func TestHandleReadyReady(t *testing.T) {
+	fm := NewFrameManager(&readinessCamera{ready: true}, &config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handleReady(w, req, fm)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Errorf("expected content type application/json, got %s", contentType)
+	}
+
+	var result map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to parse JSON response: %v", err)
+	}
+	if result["status"] != "ready" {
+		t.Errorf("expected status ready, got %q", result["status"])
 	}
 }
 

@@ -415,8 +415,8 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 
 func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	if !fm.cam.IsReady() {
-		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]string{"status": "initializing"}); err != nil {
 			_ = err
 		}
