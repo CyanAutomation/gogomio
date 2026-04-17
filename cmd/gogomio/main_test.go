@@ -35,7 +35,7 @@ func TestInitializeCamera_RealCameraStartsOnce(t *testing.T) {
 	realCam := &fakeCamera{}
 	mockCam := &fakeCamera{}
 
-	cam, err := initializeCamera(
+	cam, backend, err := initializeCamera(
 		cfg,
 		func() camera.Camera { return realCam },
 		func() camera.Camera { return mockCam },
@@ -45,6 +45,9 @@ func TestInitializeCamera_RealCameraStartsOnce(t *testing.T) {
 	}
 	if cam != realCam {
 		t.Fatalf("expected real camera, got %T", cam)
+	}
+	if backend != "real" {
+		t.Fatalf("expected backend real, got %q", backend)
 	}
 	if realCam.startCalls != 1 {
 		t.Fatalf("expected real camera Start() once, got %d", realCam.startCalls)
@@ -59,7 +62,7 @@ func TestInitializeCamera_RealFailureFallsBackToMock(t *testing.T) {
 	realCam := &fakeCamera{startErr: errors.New("device missing")}
 	mockCam := &fakeCamera{}
 
-	cam, err := initializeCamera(
+	cam, backend, err := initializeCamera(
 		cfg,
 		func() camera.Camera { return realCam },
 		func() camera.Camera { return mockCam },
@@ -69,6 +72,9 @@ func TestInitializeCamera_RealFailureFallsBackToMock(t *testing.T) {
 	}
 	if cam != mockCam {
 		t.Fatalf("expected mock camera fallback, got %T", cam)
+	}
+	if backend != "mock-fallback" {
+		t.Fatalf("expected backend mock-fallback, got %q", backend)
 	}
 	if realCam.startCalls != 1 {
 		t.Fatalf("expected real camera Start() once, got %d", realCam.startCalls)
@@ -84,7 +90,7 @@ func TestInitializeCamera_MockModeStartsMockOnce(t *testing.T) {
 	realCam := &fakeCamera{}
 	mockCam := &fakeCamera{}
 
-	cam, err := initializeCamera(
+	cam, backend, err := initializeCamera(
 		cfg,
 		func() camera.Camera { return realCam },
 		func() camera.Camera { return mockCam },
@@ -94,6 +100,9 @@ func TestInitializeCamera_MockModeStartsMockOnce(t *testing.T) {
 	}
 	if cam != mockCam {
 		t.Fatalf("expected mock camera, got %T", cam)
+	}
+	if backend != "mock" {
+		t.Fatalf("expected backend mock, got %q", backend)
 	}
 	if realCam.startCalls != 0 {
 		t.Fatalf("expected real camera Start() zero times, got %d", realCam.startCalls)
