@@ -17,6 +17,7 @@ import (
 const (
 	defaultCaptureWaitTimeout = 2 * time.Second
 	readChunkSize             = 32 * 1024
+	maxReadBufferSize         = 10 * 1024 * 1024
 )
 
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
@@ -264,24 +265,23 @@ func (rc *RealCamera) readMJPEGStream() {
 
 		n, err := stdout.Read(buf)
 		if n > 0 {
-		rc.frameMutex.Lock()
-		rc.readBuffer = append(rc.readBuffer, buf[:n]...)
-		const maxBufferSize = 10 * 1024 * 1024 // 10MB limit
-		if len(rc.readBuffer) > maxBufferSize {
-			rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
-			rc.frameMutex.Unlock()
-			return
-		}
-		for {
-			frame, remaining, found := extractJPEGFrame(rc.readBuffer)
-			if !found {
-				break
+			rc.frameMutex.Lock()
+			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
+			if len(rc.readBuffer) > maxReadBufferSize {
+				rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
+				rc.frameMutex.Unlock()
+				return
 			}
-			rc.latestFrame = append(rc.latestFrame[:0], frame...)
-			rc.frameSeq++
-			rc.readBuffer = remaining
-		}
-		rc.frameMutex.Unlock()
+			for {
+				frame, remaining, found := extractJPEGFrame(rc.readBuffer)
+				if !found {
+					break
+				}
+				rc.latestFrame = append([]byte(nil), frame...)
+				rc.frameSeq++
+				rc.readBuffer = remaining
+			}
+			rc.frameMutex.Unlock()
 		}
 
 		if err != nil {
