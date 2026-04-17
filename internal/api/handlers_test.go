@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -467,7 +468,8 @@ func TestFrameManagerStreamAndCaptureLifecycleRaceFree(t *testing.T) {
 		errCh := make(chan error, 1)
 
 		go func() {
-			errCh <- fm.StreamFrame(w, cfg.MaxStreamConnections)
+			req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+			errCh <- fm.StreamFrame(w, req, cfg.MaxStreamConnections)
 		}()
 
 		time.Sleep(15 * time.Millisecond)
@@ -494,7 +496,8 @@ func TestStreamFrameEmitsRepeatedIdenticalFramesBySequence(t *testing.T) {
 	t.Cleanup(fm.Stop)
 
 	writer := newCountingStreamWriter(3)
-	err := fm.StreamFrame(writer, cfg.MaxStreamConnections)
+	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+	err := fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
 	if !errors.Is(err, errStopStream) {
 		t.Fatalf("expected stream stop error, got %v", err)
 	}
@@ -514,8 +517,14 @@ func TestStreamFrameDedupeIsPerClientNotGlobal(t *testing.T) {
 	writerB := newCountingStreamWriter(2)
 	errCh := make(chan error, 2)
 
-	go func() { errCh <- fm.StreamFrame(writerA, cfg.MaxStreamConnections) }()
-	go func() { errCh <- fm.StreamFrame(writerB, cfg.MaxStreamConnections) }()
+	go func() {
+		reqA := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+		errCh <- fm.StreamFrame(writerA, reqA, cfg.MaxStreamConnections)
+	}()
+	go func() {
+		reqB := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+		errCh <- fm.StreamFrame(writerB, reqB, cfg.MaxStreamConnections)
+	}()
 
 	for i := 0; i < 2; i++ {
 		err := <-errCh
@@ -607,6 +616,41 @@ func TestFrameManagerGetFrameBurstyAccessKeepsCaptureWarm(t *testing.T) {
 	waitForCaptureState(t, fm, true)
 	time.Sleep(120 * time.Millisecond)
 	waitForCaptureState(t, fm, false)
+}
+
+func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 10*time.Millisecond)
+	t.Cleanup(fm.Stop)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
+	writer := httptest.NewRecorder()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
+	}()
+
+	time.Sleep(25 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context canceled error, got %v", err)
+		}
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("stream did not return promptly after context cancellation")
+	}
+
+	if count := atomic.LoadInt64(&fm.clientCount); count != 0 {
+		t.Fatalf("clientCount = %d, want 0", count)
+	}
+	if count := fm.connTracker.Count(); count != 0 {
+		t.Fatalf("connection tracker count = %d, want 0", count)
+	}
 }
 
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
