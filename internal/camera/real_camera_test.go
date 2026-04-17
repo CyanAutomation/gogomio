@@ -1,36 +1,33 @@
 package camera
 
 import (
+	"errors"
 	"image"
+	"io"
 	"os/exec"
 	"strings"
-	"sync"
-	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
 
-// TestRealCameraInitialization tests camera initialization
 func TestRealCameraInitialization(t *testing.T) {
 	rc := NewRealCamera()
 
 	if rc.width != 640 || rc.height != 480 {
 		t.Errorf("default resolution incorrect: %dx%d", rc.width, rc.height)
 	}
-
 	if rc.fps != 24 {
 		t.Errorf("default FPS: got %d, want 24", rc.fps)
 	}
-
 	if rc.devicePath == "" {
 		t.Error("device path not set")
 	}
 }
 
-// TestRealCameraStartNoDevice tests that Start returns error when device not found
 func TestRealCameraStartNoDevice(t *testing.T) {
 	rc := NewRealCamera()
-	rc.devicePath = "/dev/video999" // Non-existent device
+	rc.devicePath = "/dev/video999"
 
 	err := rc.Start(640, 480, 24, 80)
 	if err == nil {
@@ -38,274 +35,192 @@ func TestRealCameraStartNoDevice(t *testing.T) {
 	}
 }
 
-// TestRealCameraStartWithoutFFmpeg tests Start fails gracefully without ffmpeg
-func TestRealCameraStartWithoutFFmpeg(t *testing.T) {
-	// Skip test if ffmpeg is present (we can't mock it away easily)
-	if _, err := exec.LookPath("ffmpeg"); err == nil {
-		t.Skip("ffmpeg is installed, can't test missing ffmpeg scenario")
+func TestRealCameraProcessLifecycle(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 200 * time.Millisecond
+
+	var startedCmd *exec.Cmd
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		startedCmd = cmd
+
+		go func() {
+			defer stdoutW.Close()
+			_, _ = stdoutW.Write([]byte{0xFF, 0xD8, 0x00, 0x01, 0xFF, 0xD9})
+		}()
+		go func() {
+			defer stderrW.Close()
+		}()
+
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
 	}
 
-	rc := NewRealCamera()
-	err := rc.Start(640, 480, 24, 80)
-	if err == nil {
-		t.Error("Start should fail without ffmpeg")
+	if err := rc.Start(640, 480, 24, 80); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if !rc.IsReady() {
+		t.Fatal("camera should be ready after Start")
+	}
+	if startedCmd == nil || rc.proc == nil {
+		t.Fatal("expected process to be started")
+	}
+
+	if err := rc.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready after Stop")
+	}
+
+	if err := startedCmd.Process.Signal(syscall.Signal(0)); err == nil {
+		t.Fatal("expected process to be terminated after Stop")
 	}
 }
 
-// TestRealCameraIsReady checks Ready state transitions
+func TestRealCameraCaptureFrameReturnsBufferedLatest(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 500 * time.Millisecond
+
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+
+		go func() {
+			defer stdoutW.Close()
+			frame1 := []byte{0xFF, 0xD8, 0x01, 0xFF, 0xD9}
+			frame2 := []byte{0xFF, 0xD8, 0x02, 0xFF, 0xD9}
+			_, _ = stdoutW.Write(append(append([]byte("noise"), frame1...), frame2...))
+		}()
+		go func() {
+			defer stderrW.Close()
+		}()
+
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	}
+
+	if err := rc.Start(640, 480, 24, 80); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer rc.Stop()
+
+	frame, err := rc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("CaptureFrame() error = %v", err)
+	}
+
+	want := []byte{0xFF, 0xD8, 0x02, 0xFF, 0xD9}
+	if string(frame) != string(want) {
+		t.Fatalf("CaptureFrame() got %v, want %v", frame, want)
+	}
+}
+
+func TestRealCameraCaptureFrameTimeout(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 75 * time.Millisecond
+
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		go func() {
+			defer stderrW.Close()
+			defer stdoutW.Close()
+			time.Sleep(500 * time.Millisecond)
+		}()
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	}
+
+	if err := rc.Start(640, 480, 24, 80); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer rc.Stop()
+
+	_, err := rc.CaptureFrame()
+	if err == nil || !strings.Contains(err.Error(), "timed out waiting for frame") {
+		t.Fatalf("expected timeout error, got %v", err)
+	}
+}
+
+func TestExtractJPEGFrame(t *testing.T) {
+	stream := []byte{0x00, 0xFF, 0xD8, 0x11, 0x22, 0xFF, 0xD9, 0x33}
+	frame, rem, found := extractJPEGFrame(stream)
+	if !found {
+		t.Fatal("expected frame to be found")
+	}
+	if len(frame) == 0 || frame[0] != 0xFF || frame[1] != 0xD8 {
+		t.Fatalf("unexpected frame: %v", frame)
+	}
+	if len(rem) != 1 || rem[0] != 0x33 {
+		t.Fatalf("unexpected remaining bytes: %v", rem)
+	}
+}
+
 func TestRealCameraIsReady(t *testing.T) {
 	rc := NewRealCamera()
-
 	if rc.IsReady() {
 		t.Error("camera should not be ready before Start")
 	}
-
 	rc.isReady.Store(true)
 	if !rc.IsReady() {
 		t.Error("camera should be ready after isReady set")
 	}
-
 	rc.isStopping.Store(true)
 	if rc.IsReady() {
 		t.Error("camera should not be ready when stopping")
 	}
 }
 
-// TestRealCameraStop tests camera shutdown
-func TestRealCameraStop(t *testing.T) {
-	rc := NewRealCamera()
-	rc.isReady.Store(true)
-
-	err := rc.Stop()
-	if err != nil {
-		t.Errorf("Stop returned error: %v", err)
-	}
-
-	if rc.IsReady() {
-		t.Error("camera should not be ready after Stop")
-	}
-
-	if !rc.isStopping.Load() {
-		t.Error("isStopping flag should be set")
-	}
-}
-
-// TestRealCameraFPSThrottling tests that frames respect FPS limit
-func TestRealCameraFPSThrottling(t *testing.T) {
-	rc := NewRealCamera()
-	rc.isReady.Store(true)
-	rc.fps = 10 // 10 FPS = 100ms per frame
-	rc.lastCapture = time.Now()
-
-	// First call (after delay) should fail since we don't have real device
-	// but we're testing the throttling logic
-
-	// This test mainly verifies no panic, since real device won't be available
-	frameInterval := time.Duration(1e9/int64(rc.fps)) * time.Nanosecond
-	if frameInterval != 100*time.Millisecond {
-		t.Errorf("frame interval calculation: got %v, want 100ms", frameInterval)
-	}
-}
-
-// TestRealCameraResolutionConfiguration tests setting custom resolution
-func TestRealCameraResolutionConfiguration(t *testing.T) {
-	rc := NewRealCamera()
-
-	testCases := []struct {
-		width   int
-		height  int
-		fps     int
-		quality int
-	}{
-		{1920, 1080, 30, 85},
-		{1280, 720, 24, 80},
-		{640, 480, 15, 75},
-		{320, 240, 10, 60},
-	}
-
-	for _, tc := range testCases {
-		// Don't actually start (won't have device), just verify config
-		rc.width = tc.width
-		rc.height = tc.height
-		rc.fps = tc.fps
-		rc.jpegQuality = tc.quality
-
-		if rc.width != tc.width || rc.height != tc.height {
-			t.Errorf("resolution not set: %dx%d", rc.width, rc.height)
-		}
-		if rc.fps != tc.fps {
-			t.Errorf("fps not set: %d", rc.fps)
-		}
-	}
-}
-
-// TestRealCameraJPEGQualityValidation tests JPEG quality bounds
-func TestRealCameraJPEGQualityValidation(t *testing.T) {
-	rc := NewRealCamera()
-
-	// Quality 0 should be adjusted
-	_ = rc.Start(640, 480, 24, 0)
-	// We don't actually expect Start to succeed without device
-
-	// Valid quality range
-	validQualities := []int{1, 50, 75, 100}
-	for _, q := range validQualities {
-		if q < 1 || q > 100 {
-			t.Errorf("quality validation: %d should be valid", q)
-		}
-	}
-}
-
-// TestRealCameraDevicePathConfiguration tests custom device paths
-func TestRealCameraDevicePathConfiguration(t *testing.T) {
-	testPaths := []string{
-		"/dev/video0",
-		"/dev/video1",
-		"/dev/video2",
-	}
-
-	for _, path := range testPaths {
-		rc := NewRealCamera()
-		rc.devicePath = path
-
-		if rc.devicePath != path {
-			t.Errorf("device path not set: %q", rc.devicePath)
-		}
-	}
-}
-
-// TestRealCameraEncodeFrame tests JPEG encoding utility
 func TestRealCameraEncodeFrame(t *testing.T) {
-	// Create a small test image
 	img := createTestImage(10, 10)
-
 	jpegData, err := encodeFrameToJPEG(img, 80)
 	if err != nil {
 		t.Fatalf("encodeFrameToJPEG failed: %v", err)
 	}
-
 	if len(jpegData) == 0 {
 		t.Error("encoded JPEG data is empty")
 	}
-
-	// Verify JPEG magic bytes (FFD8)
-	if len(jpegData) >= 2 && jpegData[0] != 0xFF && jpegData[1] != 0xD8 {
+	if len(jpegData) >= 2 && (jpegData[0] != 0xFF || jpegData[1] != 0xD8) {
 		t.Error("encoded data doesn't start with JPEG SOI marker")
 	}
 }
 
-// Helper function to create test image
+func TestRealCameraStartMissingBinaries(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.lookPath = func(string) (string, error) { return "", errors.New("missing") }
+	rc.launchFn = rc.launchContinuousProducer
+
+	err := rc.Start(640, 480, 24, 80)
+	if err == nil || !strings.Contains(err.Error(), "neither libcamera-vid nor ffmpeg") {
+		t.Fatalf("expected missing binary error, got: %v", err)
+	}
+}
+
 func createTestImage(width, height int) *image.YCbCr {
 	img := image.NewYCbCr(image.Rect(0, 0, width, height), image.YCbCrSubsampleRatio420)
-	// Fill with test pattern
 	for i := 0; i < len(img.Y); i++ {
 		img.Y[i] = uint8(i & 0xFF)
 	}
 	return img
 }
 
-// TestRealCameraMultipleCameras tests multiple camera instances
-func TestRealCameraMultipleCameras(t *testing.T) {
-	cam1 := NewRealCamera()
-	cam2 := NewRealCamera()
+type nopWriteCloser struct{}
 
-	cam1.width = 1920
-	cam2.width = 640
-
-	if cam1.width == cam2.width {
-		t.Error("camera instances not independent")
-	}
-}
-
-// TestRealCameraThreadSafety tests concurrent access
-func TestRealCameraThreadSafety(t *testing.T) {
-	rc := NewRealCamera()
-	done := make(chan bool)
-
-	// Multiple goroutines trying to configure camera
-	for i := 0; i < 5; i++ {
-		go func(id int) {
-			rc.captureMutex.Lock()
-			rc.width = 640 + id
-			rc.height = 480 + id
-			rc.captureMutex.Unlock()
-			done <- true
-		}(i)
-	}
-
-	for i := 0; i < 5; i++ {
-		<-done
-	}
-
-	// If we get here without deadlock, test passed
-	if rc.width == 0 {
-		t.Error("camera mutex lock failed")
-	}
-}
-
-func TestRealCameraCaptureFrameSingleFlight(t *testing.T) {
-	rc := NewRealCamera()
-	rc.isReady.Store(true)
-	rc.fps = 0 // Disable throttling to test pure single-flight semantics
-	rc.lastCapture = time.Now().Add(-time.Second)
-
-	var inFlight int32
-	var maxInFlight int32
-	var calls int32
-	var busyErrs int32
-
-	rc.captureRunner = func() ([]byte, error) {
-		current := atomic.AddInt32(&inFlight, 1)
-		defer atomic.AddInt32(&inFlight, -1)
-
-		// Track peak in-flight count without allowing lower values to overwrite higher ones.
-		for prev := atomic.LoadInt32(&maxInFlight); current > prev; prev = atomic.LoadInt32(&maxInFlight) {
-			if atomic.CompareAndSwapInt32(&maxInFlight, prev, current) {
-				break
-			}
-		}
-
-		atomic.AddInt32(&calls, 1)
-		time.Sleep(25 * time.Millisecond)
-		return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil
-	}
-
-	const goroutines = 8
-	var wg sync.WaitGroup
-	errCh := make(chan error, goroutines)
-
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, err := rc.CaptureFrame()
-			errCh <- err
-		}()
-	}
-
-	wg.Wait()
-	close(errCh)
-
-	for err := range errCh {
-		if err == nil {
-			continue
-		}
-		if strings.Contains(err.Error(), "capture already in progress") {
-			atomic.AddInt32(&busyErrs, 1)
-			continue
-		}
-		t.Fatalf("CaptureFrame returned unexpected error: %v", err)
-	}
-
-	if got := atomic.LoadInt32(&calls); got != 1 {
-		t.Fatalf("capture runner calls mismatch: got %d want 1", got)
-	}
-
-	if got := atomic.LoadInt32(&busyErrs); got != goroutines-1 {
-		t.Fatalf("busy errors mismatch: got %d want %d", got, goroutines-1)
-	}
-
-	if got := atomic.LoadInt32(&maxInFlight); got != 1 {
-		t.Fatalf("capture overlap detected: max in-flight=%d, want 1", got)
-	}
-}
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
