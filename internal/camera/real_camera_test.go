@@ -3,6 +3,7 @@ package camera
 import (
 	"image"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -251,17 +252,15 @@ func TestRealCameraCaptureFrameSingleFlight(t *testing.T) {
 	var inFlight int32
 	var maxInFlight int32
 	var calls int32
+	var busyErrs int32
 
 	rc.captureRunner = func() ([]byte, error) {
 		current := atomic.AddInt32(&inFlight, 1)
 		defer atomic.AddInt32(&inFlight, -1)
 
-		for {
-			previous := atomic.LoadInt32(&maxInFlight)
-			if current <= previous {
-				break
-			}
-			if atomic.CompareAndSwapInt32(&maxInFlight, previous, current) {
+		// Track peak in-flight count without allowing lower values to overwrite higher ones.
+		for prev := atomic.LoadInt32(&maxInFlight); current > prev; prev = atomic.LoadInt32(&maxInFlight) {
+			if atomic.CompareAndSwapInt32(&maxInFlight, prev, current) {
 				break
 			}
 		}
@@ -288,13 +287,22 @@ func TestRealCameraCaptureFrameSingleFlight(t *testing.T) {
 	close(errCh)
 
 	for err := range errCh {
-		if err != nil {
-			t.Fatalf("CaptureFrame returned error: %v", err)
+		if err == nil {
+			continue
 		}
+		if strings.Contains(err.Error(), "capture already in progress") {
+			atomic.AddInt32(&busyErrs, 1)
+			continue
+		}
+		t.Fatalf("CaptureFrame returned unexpected error: %v", err)
 	}
 
-	if got := atomic.LoadInt32(&calls); got != goroutines {
-		t.Fatalf("capture runner calls mismatch: got %d want %d", got, goroutines)
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("capture runner calls mismatch: got %d want 1", got)
+	}
+
+	if got := atomic.LoadInt32(&busyErrs); got != goroutines-1 {
+		t.Fatalf("busy errors mismatch: got %d want %d", got, goroutines-1)
 	}
 
 	if got := atomic.LoadInt32(&maxInFlight); got != 1 {
