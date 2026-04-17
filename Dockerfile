@@ -51,12 +51,14 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
 RUN apk add --no-cache ca-certificates tzdata curl
 
 # Install ffmpeg for real camera support (V4L2 camera access on Raspberry Pi)
-RUN apk add --no-cache ffmpeg
+# Install libcamera-tools for native CSI camera support (Raspberry Pi 4/5)
+RUN apk add --no-cache ffmpeg libcamera-tools
 
 # Create non-root user with explicit umask
 RUN adduser -D -u 1000 gogomio && \
     echo "umask 0077" >> /etc/profile.d/gogomio.sh && \
-    chmod 755 /etc/profile.d/gogomio.sh
+    chmod 755 /etc/profile.d/gogomio.sh && \
+    addgroup gogomio video
 
 WORKDIR /app
 
