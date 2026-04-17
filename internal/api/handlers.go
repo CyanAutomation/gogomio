@@ -271,10 +271,14 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 			seq   uint64
 		}
 		frameResultChan := make(chan frameResult, 1)
-		go func(last uint64) {
-			frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, last)
-			frameResultChan <- frameResult{frame: frame, seq: seq}
-		}(lastSeenSeq)
+	go func(last uint64) {
+		frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, last)
+		select {
+		case frameResultChan <- frameResult{frame: frame, seq: seq}:
+		case <-ctx.Done():
+		case <-streamDone:
+		}
+	}(lastSeenSeq)
 
 		// Wait for new frame with timeout, stream stop, or client disconnect.
 		select {
