@@ -1,12 +1,14 @@
 package camera
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"sync"
@@ -90,9 +92,16 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	}
 	rc.jpegQuality = jpegQuality
 
+	// Check if camera device exists
 	if _, err := rc.statFn(rc.devicePath); err != nil {
+		log.Printf("❌ Camera device not found at %s: %v", rc.devicePath, err)
+		log.Printf("   Please ensure:")
+		log.Printf("   - CSI camera is physically connected")
+		log.Printf("   - Camera is enabled in raspi-config")
+		log.Printf("   - Device permissions allow access to %s", rc.devicePath)
 		return fmt.Errorf("camera device not found at %s: %w", rc.devicePath, err)
 	}
+	log.Printf("✓ Camera device found at %s", rc.devicePath)
 
 	rc.frameMutex.Lock()
 	rc.latestFrame = nil
@@ -103,6 +112,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 
 	cmd, stdin, stdout, stderr, err := rc.launchFn()
 	if err != nil {
+		log.Printf("❌ Failed to launch camera backend: %v", err)
 		return err
 	}
 
@@ -201,6 +211,8 @@ func (rc *RealCamera) IsReady() bool {
 
 func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 	if _, err := rc.lookPath("libcamera-vid"); err == nil {
+		log.Printf("✓ Using libcamera-vid for native CSI camera support")
+		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := exec.Command(
 			"libcamera-vid",
 			"--codec", "mjpeg",
@@ -211,13 +223,16 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 			"--framerate", fmt.Sprintf("%d", rc.fps),
 			"-o", "-",
 		)
-		return rc.startCommand(cmd)
+		return rc.startCommand(cmd, "libcamera-vid")
 	}
 
 	if _, err := rc.lookPath("ffmpeg"); err != nil {
+		log.Printf("❌ Neither libcamera-vid nor ffmpeg found in PATH")
 		return nil, nil, nil, nil, fmt.Errorf("neither libcamera-vid nor ffmpeg found in PATH")
 	}
 
+	log.Printf("⚠️  libcamera-vid not available, falling back to ffmpeg (V4L2 mode)")
+	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 	cmd := exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
@@ -228,25 +243,30 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		"-f", "mjpeg",
 		"pipe:1",
 	)
-	return rc.startCommand(cmd)
+	return rc.startCommand(cmd, "ffmpeg")
 }
 
-func (rc *RealCamera) startCommand(cmd *exec.Cmd) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		log.Printf("❌ %s: failed creating stdout pipe: %v", backendName, err)
 		return nil, nil, nil, nil, fmt.Errorf("failed creating stdout pipe: %w", err)
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
+		log.Printf("❌ %s: failed creating stderr pipe: %v", backendName, err)
 		return nil, nil, nil, nil, fmt.Errorf("failed creating stderr pipe: %w", err)
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		log.Printf("❌ %s: failed creating stdin pipe: %v", backendName, err)
 		return nil, nil, nil, nil, fmt.Errorf("failed creating stdin pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
+		log.Printf("❌ %s: failed to start capture process: %v", backendName, err)
 		return nil, nil, nil, nil, fmt.Errorf("failed to start capture process: %w", err)
 	}
+	log.Printf("✓ %s process started successfully (PID: %d)", backendName, cmd.Process.Pid)
 	return cmd, stdin, stdout, stderr, nil
 }
 
@@ -308,7 +328,16 @@ func (rc *RealCamera) drainStderr() {
 		return
 	}
 
-	_, _ = io.Copy(io.Discard, stderr)
+	scanner := bufio.NewScanner(stderr)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			log.Printf("[camera stderr] %s", line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("❌ Error reading camera stderr: %v", err)
+	}
 }
 
 func extractJPEGFrame(stream []byte) (frame []byte, remaining []byte, found bool) {
