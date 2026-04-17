@@ -88,7 +88,7 @@ func initializeCamera(
 	newMockCamera func() camera.Camera,
 ) (camera.Camera, string, error) {
 	if cfg.MockCamera {
-		log.Println("Initializing camera backend: mock (development mode)")
+		log.Println("🎬 Initializing camera backend: mock (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 			return nil, "", err
@@ -97,11 +97,19 @@ func initializeCamera(
 	}
 
 	// Try real camera first if device is available.
-	log.Println("Initializing camera backend: real (Raspberry Pi CSI)")
+	log.Println("📹 Initializing camera backend: real (Raspberry Pi CSI)")
+	log.Println("   Checking for CSI camera access...")
 	realCam := newRealCamera()
 	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-		log.Printf("Real camera initialization failed (%v), falling back to mock camera", err)
-		log.Println("Initializing camera backend: mock fallback (development mode)")
+		log.Printf("❌ Real camera initialization failed (%v)", err)
+		log.Println("   Troubleshooting steps:")
+		log.Println("   1. Verify CSI camera is physically connected to the camera port")
+		log.Println("   2. Enable camera in raspi-config: sudo raspi-config → Interface → Camera")
+		log.Println("   3. Check device permissions: ls -la /dev/video*")
+		log.Println("   4. Verify container has device access: docker-compose shows devices mapped")
+		log.Println("   5. Check if libcamera-apps is installed in container")
+		log.Println("   Falling back to mock camera for testing...")
+		log.Println("🎬 Initializing camera backend: mock fallback (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 			return nil, "", err
