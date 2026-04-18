@@ -814,15 +814,13 @@ func (rc *RealCamera) healthMonitor() {
 	var lastFrameTime time.Time
 	var lastFrameSeq uint64
 
-	for {
-		select {
-		case <-ticker.C:
-			if rc.isStopping.Load() {
-				return
-			}
+	for range ticker.C {
+		if rc.isStopping.Load() {
+			return
+		}
 
-			// Check if process is still running
-			rc.captureMutex.Lock()
+		// Check if process is still running
+		rc.captureMutex.Lock()
 			proc := rc.proc
 			rc.captureMutex.Unlock()
 
@@ -855,6 +853,5 @@ func (rc *RealCamera) healthMonitor() {
 			if readerErr != nil {
 				log.Printf("⚠️  Health check: reader error detected: %v", readerErr)
 			}
-		}
 	}
 }
