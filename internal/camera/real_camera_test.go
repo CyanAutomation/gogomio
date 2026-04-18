@@ -277,11 +277,19 @@ func TestRealCameraBuildFFmpegCommandIncludesInputNegotiation(t *testing.T) {
 
 	cmd := rc.buildFFmpegCommand()
 	args := strings.Join(cmd.Args, " ")
-	if !strings.Contains(args, "-input_format mjpeg") {
-		t.Fatalf("expected explicit input format, args=%q", args)
+	// Should include V4L2 format without restrictive input_format to support libcamera devices
+	if !strings.Contains(args, "-f video4linux2") {
+		t.Fatalf("expected video4linux2 format, args=%q", args)
 	}
 	if !strings.Contains(args, "-framerate 30") {
 		t.Fatalf("expected explicit framerate, args=%q", args)
+	}
+	if !strings.Contains(args, "-i /dev/video0") {
+		t.Fatalf("expected device path, args=%q", args)
+	}
+	// Should NOT have restrictive input_format that breaks libcamera devices
+	if strings.Contains(args, "-input_format mjpeg") {
+		t.Fatalf("should not use restrictive input_format for libcamera compatibility, args=%q", args)
 	}
 }
 
