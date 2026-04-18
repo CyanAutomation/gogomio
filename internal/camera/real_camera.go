@@ -3,6 +3,7 @@ package camera
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -11,6 +12,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +22,7 @@ const (
 	defaultCaptureWaitTimeout = 2 * time.Second
 	readChunkSize             = 32 * 1024
 	maxReadBufferSize         = 10 * 1024 * 1024
+	v4l2ProbeTimeout          = 3 * time.Second
 )
 
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
@@ -57,6 +60,7 @@ type RealCamera struct {
 	lookPath func(string) (string, error)
 	statFn   func(string) (os.FileInfo, error)
 	launchFn func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
+	runCmdFn func(*exec.Cmd) ([]byte, error)
 }
 
 // NewRealCamera creates a new camera instance for Raspberry Pi CSI camera.
@@ -72,6 +76,9 @@ func NewRealCamera() *RealCamera {
 	rc.lookPath = exec.LookPath
 	rc.statFn = os.Stat
 	rc.launchFn = rc.launchContinuousProducer
+	rc.runCmdFn = func(cmd *exec.Cmd) ([]byte, error) {
+		return cmd.CombinedOutput()
+	}
 	return rc
 }
 
@@ -255,6 +262,9 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		log.Printf("   ffmpeg: Check if ffmpeg package is installed in container")
 		return nil, nil, nil, nil, fmt.Errorf("none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH")
 	}
+	if err := rc.probeV4L2CaptureNode(); err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	log.Printf("✓ Selected camera backend binary: ffmpeg")
 	log.Printf("⚠️  Falling back to ffmpeg (V4L2 mode) because rpicam-vid/libcamera-vid were not found")
@@ -295,10 +305,11 @@ func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
 }
 
 func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
-	// libcamera V4L2 device - use minimal parameters and let FFmpeg auto-detect.
+	// Use explicit V4L2 input negotiation to reduce startup ambiguity.
 	return exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
+		"-input_format", "mjpeg",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
 		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
@@ -307,6 +318,54 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 		"-f", "mjpeg",
 		"pipe:1",
 	)
+}
+
+func (rc *RealCamera) probeV4L2CaptureNode() error {
+	ctx, cancel := context.WithTimeout(context.Background(), v4l2ProbeTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		"ffmpeg",
+		"-hide_banner",
+		"-loglevel", "error",
+		"-f", "video4linux2",
+		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
+		"-framerate", fmt.Sprintf("%d", rc.fps),
+		"-i", rc.devicePath,
+		"-frames:v", "1",
+		"-f", "null",
+		"-",
+	)
+
+	output, err := rc.runCmdFn(cmd)
+	if err == nil {
+		log.Printf("✓ V4L2 probe succeeded for %s", rc.devicePath)
+		return nil
+	}
+
+	probeOutput := strings.TrimSpace(string(output))
+	log.Printf("❌ V4L2 probe failed for %s: %v", rc.devicePath, err)
+	if probeOutput != "" {
+		log.Printf("   Probe output: %s", probeOutput)
+	}
+	return rc.mapFFmpegInputError(probeOutput, err)
+}
+
+func (rc *RealCamera) mapFFmpegInputError(stderr string, cause error) error {
+	lower := strings.ToLower(stderr)
+	switch {
+	case strings.Contains(lower, "vidioc_streamon"):
+		return fmt.Errorf("camera startup failed for %s: V4L2 STREAMON failed (device is not a usable capture node). For CSI cameras inside containers, install rpicam-vid/libcamera-vid and avoid ffmpeg fallback: %w", rc.devicePath, cause)
+	case strings.Contains(lower, "error opening input"),
+		strings.Contains(lower, "cannot open video device"),
+		strings.Contains(lower, "not a video capture device"),
+		strings.Contains(lower, "no such file or directory"),
+		strings.Contains(lower, "permission denied"):
+		return fmt.Errorf("camera startup failed for %s: ffmpeg could not open the V4L2 input. For CSI cameras inside containers, ensure rpicam-vid/libcamera-vid is installed and accessible: %w", rc.devicePath, cause)
+	default:
+		return fmt.Errorf("camera startup failed for %s: V4L2 probe failed before ffmpeg fallback. For CSI cameras inside containers, install rpicam-vid/libcamera-vid. probe details: %s: %w", rc.devicePath, stderr, cause)
+	}
 }
 
 func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
