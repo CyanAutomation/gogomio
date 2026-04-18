@@ -821,37 +821,37 @@ func (rc *RealCamera) healthMonitor() {
 
 		// Check if process is still running
 		rc.captureMutex.Lock()
-			proc := rc.proc
-			rc.captureMutex.Unlock()
+		proc := rc.proc
+		rc.captureMutex.Unlock()
 
-			if proc != nil && proc.Process != nil {
-				// Process is still alive, good sign
-				log.Printf("🏥 Health check: process running (PID: %d)", proc.Process.Pid)
-			}
+		if proc != nil && proc.Process != nil {
+			// Process is still alive, good sign
+			log.Printf("🏥 Health check: process running (PID: %d)", proc.Process.Pid)
+		}
 
-			// Check for frame progress (detect stalled capture)
-			rc.frameMutex.Lock()
-			currentFrameSeq := rc.frameSeq
-			readerErr := rc.readerErr
-			rc.frameMutex.Unlock()
+		// Check for frame progress (detect stalled capture)
+		rc.frameMutex.Lock()
+		currentFrameSeq := rc.frameSeq
+		readerErr := rc.readerErr
+		rc.frameMutex.Unlock()
 
-			if currentFrameSeq > lastFrameSeq {
-				lastFrameTime = time.Now()
-				lastFrameSeq = currentFrameSeq
-				log.Printf("🏥 Health check: frames flowing normally (seq: %d)", currentFrameSeq)
-			} else {
-				if !lastFrameTime.IsZero() {
-					stalledDuration := time.Since(lastFrameTime)
-					if stalledDuration > 30*time.Second {
-						log.Printf("⚠️  Health check: frame capture stalled for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
-					} else if stalledDuration > 10*time.Second {
-						log.Printf("ℹ️  Health check: no recent frames for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
-					}
+		if currentFrameSeq > lastFrameSeq {
+			lastFrameTime = time.Now()
+			lastFrameSeq = currentFrameSeq
+			log.Printf("🏥 Health check: frames flowing normally (seq: %d)", currentFrameSeq)
+		} else {
+			if !lastFrameTime.IsZero() {
+				stalledDuration := time.Since(lastFrameTime)
+				if stalledDuration > 30*time.Second {
+					log.Printf("⚠️  Health check: frame capture stalled for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
+				} else if stalledDuration > 10*time.Second {
+					log.Printf("ℹ️  Health check: no recent frames for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
 				}
 			}
+		}
 
-			if readerErr != nil {
-				log.Printf("⚠️  Health check: reader error detected: %v", readerErr)
-			}
+		if readerErr != nil {
+			log.Printf("⚠️  Health check: reader error detected: %v", readerErr)
+		}
 	}
 }
