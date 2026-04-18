@@ -274,54 +274,42 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 		default:
 		}
 
-		type frameResult struct {
-			frame []byte
-			seq   uint64
-		}
-		frameResultChan := make(chan frameResult, 1)
-		go func(last uint64) {
-			frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, last)
-			select {
-			case frameResultChan <- frameResult{frame: frame, seq: seq}:
-			case <-ctx.Done():
-			case <-streamDone:
-			}
-		}(lastSeenSeq)
+		frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, lastSeenSeq)
 
-		// Wait for new frame with timeout, stream stop, or client disconnect.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-streamDone:
 			return fmt.Errorf("stream stopped")
-		case frameResult := <-frameResultChan:
-			if frameResult.frame == nil {
-				// Timeout waiting for frame, keep connection open or retry
-				continue
-			}
-			lastSeenSeq = frameResult.seq
-			frame := frameResult.frame
-
-			// Write MJPEG boundary and frame
-			boundary := []byte("--frame\r\n")
-			headers := []byte("Content-Type: image/jpeg\r\nContent-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")
-			trailer := []byte("\r\n")
-
-			if _, err := w.Write(boundary); err != nil {
-				return err
-			}
-			if _, err := w.Write(headers); err != nil {
-				return err
-			}
-			if _, err := w.Write(frame); err != nil {
-				return err
-			}
-			if _, err := w.Write(trailer); err != nil {
-				return err
-			}
-
-			flusher.Flush()
+		default:
 		}
+
+		if frame == nil {
+			// Timeout waiting for frame, keep connection open or retry.
+			continue
+		}
+
+		lastSeenSeq = seq
+
+		// Write MJPEG boundary and frame
+		boundary := []byte("--frame\r\n")
+		headers := []byte("Content-Type: image/jpeg\r\nContent-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")
+		trailer := []byte("\r\n")
+
+		if _, err := w.Write(boundary); err != nil {
+			return err
+		}
+		if _, err := w.Write(headers); err != nil {
+			return err
+		}
+		if _, err := w.Write(frame); err != nil {
+			return err
+		}
+		if _, err := w.Write(trailer); err != nil {
+			return err
+		}
+
+		flusher.Flush()
 	}
 }
 
