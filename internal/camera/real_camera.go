@@ -235,36 +235,68 @@ func (rc *RealCamera) IsReady() bool {
 }
 
 func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
-	if _, err := rc.lookPath("libcamera-vid"); err == nil {
-		log.Printf("✓ Using libcamera-vid for native CSI camera support")
+	if _, err := rc.lookPath("rpicam-vid"); err == nil {
+		log.Printf("✓ Selected camera backend binary: rpicam-vid")
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
-		cmd := exec.Command(
-			"libcamera-vid",
-			"--codec", "mjpeg",
-			"--nopreview",
-			"--timeout", "0",
-			"--width", fmt.Sprintf("%d", rc.width),
-			"--height", fmt.Sprintf("%d", rc.height),
-			"--framerate", fmt.Sprintf("%d", rc.fps),
-			"-o", "-",
-		)
+		cmd := rc.buildRpiCamVidCommand()
+		return rc.startCommand(cmd, "rpicam-vid")
+	}
+
+	if _, err := rc.lookPath("libcamera-vid"); err == nil {
+		log.Printf("✓ Selected camera backend binary: libcamera-vid")
+		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
+		cmd := rc.buildLibcameraVidCommand()
 		return rc.startCommand(cmd, "libcamera-vid")
 	}
 
 	if _, err := rc.lookPath("ffmpeg"); err != nil {
-		log.Printf("❌ Neither libcamera-vid nor ffmpeg found in PATH")
-		log.Printf("   libcamera-vid: Check if libcamera-apps package is installed in container")
+		log.Printf("❌ None of rpicam-vid, libcamera-vid, or ffmpeg were found in PATH")
+		log.Printf("   rpicam-vid/libcamera-vid: Check if libcamera-apps package is installed in container")
 		log.Printf("   ffmpeg: Check if ffmpeg package is installed in container")
-		return nil, nil, nil, nil, fmt.Errorf("neither libcamera-vid nor ffmpeg found in PATH")
+		return nil, nil, nil, nil, fmt.Errorf("none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH")
 	}
 
-	log.Printf("⚠️  libcamera-vid not available, falling back to ffmpeg (V4L2 mode)")
-	log.Printf("  Note: libcamera-apps may not be installed or available in container")
+	log.Printf("✓ Selected camera backend binary: ffmpeg")
+	log.Printf("⚠️  Falling back to ffmpeg (V4L2 mode) because rpicam-vid/libcamera-vid were not found")
+	log.Printf("  Note: native CSI camera tools may not be installed or available in container")
+	if rc.devicePath == "/dev/video0" {
+		log.Printf("⚠️  CSI camera warning: ffmpeg fallback is being used for %s; native rpicam-vid/libcamera-vid is recommended for better compatibility", rc.devicePath)
+	}
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 
-	// libcamera V4L2 device - use minimal parameters and let FFmpeg auto-detect
-	// This works with libcamera's /dev/video0 which has special behavior
-	cmd := exec.Command(
+	cmd := rc.buildFFmpegCommand()
+	return rc.startCommand(cmd, "ffmpeg")
+}
+
+func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
+	return exec.Command(
+		"rpicam-vid",
+		"--codec", "mjpeg",
+		"--nopreview",
+		"--timeout", "0",
+		"--width", fmt.Sprintf("%d", rc.width),
+		"--height", fmt.Sprintf("%d", rc.height),
+		"--framerate", fmt.Sprintf("%d", rc.fps),
+		"-o", "-",
+	)
+}
+
+func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
+	return exec.Command(
+		"libcamera-vid",
+		"--codec", "mjpeg",
+		"--nopreview",
+		"--timeout", "0",
+		"--width", fmt.Sprintf("%d", rc.width),
+		"--height", fmt.Sprintf("%d", rc.height),
+		"--framerate", fmt.Sprintf("%d", rc.fps),
+		"-o", "-",
+	)
+}
+
+func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
+	// libcamera V4L2 device - use minimal parameters and let FFmpeg auto-detect.
+	return exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
@@ -275,7 +307,6 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		"-f", "mjpeg",
 		"pipe:1",
 	)
-	return rc.startCommand(cmd, "ffmpeg")
 }
 
 func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
