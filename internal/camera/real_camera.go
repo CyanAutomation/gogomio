@@ -391,16 +391,24 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		return nil, nil, nil, nil, fmt.Errorf("none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH")
 	}
 	rc.setBackendAttempted("ffmpeg")
-	if err := rc.probeV4L2CaptureNode(); err != nil {
-		return nil, nil, nil, nil, err
+	
+	// Skip V4L2 probe for libcamera CSI cameras without libcamera-vid
+	// These devices require libcamera initialization which FFmpeg can't do
+	// The probe would fail anyway, so we skip it and provide clear guidance
+	if rc.devicePath == "/dev/video0" {
+		log.Printf("ℹ️  CSI camera detected at /dev/video0 without native libcamera tools")
+		log.Printf("⚠️  Attempting FFmpeg fallback (limited compatibility)")
+		log.Printf("✓ For optimal performance, install rpicam-vid/libcamera-vid in the container")
+	} else {
+		// For other V4L2 devices, probe first to verify they work with FFmpeg
+		if err := rc.probeV4L2CaptureNode(); err != nil {
+			return nil, nil, nil, nil, err
+		}
 	}
 
 	log.Printf("✓ Selected camera backend binary: ffmpeg")
 	log.Printf("⚠️  Falling back to ffmpeg (V4L2 mode) because rpicam-vid/libcamera-vid were not found")
 	log.Printf("  Note: native CSI camera tools may not be installed or available in container")
-	if rc.devicePath == "/dev/video0" {
-		log.Printf("⚠️  CSI camera warning: ffmpeg fallback is being used for %s; native rpicam-vid/libcamera-vid is recommended for better compatibility", rc.devicePath)
-	}
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 
 	cmd := rc.buildFFmpegCommand()
@@ -434,11 +442,11 @@ func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
 }
 
 func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
-	// Use explicit V4L2 input negotiation to reduce startup ambiguity.
+	// For libcamera V4L2 devices, avoid strict format constraints
+	// Let FFmpeg auto-detect the device's native format
 	return exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
-		"-input_format", "mjpeg",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
 		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
