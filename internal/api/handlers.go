@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +40,14 @@ type FrameManager struct {
 }
 
 const defaultIdleStopDelay = 3 * time.Second
+
+var (
+	mjpegBoundaryBytes      = []byte("--frame\r\n")
+	mjpegContentTypeBytes   = []byte("Content-Type: image/jpeg\r\n")
+	mjpegContentLengthBytes = []byte("Content-Length: ")
+	mjpegHeaderEndBytes     = []byte("\r\n\r\n")
+	mjpegTrailerBytes       = []byte("\r\n")
+)
 
 // NewFrameManager creates and initializes a new FrameManager.
 func NewFrameManager(cam camera.Camera, cfg *config.Config) *FrameManager {
@@ -264,6 +274,8 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	streamDone := fm.doneChan
 	fm.captureMu.Unlock()
 	ctx := r.Context()
+	var frameWriteBuf bytes.Buffer
+	contentLengthScratch := make([]byte, 0, 20)
 
 	for {
 		select {
@@ -291,26 +303,29 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 		lastSeenSeq = seq
 
-		// Write MJPEG boundary and frame
-		boundary := []byte("--frame\r\n")
-		headers := []byte("Content-Type: image/jpeg\r\nContent-Length: " + fmt.Sprintf("%d", len(frame)) + "\r\n\r\n")
-		trailer := []byte("\r\n")
-
-		if _, err := w.Write(boundary); err != nil {
-			return err
-		}
-		if _, err := w.Write(headers); err != nil {
-			return err
-		}
-		if _, err := w.Write(frame); err != nil {
-			return err
-		}
-		if _, err := w.Write(trailer); err != nil {
+		if err := writeMultipartFrame(w, &frameWriteBuf, &contentLengthScratch, frame); err != nil {
 			return err
 		}
 
 		flusher.Flush()
 	}
+}
+
+func writeMultipartFrame(w http.ResponseWriter, frameWriteBuf *bytes.Buffer, contentLengthScratch *[]byte, frame []byte) error {
+	frameWriteBuf.Reset()
+	frameWriteBuf.Grow(len(frame) + 128)
+
+	frameWriteBuf.Write(mjpegBoundaryBytes)
+	frameWriteBuf.Write(mjpegContentTypeBytes)
+	frameWriteBuf.Write(mjpegContentLengthBytes)
+	*contentLengthScratch = strconv.AppendInt((*contentLengthScratch)[:0], int64(len(frame)), 10)
+	frameWriteBuf.Write(*contentLengthScratch)
+	frameWriteBuf.Write(mjpegHeaderEndBytes)
+	frameWriteBuf.Write(frame)
+	frameWriteBuf.Write(mjpegTrailerBytes)
+
+	_, err := w.Write(frameWriteBuf.Bytes())
+	return err
 }
 
 // ConfigResponse is the JSON response for /api/config endpoint.
