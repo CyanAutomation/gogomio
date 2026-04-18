@@ -11,10 +11,10 @@ import (
 // TestDiagnosticsErrorRateCalculation tests error rate calculation
 func TestDiagnosticsErrorRateCalculation(t *testing.T) {
 	tests := []struct {
-		name           string
-		frameCount     int64
-		failureCount   int64
-		expectedRate   float64
+		name         string
+		frameCount   int64
+		failureCount int64
+		expectedRate float64
 	}{
 		{
 			name:         "No frames",
@@ -53,7 +53,7 @@ func TestDiagnosticsErrorRateCalculation(t *testing.T) {
 			expectedRate: 100.0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Calculate error rate using same formula as handleDiagnostics
@@ -61,7 +61,7 @@ func TestDiagnosticsErrorRateCalculation(t *testing.T) {
 			if tt.frameCount+tt.failureCount > 0 {
 				errorRate = (float64(tt.failureCount) / float64(tt.frameCount+tt.failureCount)) * 100
 			}
-			
+
 			if errorRate != tt.expectedRate {
 				t.Errorf("Error rate calculation: got %f, want %f", errorRate, tt.expectedRate)
 			}
@@ -72,61 +72,61 @@ func TestDiagnosticsErrorRateCalculation(t *testing.T) {
 // TestDiagnosticsHealthStatusThresholds tests health status categorization
 func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 	tests := []struct {
-		name               string
-		errorRate          float64
+		name                string
+		errorRate           float64
 		consecutiveFailures int64
-		expectedStatus     string
+		expectedStatus      string
 	}{
 		{
-			name:               "Excellent - low error rate",
-			errorRate:          0.5,
+			name:                "Excellent - low error rate",
+			errorRate:           0.5,
 			consecutiveFailures: 0,
-			expectedStatus:     "Excellent",
+			expectedStatus:      "Excellent",
 		},
 		{
-			name:               "Excellent - borderline low",
-			errorRate:          5.0,
+			name:                "Excellent - borderline low",
+			errorRate:           5.0,
 			consecutiveFailures: 0,
-			expectedStatus:     "Excellent",
+			expectedStatus:      "Excellent",
 		},
 		{
-			name:               "Degraded - borderline high",
-			errorRate:          5.1,
+			name:                "Degraded - borderline high",
+			errorRate:           5.1,
 			consecutiveFailures: 0,
-			expectedStatus:     "Degraded",
+			expectedStatus:      "Degraded",
 		},
 		{
-			name:               "Degraded - mid range",
-			errorRate:          10.0,
+			name:                "Degraded - mid range",
+			errorRate:           10.0,
 			consecutiveFailures: 0,
-			expectedStatus:     "Degraded",
+			expectedStatus:      "Degraded",
 		},
 		{
-			name:               "Degraded - high error rate",
-			errorRate:          19.9,
+			name:                "Degraded - high error rate",
+			errorRate:           19.9,
 			consecutiveFailures: 0,
-			expectedStatus:     "Degraded",
+			expectedStatus:      "Degraded",
 		},
 		{
-			name:               "Poor - high error rate",
-			errorRate:          20.1,
+			name:                "Poor - high error rate",
+			errorRate:           20.1,
 			consecutiveFailures: 0,
-			expectedStatus:     "Poor",
+			expectedStatus:      "Poor",
 		},
 		{
-			name:               "Poor - many consecutive failures",
-			errorRate:          1.0,
+			name:                "Poor - many consecutive failures",
+			errorRate:           1.0,
 			consecutiveFailures: 6,
-			expectedStatus:     "Poor",
+			expectedStatus:      "Poor",
 		},
 		{
-			name:               "Excellent - few consecutive failures",
-			errorRate:          1.0,
+			name:                "Excellent - few consecutive failures",
+			errorRate:           1.0,
 			consecutiveFailures: 3,
-			expectedStatus:     "Excellent",
+			expectedStatus:      "Excellent",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Replicate health status logic from handleDiagnostics
@@ -137,7 +137,7 @@ func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 			if tt.errorRate > 20 || tt.consecutiveFailures > 5 {
 				healthStatus = "Poor"
 			}
-			
+
 			if healthStatus != tt.expectedStatus {
 				t.Errorf("Health status: got %s, want %s", healthStatus, tt.expectedStatus)
 			}
@@ -149,35 +149,35 @@ func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 func TestDiagnosticsResponseStructure(t *testing.T) {
 	// Create a sample DiagnosticsResponse
 	response := DiagnosticsResponse{
-		Status:              "ok",
-		CameraReady:         true,
-		FramesPerSecond:     24.5,
-		UptimeSeconds:       3600,
-		StreamConnections:   1,
-		FramesCaptured:      86400,
-		LastFrameAgeSeconds: 0.1,
-		Resolution:          "1920x1080",
-		JPEGQuality:         85,
-		MaxConnections:      2,
-		CaptureFailures:     0,
+		Status:               "ok",
+		CameraReady:          true,
+		FramesPerSecond:      24.5,
+		UptimeSeconds:        3600,
+		StreamConnections:    1,
+		FramesCaptured:       86400,
+		LastFrameAgeSeconds:  0.1,
+		Resolution:           "1920x1080",
+		JPEGQuality:          85,
+		MaxConnections:       2,
+		CaptureFailures:      0,
 		CaptureFailuresTotal: 10,
-		ErrorRate:           0.01,
-		HealthStatus:        "Excellent",
-		Message:             "Camera is functioning normally",
+		ErrorRate:            0.01,
+		HealthStatus:         "Excellent",
+		Message:              "Camera is functioning normally",
 	}
-	
+
 	// Marshal to JSON
 	data, err := json.Marshal(response)
 	if err != nil {
 		t.Fatalf("Failed to marshal response: %v", err)
 	}
-	
+
 	// Unmarshal to verify all fields
 	var unmarshaled map[string]interface{}
 	if err := json.Unmarshal(data, &unmarshaled); err != nil {
 		t.Fatalf("Failed to unmarshal response: %v", err)
 	}
-	
+
 	// Check for required fields
 	requiredFields := []string{
 		"status",
@@ -196,7 +196,7 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 		"health_status",
 		"message",
 	}
-	
+
 	for _, field := range requiredFields {
 		if _, ok := unmarshaled[field]; !ok {
 			t.Errorf("Missing field in response: %s", field)
@@ -207,35 +207,35 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 // TestDiagnosticsResponseJSONEncoding tests that response encodes correctly
 func TestDiagnosticsResponseJSONEncoding(t *testing.T) {
 	response := DiagnosticsResponse{
-		Status:              "ok",
-		CameraReady:         true,
-		FramesPerSecond:     30.0,
-		UptimeSeconds:       1000,
-		StreamConnections:   1,
-		FramesCaptured:      30000,
-		LastFrameAgeSeconds: 0.05,
-		Resolution:          "1024x768",
-		JPEGQuality:         80,
-		MaxConnections:      2,
-		CaptureFailures:     0,
+		Status:               "ok",
+		CameraReady:          true,
+		FramesPerSecond:      30.0,
+		UptimeSeconds:        1000,
+		StreamConnections:    1,
+		FramesCaptured:       30000,
+		LastFrameAgeSeconds:  0.05,
+		Resolution:           "1024x768",
+		JPEGQuality:          80,
+		MaxConnections:       2,
+		CaptureFailures:      0,
 		CaptureFailuresTotal: 5,
-		ErrorRate:           0.016,
-		HealthStatus:        "Excellent",
-		Message:             "Test message",
+		ErrorRate:            0.016,
+		HealthStatus:         "Excellent",
+		Message:              "Test message",
 	}
-	
+
 	// Test encoding
 	data, err := json.Marshal(response)
 	if err != nil {
 		t.Fatalf("Failed to marshal: %v", err)
 	}
-	
+
 	// Test decoding
 	var decoded DiagnosticsResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
-	
+
 	// Verify values match
 	if decoded.Status != response.Status {
 		t.Errorf("Status mismatch: %s vs %s", decoded.Status, response.Status)
@@ -257,11 +257,11 @@ func TestDiagnosticsResponseJSONEncoding(t *testing.T) {
 // TestDiagnosticsEdgeCases tests edge cases in error rate calculation
 func TestDiagnosticsEdgeCases(t *testing.T) {
 	tests := []struct {
-		name             string
-		frameCount       int64
-		failureCount     int64
-		shouldCalculate  bool
-		expectedRate     float64
+		name            string
+		frameCount      int64
+		failureCount    int64
+		shouldCalculate bool
+		expectedRate    float64
 	}{
 		{
 			name:            "Very small numbers",
@@ -285,14 +285,14 @@ func TestDiagnosticsEdgeCases(t *testing.T) {
 			expectedRate:    0.998,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var errorRate float64
 			if tt.frameCount+tt.failureCount > 0 {
 				errorRate = (float64(tt.failureCount) / float64(tt.frameCount+tt.failureCount)) * 100
 			}
-			
+
 			if errorRate != tt.expectedRate {
 				// Allow for small floating point errors
 				if !(errorRate > tt.expectedRate-0.01 && errorRate < tt.expectedRate+0.01) {
@@ -307,12 +307,12 @@ func TestDiagnosticsEdgeCases(t *testing.T) {
 func TestSettingsUpdateErrorHandling(t *testing.T) {
 	// Create a test request with invalid JSON
 	invalidJSON := []byte("{invalid json}")
-	
+
 	req, err := http.NewRequest("POST", "/api/settings", bytes.NewReader(invalidJSON))
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
-	
+
 	// Verify request body is invalid
 	decoder := json.NewDecoder(req.Body)
 	var payload interface{}
@@ -328,7 +328,7 @@ func TestPanicRecoveryLogging(t *testing.T) {
 	originalOutput := log.Writer()
 	log.SetOutput(&logBuffer)
 	defer log.SetOutput(originalOutput)
-	
+
 	// Function with panic recovery (mimics goroutine pattern)
 	func() {
 		defer func() {
@@ -336,11 +336,11 @@ func TestPanicRecoveryLogging(t *testing.T) {
 				log.Printf("❌ PANIC recovered: %v", r)
 			}
 		}()
-		
+
 		// Trigger panic
 		panic("test panic")
 	}()
-	
+
 	// Verify panic was logged
 	logOutput := logBuffer.String()
 	if logOutput == "" {
@@ -356,7 +356,7 @@ func BenchmarkDiagnosticsErrorRate(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		frameCount := int64(1000000)
 		failureCount := int64(10000)
-		
+
 		var errorRate float64
 		if frameCount+failureCount > 0 {
 			errorRate = (float64(failureCount) / float64(frameCount+failureCount)) * 100
@@ -370,7 +370,7 @@ func BenchmarkDiagnosticsHealthStatus(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		errorRate := 10.5
 		consecutiveFailures := int64(2)
-		
+
 		healthStatus := "Excellent"
 		if errorRate > 5 {
 			healthStatus = "Degraded"
@@ -385,23 +385,23 @@ func BenchmarkDiagnosticsHealthStatus(b *testing.B) {
 // BenchmarkDiagnosticsResponseEncoding benchmarks JSON encoding of response
 func BenchmarkDiagnosticsResponseEncoding(b *testing.B) {
 	response := DiagnosticsResponse{
-		Status:              "ok",
-		CameraReady:         true,
-		FramesPerSecond:     24.5,
-		UptimeSeconds:       3600,
-		StreamConnections:   1,
-		FramesCaptured:      86400,
-		LastFrameAgeSeconds: 0.1,
-		Resolution:          "1920x1080",
-		JPEGQuality:         85,
-		MaxConnections:      2,
-		CaptureFailures:     0,
+		Status:               "ok",
+		CameraReady:          true,
+		FramesPerSecond:      24.5,
+		UptimeSeconds:        3600,
+		StreamConnections:    1,
+		FramesCaptured:       86400,
+		LastFrameAgeSeconds:  0.1,
+		Resolution:           "1920x1080",
+		JPEGQuality:          85,
+		MaxConnections:       2,
+		CaptureFailures:      0,
 		CaptureFailuresTotal: 10,
-		ErrorRate:           0.01,
-		HealthStatus:        "Excellent",
-		Message:             "Camera is functioning normally",
+		ErrorRate:            0.01,
+		HealthStatus:         "Excellent",
+		Message:              "Camera is functioning normally",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = json.Marshal(response)
