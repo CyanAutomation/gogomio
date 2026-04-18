@@ -697,15 +697,13 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 }
 
 func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
-	// Force stop capture by resetting client count and stopping
-	fm.captureMu.Lock()
-	if fm.captureStarted {
-		log.Printf("🛑 API: Stop stream requested - stopping capture")
-		close(fm.doneChan)
-		fm.captureStarted = false
-		fm.clientCount = 0
-	}
-	fm.captureMu.Unlock()
+	log.Printf("🛑 API: Stop stream requested by client")
+
+	// Use the proper stopCapture method to cleanly shut down
+	fm.stopCapture()
+
+	// Also reset client count to ensure cleanup
+	atomic.StoreInt64(&fm.clientCount, 0)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{

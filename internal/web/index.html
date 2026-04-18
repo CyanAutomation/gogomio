@@ -496,9 +496,16 @@
             }
 
             stopStream() {
+                console.log("🛑 Stop Stream button clicked - calling /api/stream/stop");
+                
                 // Call server endpoint to cleanly stop the stream
                 fetch("/api/stream/stop", { method: "POST" })
-                    .catch(err => console.log("Stream stop call:", err));
+                    .then(response => {
+                        console.log("✅ Stop stream response:", response.status);
+                        return response.json();
+                    })
+                    .then(data => console.log("✅ Stop stream data:", data))
+                    .catch(err => console.error("❌ Stop stream error:", err));
                 
                 // Remove image source to stop displaying stream in UI
                 if (this.streamAbortController) {
