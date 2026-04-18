@@ -323,7 +323,7 @@ func TestStreamEndpoint(t *testing.T) {
 	}
 }
 
-// TestIndexEndpoint tests the / root endpoint returns HTML
+// TestIndexEndpoint tests the / root endpoint serves the embedded UI.
 func TestIndexEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
@@ -332,13 +332,17 @@ func TestIndexEndpoint(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code == http.StatusNotFound {
-		t.Logf("index endpoint not implemented yet (expected for MVP)")
-		return
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	if w.Code != http.StatusOK {
-		t.Logf("index endpoint returned %d", w.Code)
+	if contentType := w.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
+		t.Fatalf("expected content type %q, got %q", "text/html; charset=utf-8", contentType)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "<title>Motion In Ocean - Go Edition</title>") {
+		t.Fatalf("expected response body to contain embedded UI title marker")
 	}
 }
 
