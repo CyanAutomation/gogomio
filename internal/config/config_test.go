@@ -163,12 +163,19 @@ func TestConfigToString(t *testing.T) {
 		t.Error("Config.String() returned empty string")
 	}
 
-	// Check that it contains key values
-	if !contains(str, "1280") || !contains(str, "720") {
-		t.Errorf("Resolution not in string: %s", str)
+	// Check that labeled key/value pairs are present.
+	if !contains(str, "\"fps\": 24") {
+		t.Errorf("FPS key/value pair not in string: %s", str)
 	}
-	if !contains(str, "24") {
-		t.Errorf("FPS not in string: %s", str)
+	if !contains(str, "\"resolution\":") || !contains(str, "1280") || !contains(str, "720") {
+		t.Errorf("Resolution key/value pair not in string: %s", str)
+	}
+
+	// Negative case: a field that is not set should not be implied in output.
+	cfg.BindHost = ""
+	strWithoutBindHost := cfg.String()
+	if contains(strWithoutBindHost, "\"bind_host\": \"0.0.0.0\"") {
+		t.Errorf("unexpected default bind_host implied in string: %s", strWithoutBindHost)
 	}
 }
 
