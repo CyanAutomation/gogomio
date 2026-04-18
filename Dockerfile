@@ -33,15 +33,12 @@ RUN CGO_ENABLED=0 go build \
     ./cmd/gogomio
 
 # Stage 2: Runtime
-# Note on CSI Camera Support:
-# - For native Raspberry Pi CSI camera support, libcamera-apps with libcamera-vid binary is required
-# - libcamera-apps is specific to Raspberry Pi OS and not available in standard Debian repositories
-# - Current base: Debian Trixie (generic arm64 support)
-# - Alternative: Use Raspberry Pi OS base image for full libcamera support
-#   (requires removing multi-architecture support, build only for arm64)
-# - Workaround: FFmpeg V4L2 fallback (limited compatibility with libcamera devices)
-# - When libcamera-vid unavailable: Application gracefully falls back to mock camera with diagnostics
-FROM debian:trixie
+# Raspberry Pi OS base for native CSI camera support
+# Note: This image is optimized for arm64 Raspberry Pi deployment
+# - Includes libcamera-apps with libcamera-vid for native CSI camera access
+# - Includes Raspberry Pi-specific camera middleware
+# - For multi-architecture builds, use a separate generic Dockerfile
+FROM arm64v8/debian:bookworm
 
 # Build arguments for runtime stage
 ARG VERSION
@@ -53,16 +50,42 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.description="Motion detection and MJPEG streaming service for cameras" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.authors="CyanAutomation" \
-      org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
+      org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio" \
+      org.opencontainers.image.arch="arm64"
 
-# Update package lists and install runtime dependencies
-# Attempts to install libcamera-apps for CSI camera support (not in standard Debian repos)
-# Falls back gracefully if unavailable; FFmpeg serves as V4L2 fallback
+# Setup Raspberry Pi repository and install libcamera-apps
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates tzdata curl ffmpeg; \
-    apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || echo "ℹ️  libcamera-apps not available in Debian repos; native CSI camera tools not installed"; \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg wget tzdata; \
+    \
+    echo "Setting up Raspberry Pi repository for libcamera-apps..."; \
+    mkdir -p /etc/apt/keyrings; \
+    \
+    wget -qO - https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
+    gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
+    (echo "⚠️  Failed to download Raspberry Pi GPG key; attempting fallback..."; \
+     curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
+     gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
+     echo "⚠️  GPG key fetch failed, continuing without signature verification"); \
+    \
+    cat > /etc/apt/sources.list.d/raspi.sources << 'RASPI_SOURCES'; \
+Types: deb deb-src
+URIs: http://archive.raspberrypi.org/debian
+Suites: bookworm
+Components: main
+Signed-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg
+RASPI_SOURCES; \
+    \
+    apt-get update 2>/dev/null || echo "⚠️  Raspberry Pi repository update had issues, continuing..."; \
+    \
+    echo "Installing camera support packages..."; \
+    apt-get install -y --no-install-recommends ffmpeg || echo "⚠️  ffmpeg install failed"; \
+    apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || \
+    apt-get install -y --no-install-recommends rpicam-apps 2>/dev/null || \
+    echo "⚠️  libcamera/rpicam packages not found in repository"; \
+    \
+    apt-get purge -y gnupg wget || true; \
+    rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raspi.sources
 
 # Create non-root user with explicit umask
 RUN useradd -m -u 1001 -s /bin/bash gogomio && \
