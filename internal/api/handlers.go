@@ -224,7 +224,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 
 	retryDelay := initialCaptureRetryDelay
 	captureCount := 0
-	
+
 	// Calculate minimal frame throttle to prevent tight spinning
 	frameInterval := time.Second / time.Duration(fm.cfg.TargetFPS)
 	if frameInterval <= 0 {
