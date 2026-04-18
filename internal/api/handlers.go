@@ -225,7 +225,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 
 	retryDelay := initialCaptureRetryDelay
 	captureCount := 0
-	
+
 	// Calculate frame interval to throttle to target FPS
 	frameInterval := time.Second / time.Duration(fm.cfg.TargetFPS)
 	if frameInterval <= 0 {
