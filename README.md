@@ -48,6 +48,10 @@ curl http://localhost:8000/api/config | jq
 - Raspberry Pi 3B+, 4, or 5
 - CSI camera connected
 - Docker installed (`curl -sSL https://get.docker.com | sh`)
+- 64-bit Raspberry Pi OS (arm64) recommended so camera packages are available
+- Camera backend package on host:
+  - Preferred: `rpicam-apps` (`rpicam-vid`)
+  - Fallback: `libcamera-tools` / `libcamera-apps-lite` (`libcamera-vid`)
 
 **Deployment:**
 
@@ -66,6 +70,9 @@ docker-compose up -d
 
 # View logs
 docker-compose logs -f gogomio
+
+# Optional: confirm backend binaries discovered at startup
+docker-compose logs gogomio | grep camera-check
 
 # Access streams
 # - Streaming: http://YOUR_PI_IP:8000/stream.mjpg
@@ -270,6 +277,8 @@ go test ./... -v -race -cover
 - Ensure CSI cable is properly connected to Pi
 - Check `/dev/video0` exists: `ls -la /dev/video0`
 - In docker-compose, verify device mapping
+- Check startup binary probe output: `docker-compose logs gogomio | grep camera-check`
+- Prefer `rpicam-vid`; use `libcamera-vid` as fallback if `rpicam-vid` is unavailable
 
 **High CPU usage**
 
@@ -316,8 +325,10 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 - Go 1.22+
 - `chi` - HTTP router
-- No external camera library yet (mock mode only - v0.1)
-- Future: `libcamera` (system library) for real Pi support
+- Runtime camera binaries (arm64 Raspberry Pi):
+  - Preferred: `rpicam-vid` via `rpicam-apps`
+  - Fallback: `libcamera-vid` via `libcamera-tools` / `libcamera-apps-lite`
+- `ffmpeg` fallback backend is installed in Docker images for compatibility
 
 ## License
 
