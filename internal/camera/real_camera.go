@@ -191,39 +191,47 @@ func (rc *RealCamera) waitForFirstFrame() error {
 	timeout := rc.firstFrameTimeout()
 	deadline := time.Now().Add(timeout)
 
-	for {
-		rc.frameMutex.Lock()
-		frame := append([]byte(nil), rc.latestFrame...)
-		readerErr := rc.readerErr
-		rc.frameMutex.Unlock()
-
-		if len(frame) > 0 {
-			if _, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err == nil {
-				return nil
-			}
+for {
+	// Check if stopping to allow clean shutdown during initialization
+	if rc.isStopping.Load() {
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  "camera stopped during initialization",
 		}
-
-		if readerErr != nil {
-			reason := "frame reader stopped before first JPEG frame"
-			if errors.Is(readerErr, io.EOF) {
-				reason = "camera backend exited before first JPEG frame"
-			}
-			return &InitializationError{
-				Backend: rc.getBackendAttempted(),
-				Reason:  reason,
-				Cause:   readerErr,
-			}
-		}
-
-		if time.Now().After(deadline) {
-			return &InitializationError{
-				Backend: rc.getBackendAttempted(),
-				Reason:  fmt.Sprintf("timed out waiting %s for first JPEG frame (fps=%d)", timeout.Round(10*time.Millisecond), rc.fps),
-			}
-		}
-
-		time.Sleep(10 * time.Millisecond)
 	}
+
+	rc.frameMutex.Lock()
+	frame := append([]byte(nil), rc.latestFrame...)
+	readerErr := rc.readerErr
+	rc.frameMutex.Unlock()
+
+	if len(frame) > 0 {
+		if _, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err == nil {
+			return nil
+		}
+	}
+
+	if readerErr != nil {
+		reason := "frame reader stopped before first JPEG frame"
+		if errors.Is(readerErr, io.EOF) {
+			reason = "camera backend exited before first JPEG frame"
+		}
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  reason,
+			Cause:   readerErr,
+		}
+	}
+
+	if time.Now().After(deadline) {
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  fmt.Sprintf("timed out waiting %s for first JPEG frame (fps=%d)", timeout.Round(10*time.Millisecond), rc.fps),
+		}
+	}
+
+	time.Sleep(10 * time.Millisecond)
+}
 }
 
 func (rc *RealCamera) firstFrameTimeout() time.Duration {
