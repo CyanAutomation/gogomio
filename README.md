@@ -50,6 +50,7 @@ curl http://localhost:8000/api/config | jq
 - Docker installed (`curl -sSL https://get.docker.com | sh`)
 
 **Important:** The Dockerfile has been optimized for **Raspberry Pi arm64 deployments** with native libcamera support. See [Raspberry Pi Build Guide](docs/RASPBERRY_PI_BUILD.md) for:
+
 - Build instructions
 - Camera initialization troubleshooting  
 - Performance optimization

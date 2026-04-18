@@ -9,10 +9,12 @@ The Dockerfile has been updated to support **native Raspberry Pi CSI cameras** v
 ## Key Changes
 
 ### Base Image
+
 - **Old:** `debian:trixie` (multi-architecture: amd64 + arm64)
 - **New:** `arm64v8/debian:bookworm` (arm64 only)
 
 ### Camera Tools
+
 - **Added:** Raspberry Pi OS apt repository (`archive.raspberrypi.org/debian`)
 - **Installs:** `libcamera-apps` (provides `libcamera-vid`) or `rpicam-apps`
 - **Result:** Native CSI camera support works out of the box
@@ -51,12 +53,14 @@ docker buildx build \
 ## What's Different
 
 ### With Native libcamera-vid
+
 - ✅ Direct CSI camera access without intermediaries
 - ✅ Optimal performance and frame rate
 - ✅ Full Raspberry Pi GPU ISP (Image Signal Processor) utilization
 - ✅ Logs show: `✓ Selected camera backend binary: libcamera-vid`
 
 ### With FFmpeg Fallback
+
 - ⚠️ Limited V4L2 device compatibility
 - ⚠️ May timeout waiting for frames
 - ⚠️ Falls back to mock camera
@@ -95,6 +99,7 @@ docker exec gogomio cat /run/udev/db/c189:0 2>/dev/null | head
 ### Diagnostics Modal
 
 Access the web UI diagnostics at `http://<pi-ip>:8000` and click the **📊 Diagnostics** button to see:
+
 - Real-time camera status
 - Frame rates
 - Camera backend in use
