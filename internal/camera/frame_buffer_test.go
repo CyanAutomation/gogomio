@@ -2,6 +2,7 @@ package camera
 
 import (
 	"bytes"
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -330,5 +331,28 @@ func TestFrameBufferWaitFrameTimeout(t *testing.T) {
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("timeout in test")
+	}
+}
+
+// TestFrameBufferWaitFrameWithContextCancel returns quickly on context cancellation.
+func TestFrameBufferWaitFrameWithContextCancel(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	frame, seq := fb.WaitFrameWithContext(ctx, 2*time.Second, 0)
+	elapsed := time.Since(start)
+
+	if frame != nil {
+		t.Fatalf("WaitFrameWithContext got frame %v, want nil on canceled context", frame)
+	}
+	if seq != 0 {
+		t.Fatalf("WaitFrameWithContext returned seq %d, want 0 on canceled context", seq)
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Fatalf("WaitFrameWithContext canceled too slowly: elapsed=%v", elapsed)
 	}
 }
