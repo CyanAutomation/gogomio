@@ -56,11 +56,41 @@ type RealCamera struct {
 	readerDone chan struct{}
 	stderrDone chan struct{}
 
+	backendAttempted string
+
 	// test hooks
 	lookPath func(string) (string, error)
 	statFn   func(string) (os.FileInfo, error)
 	launchFn func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 	runCmdFn func(*exec.Cmd) ([]byte, error)
+}
+
+// InitializationError describes why real camera startup failed.
+type InitializationError struct {
+	Backend string
+	Reason  string
+	Cause   error
+}
+
+func (e *InitializationError) Error() string {
+	if e == nil {
+		return "camera initialization failed"
+	}
+	causeText := ""
+	if e.Cause != nil {
+		causeText = fmt.Sprintf(": %v", e.Cause)
+	}
+	if e.Backend != "" {
+		return fmt.Sprintf("camera initialization failed (backend: %s): %s%s", e.Backend, e.Reason, causeText)
+	}
+	return fmt.Sprintf("camera initialization failed: %s%s", e.Reason, causeText)
+}
+
+func (e *InitializationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }
 
 // NewRealCamera creates a new camera instance for Raspberry Pi CSI camera.
@@ -85,9 +115,8 @@ func NewRealCamera() *RealCamera {
 // Start initializes camera configuration and starts the long-lived capture process.
 func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Lock()
-	defer rc.captureMutex.Unlock()
-
 	if rc.isReady.Load() {
+		rc.captureMutex.Unlock()
 		return fmt.Errorf("camera already started")
 	}
 
@@ -98,6 +127,8 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 		jpegQuality = 80
 	}
 	rc.jpegQuality = jpegQuality
+	rc.backendAttempted = "preflight"
+	rc.captureMutex.Unlock()
 
 	// Check if camera device exists
 	if _, err := rc.statFn(rc.devicePath); err != nil {
@@ -106,7 +137,11 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 		log.Printf("   - CSI camera is physically connected")
 		log.Printf("   - Camera is enabled in raspi-config")
 		log.Printf("   - Device permissions allow access to %s", rc.devicePath)
-		return fmt.Errorf("camera device not found at %s: %w", rc.devicePath, err)
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  fmt.Sprintf("camera device not found at %s", rc.devicePath),
+			Cause:   err,
+		}
 	}
 	log.Printf("✓ Camera device found at %s", rc.devicePath)
 
@@ -120,9 +155,14 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	cmd, stdin, stdout, stderr, err := rc.launchFn()
 	if err != nil {
 		log.Printf("❌ Failed to launch camera backend: %v", err)
-		return err
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  "failed to launch camera backend",
+			Cause:   err,
+		}
 	}
 
+	rc.captureMutex.Lock()
 	rc.proc = cmd
 	rc.procStdin = stdin
 	rc.procStdout = stdout
@@ -131,12 +171,97 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.stderrDone = make(chan struct{})
 
 	rc.isStopping.Store(false)
-	rc.isReady.Store(true)
+	rc.isReady.Store(false)
+	rc.captureMutex.Unlock()
 
 	go rc.readMJPEGStream()
 	go rc.drainStderr()
 
+	if err := rc.waitForFirstFrame(); err != nil {
+		_ = rc.Stop()
+		return err
+	}
+
+	rc.isReady.Store(true)
+
 	return nil
+}
+
+func (rc *RealCamera) waitForFirstFrame() error {
+	timeout := rc.firstFrameTimeout()
+	deadline := time.Now().Add(timeout)
+
+for {
+	// Check if stopping to allow clean shutdown during initialization
+	if rc.isStopping.Load() {
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  "camera stopped during initialization",
+		}
+	}
+
+	rc.frameMutex.Lock()
+	frame := append([]byte(nil), rc.latestFrame...)
+	readerErr := rc.readerErr
+	rc.frameMutex.Unlock()
+
+	if len(frame) > 0 {
+		if _, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err == nil {
+			return nil
+		}
+	}
+
+	if readerErr != nil {
+		reason := "frame reader stopped before first JPEG frame"
+		if errors.Is(readerErr, io.EOF) {
+			reason = "camera backend exited before first JPEG frame"
+		}
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  reason,
+			Cause:   readerErr,
+		}
+	}
+
+	if time.Now().After(deadline) {
+		return &InitializationError{
+			Backend: rc.getBackendAttempted(),
+			Reason:  fmt.Sprintf("timed out waiting %s for first JPEG frame (fps=%d)", timeout.Round(10*time.Millisecond), rc.fps),
+		}
+	}
+
+	time.Sleep(10 * time.Millisecond)
+}
+}
+
+func (rc *RealCamera) firstFrameTimeout() time.Duration {
+	fps := rc.fps
+	if fps <= 0 {
+		fps = 1
+	}
+	timeout := 3 * (time.Second / time.Duration(fps))
+	if timeout < 500*time.Millisecond {
+		timeout = 500 * time.Millisecond
+	}
+	if rc.captureWaitTimeout > 0 && timeout > rc.captureWaitTimeout {
+		timeout = rc.captureWaitTimeout
+	}
+	return timeout
+}
+
+func (rc *RealCamera) setBackendAttempted(name string) {
+	rc.captureMutex.Lock()
+	rc.backendAttempted = name
+	rc.captureMutex.Unlock()
+}
+
+func (rc *RealCamera) getBackendAttempted() string {
+	rc.captureMutex.Lock()
+	defer rc.captureMutex.Unlock()
+	if rc.backendAttempted == "" {
+		return "unknown"
+	}
+	return rc.backendAttempted
 }
 
 // CaptureFrame returns the latest buffered frame, waiting for an initial frame
@@ -243,6 +368,7 @@ func (rc *RealCamera) IsReady() bool {
 
 func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 	if _, err := rc.lookPath("rpicam-vid"); err == nil {
+		rc.setBackendAttempted("rpicam-vid")
 		log.Printf("✓ Selected camera backend binary: rpicam-vid")
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := rc.buildRpiCamVidCommand()
@@ -250,6 +376,7 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 	}
 
 	if _, err := rc.lookPath("libcamera-vid"); err == nil {
+		rc.setBackendAttempted("libcamera-vid")
 		log.Printf("✓ Selected camera backend binary: libcamera-vid")
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := rc.buildLibcameraVidCommand()
@@ -257,11 +384,13 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 	}
 
 	if _, err := rc.lookPath("ffmpeg"); err != nil {
+		rc.setBackendAttempted("none")
 		log.Printf("❌ None of rpicam-vid, libcamera-vid, or ffmpeg were found in PATH")
 		log.Printf("   rpicam-vid/libcamera-vid: Check if libcamera-apps package is installed in container")
 		log.Printf("   ffmpeg: Check if ffmpeg package is installed in container")
 		return nil, nil, nil, nil, fmt.Errorf("none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH")
 	}
+	rc.setBackendAttempted("ffmpeg")
 	if err := rc.probeV4L2CaptureNode(); err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -329,10 +458,10 @@ func (rc *RealCamera) probeV4L2CaptureNode() error {
 		"ffmpeg",
 		"-hide_banner",
 		"-loglevel", "error",
-	"-f", "video4linux2",
-	"-input_format", "mjpeg",
-	"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
-	"-framerate", fmt.Sprintf("%d", rc.fps),
+		"-f", "video4linux2",
+		"-input_format", "mjpeg",
+		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
+		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-frames:v", "1",
 		"-f", "null",
 		"-",
