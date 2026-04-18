@@ -225,29 +225,17 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	retryDelay := initialCaptureRetryDelay
 	captureCount := 0
 
-	// Calculate minimal frame throttle to prevent tight spinning
-	frameInterval := time.Second / time.Duration(fm.cfg.TargetFPS)
-	if frameInterval <= 0 {
-		frameInterval = time.Second / time.Duration(fm.cfg.FPS)
-	}
-	if frameInterval < 10*time.Millisecond {
-		frameInterval = 10 * time.Millisecond
-	}
-	ticker := time.NewTicker(frameInterval)
-	defer ticker.Stop()
-	log.Printf("🎬 Capture loop: throttle %v (target %d FPS)", frameInterval, fm.cfg.TargetFPS)
-
 	for {
 		select {
 		case <-done:
 			log.Printf("🎬 Capture loop: done signal received, exiting (captured %d frames)", captureCount)
 			return
-		case <-ticker.C:
-			// Throttle to target FPS - proceed to capture next frame
+		default:
 		}
 
 		// CaptureFrame blocks until a newer frame sequence is published (or timeout/error),
 		// so this loop tracks upstream frame cadence without CPU spinning.
+		// Add minimal 1ms sleep to prevent tight spinning on error path retries.
 		frame, err := fm.cam.CaptureFrame()
 		if err != nil {
 			consecutive := atomic.AddInt64(&fm.consecutiveCaptureFailures, 1)
@@ -269,6 +257,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 			if retryDelay > maxCaptureRetryDelay {
 				retryDelay = maxCaptureRetryDelay
 			}
+			time.Sleep(1 * time.Millisecond) // Minimal sleep on error to prevent tight spinning
 			continue
 		}
 
