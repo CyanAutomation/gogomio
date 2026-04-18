@@ -312,6 +312,7 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 
 // Stop stops the camera process and reader goroutines.
 func (rc *RealCamera) Stop() error {
+	log.Printf("🛑 Camera Stop() called")
 	rc.isStopping.Store(true)
 	rc.isReady.Store(false)
 
@@ -333,6 +334,7 @@ func (rc *RealCamera) Stop() error {
 
 	if proc != nil {
 		if proc.Process != nil {
+			log.Printf("🛑 Killing process PID: %d", proc.Process.Pid)
 			_ = proc.Process.Kill()
 		}
 		// Use a timeout to prevent indefinite blocking on proc.Wait()
@@ -344,6 +346,7 @@ func (rc *RealCamera) Stop() error {
 		select {
 		case <-waitDone:
 			// Process exited cleanly
+			log.Printf("✓ Process exited cleanly")
 		case <-time.After(5 * time.Second):
 			// Timeout waiting for process to exit
 			log.Printf("⚠️  Timeout waiting for camera process to exit")
@@ -355,6 +358,7 @@ func (rc *RealCamera) Stop() error {
 		select {
 		case <-readerDone:
 			// Reader exited
+			log.Printf("✓ Frame reader goroutine exited")
 		case <-time.After(5 * time.Second):
 			// Timeout waiting for reader
 			log.Printf("⚠️  Timeout waiting for reader goroutine to exit")
@@ -364,6 +368,7 @@ func (rc *RealCamera) Stop() error {
 		select {
 		case <-stderrDone:
 			// Stderr drainer exited
+			log.Printf("✓ Stderr drainer goroutine exited")
 		case <-time.After(5 * time.Second):
 			// Timeout waiting for stderr drainer
 			log.Printf("⚠️  Timeout waiting for stderr drainer goroutine to exit")
@@ -542,7 +547,12 @@ func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd
 }
 
 func (rc *RealCamera) readMJPEGStream() {
-	defer close(rc.readerDone)
+	defer func() {
+		log.Printf("📹 Frame reader: EXIT (closing readerDone channel)")
+		close(rc.readerDone)
+	}()
+
+	log.Printf("📹 Frame reader: STARTED")
 
 	buf := make([]byte, readChunkSize)
 	readAttempts := 0
@@ -612,7 +622,12 @@ func (rc *RealCamera) readMJPEGStream() {
 }
 
 func (rc *RealCamera) drainStderr() {
-	defer close(rc.stderrDone)
+	defer func() {
+		log.Printf("📹 Stderr drainer: EXIT (closing stderrDone channel)")
+		close(rc.stderrDone)
+	}()
+
+	log.Printf("📹 Stderr drainer: STARTED")
 
 	// Check if stopping before attempting to access stderr
 	if rc.isStopping.Load() {

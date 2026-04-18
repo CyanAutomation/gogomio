@@ -2,11 +2,15 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/CyanAutomation/gogomio/internal/api"
 	"github.com/CyanAutomation/gogomio/internal/camera"
@@ -50,6 +54,17 @@ func main() {
 	defer frameManager.Stop()
 
 	api.RegisterHandlers(router, frameManager, cfg)
+
+	// Start pprof profiling server on separate port
+	go func() {
+		log.Printf("🔍 Profiling server listening on http://localhost:6060/debug/pprof")
+		if err := http.ListenAndServe(":6060", nil); err != nil && err != http.ErrServerClosed {
+			log.Printf("Profiling server error: %v", err)
+		}
+	}()
+
+	// Log goroutine count periodically
+	go logGoroutineStats()
 
 	// Setup HTTP server
 	addr := cfg.AddressString()
@@ -141,4 +156,24 @@ func initializeCamera(
 	}
 
 	return realCam, "real", nil
+}
+
+// logGoroutineStats logs goroutine count periodically to track potential leaks
+func logGoroutineStats() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	var lastCount int
+	for range ticker.C {
+		count := runtime.NumGoroutine()
+		delta := count - lastCount
+		deltaStr := ""
+		if delta > 0 {
+			deltaStr = fmt.Sprintf(" (+%d)", delta)
+		} else if delta < 0 {
+			deltaStr = fmt.Sprintf(" (%d)", delta)
+		}
+		log.Printf("📊 Goroutines: %d%s", count, deltaStr)
+		lastCount = count
+	}
 }
