@@ -120,9 +120,10 @@ func benchmarkWaitFrameTimeoutConcurrent(b *testing.B, readers int, waitFn func(
 			defer wg.Done()
 			<-start
 			for {
-				if int(atomic.AddInt64(&opIdx, 1)) >= b.N {
-					return
-				}
+			idx := int(atomic.AddInt64(&opIdx, 1))
+			if idx >= b.N {
+				return
+			}
 				waitFn(250 * time.Microsecond)
 			}
 		}()
