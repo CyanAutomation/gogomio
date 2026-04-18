@@ -532,6 +532,14 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 		}
 	})
 
+	// OctoPrint-compatible stream endpoint
+	router.Get("/webcam", func(w http.ResponseWriter, r *http.Request) {
+		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
+			// Client disconnected or error occurred - this is normal
+			_ = err
+		}
+	})
+
 	router.Get("/snapshot.jpg", func(w http.ResponseWriter, r *http.Request) {
 		handleSnapshot(w, r, fm)
 	})

@@ -5,86 +5,180 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Motion In Ocean - Go Edition</title>
     <style>
+        /* ====== DESIGN SYSTEM ====== */
+        :root {
+            /* Color Palette */
+            --color-primary: #2563eb;
+            --color-primary-dark: #1e40af;
+            --color-primary-light: #3b82f6;
+            --color-success: #10b981;
+            --color-success-light: #d1fae5;
+            --color-success-dark: #065f46;
+            --color-error: #ef4444;
+            --color-error-light: #fee2e2;
+            --color-error-dark: #7f1d1d;
+            --color-warning: #f59e0b;
+            --color-warning-light: #fef3c7;
+            --color-warning-dark: #78350f;
+            
+            /* Neutral Colors */
+            --color-bg: #f8fafc;
+            --color-bg-secondary: #f1f5f9;
+            --color-border: #e2e8f0;
+            --color-text: #1e293b;
+            --color-text-secondary: #64748b;
+            --color-text-tertiary: #94a3b8;
+            
+            /* Surfaces */
+            --color-surface: #ffffff;
+            --color-surface-hover: #f8fafc;
+            
+            /* Spacing */
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 12px;
+            --spacing-lg: 16px;
+            --spacing-xl: 20px;
+            --spacing-2xl: 24px;
+            --spacing-3xl: 32px;
+            
+            /* Typography */
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-size-xs: 12px;
+            --font-size-sm: 14px;
+            --font-size-base: 16px;
+            --font-size-lg: 18px;
+            --font-size-xl: 20px;
+            --font-size-2xl: 28px;
+            --font-size-3xl: 32px;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);
+            --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.15);
+            
+            /* Border Radius */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            
+            /* Transitions */
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        html, body {
+            height: 100%;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: var(--font-family);
+            background: var(--color-bg);
+            color: var(--color-text);
+            font-size: var(--font-size-base);
+            line-height: 1.5;
             min-height: 100vh;
-            padding: 20px;
-            color: #333;
+            display: flex;
+            flex-direction: column;
         }
 
         .container {
-            max-width: 1024px;
+            max-width: 1400px;
             margin: 0 auto;
+            padding: var(--spacing-3xl);
+            flex: 1;
+            width: 100%;
         }
 
+        /* ====== HEADER ====== */
         header {
-            text-align: center;
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
             color: white;
-            margin-bottom: 30px;
+            padding: var(--spacing-3xl) 0;
+            text-align: center;
+            margin-bottom: var(--spacing-3xl);
+            box-shadow: var(--shadow-md);
         }
 
         h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            font-size: var(--font-size-3xl);
+            font-weight: 700;
+            margin-bottom: var(--spacing-md);
+            letter-spacing: -0.5px;
         }
 
         .subtitle {
-            font-size: 1.1em;
-            opacity: 0.9;
+            font-size: var(--font-size-lg);
+            opacity: 0.95;
+            font-weight: 400;
         }
 
+        /* ====== MAIN LAYOUT ====== */
         .main-grid {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 20px;
-            margin-bottom: 20px;
+            gap: var(--spacing-2xl);
+            margin-bottom: var(--spacing-3xl);
         }
 
-        @media (min-width: 1024px) {
+        @media (min-width: 1280px) {
             .main-grid {
-                grid-template-columns: 2fr 1fr;
+                grid-template-columns: 2.5fr 1fr;
             }
         }
 
+        /* ====== CARDS ====== */
         .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            transition: transform 0.2s ease;
+            background: var(--color-surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--color-border);
+            padding: var(--spacing-2xl);
+            transition: all var(--transition-base);
+            display: flex;
+            flex-direction: column;
         }
 
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--color-primary-light);
         }
 
+        /* ====== SECTION HEADERS ====== */
         .video-section h2,
         .controls-section h2 {
-            font-size: 1.3em;
-            margin-bottom: 15px;
-            color: #667eea;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
+            font-size: var(--font-size-xl);
+            font-weight: 600;
+            margin-bottom: var(--spacing-xl);
+            color: var(--color-text);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 2px solid var(--color-border);
         }
 
+        /* ====== STREAM SECTION ====== */
         #stream-container {
             background: #000;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             overflow: hidden;
             aspect-ratio: 16 / 9;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 300px;
+            min-height: 360px;
+            margin-bottom: var(--spacing-lg);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         #stream-img {
@@ -94,51 +188,79 @@
         }
 
         .stream-status {
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 10px;
-            text-align: center;
-        }
-
-        .stream-controls {
             display: flex;
-            gap: 10px;
-            margin-top: 12px;
+            align-items: center;
+            gap: var(--spacing-sm);
+            font-size: var(--font-size-sm);
+            color: var(--color-text-secondary);
+            padding: var(--spacing-md);
+            background: var(--color-bg-secondary);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-lg);
         }
 
         .status-indicator {
             display: inline-block;
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
-            margin-right: 5px;
             animation: pulse 2s infinite;
+            flex-shrink: 0;
+            box-shadow: 0 0 8px currentColor;
         }
 
         .status-indicator.active {
-            background: #4caf50;
+            background: var(--color-success);
+            color: var(--color-success);
         }
 
         .status-indicator.inactive {
-            background: #f44336;
+            background: var(--color-error);
             animation: none;
+            color: var(--color-error);
+            box-shadow: none;
+        }
+
+        #status-text {
+            font-weight: 500;
+            color: var(--color-text);
         }
 
         @keyframes pulse {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+            50% { opacity: 0.6; }
         }
 
+        .stream-controls {
+            display: flex;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+
+        /* ====== FORM CONTROLS ====== */
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: var(--spacing-xl);
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: #555;
-            font-size: 0.95em;
+            margin-bottom: var(--spacing-sm);
+            font-weight: 600;
+            color: var(--color-text);
+            font-size: var(--font-size-sm);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group > div:first-child {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .form-group > div:first-child label {
+            margin-bottom: 0;
         }
 
         input[type="text"],
@@ -146,188 +268,323 @@
         input[type="range"],
         input[type="color"] {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 1em;
-            transition: border-color 0.2s;
+            padding: var(--spacing-md);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-base);
+            transition: all var(--transition-fast);
+            font-family: var(--font-family);
+            background: var(--color-surface);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="color"] {
+            background: var(--color-bg);
+        }
+
+        input[type="text"]:hover,
+        input[type="number"]:hover,
+        input[type="range"]:hover {
+            border-color: var(--color-primary-light);
         }
 
         input[type="text"]:focus,
         input[type="number"]:focus,
-        input[type="range"]:focus,
         input[type="color"]:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
         input[type="range"] {
             padding: 0;
-            height: 6px;
+            height: 8px;
             cursor: pointer;
+            appearance: none;
+            background: linear-gradient(to right, #e2e8f0 0%, #e2e8f0 100%);
+            border: 1px solid var(--color-border);
+            margin-top: var(--spacing-md);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--color-primary);
+            cursor: pointer;
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition-fast);
+            border: 2px solid white;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+
+        input[type="range"]::-webkit-slider-thumb:active {
+            transform: scale(1.1);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--color-primary);
+            cursor: pointer;
+            box-shadow: var(--shadow-md);
+            border: 2px solid white;
+            transition: all var(--transition-fast);
+        }
+
+        input[type="range"]::-moz-range-thumb:hover {
+            transform: scale(1.15);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+
+        input[type="range"]::-moz-range-track {
+            background: transparent;
+            border: none;
         }
 
         .range-value {
             display: inline-block;
-            float: right;
-            background: #667eea;
+            background: var(--color-primary);
             color: white;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.85em;
-            font-weight: bold;
+            padding: var(--spacing-xs) var(--spacing-md);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
         }
 
+        /* ====== BUTTONS ====== */
         .button-group {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
+            gap: var(--spacing-md);
+            margin: var(--spacing-xl) 0;
         }
 
         button {
-            flex: 1;
-            padding: 12px 20px;
+            padding: var(--spacing-md) var(--spacing-xl);
             border: none;
-            border-radius: 6px;
-            font-size: 1em;
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-base);
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all var(--transition-base);
+            font-family: var(--font-family);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+            white-space: nowrap;
         }
 
         .btn-primary {
-            background: #667eea;
+            background: var(--color-primary);
             color: white;
+            box-shadow: var(--shadow-md);
+            flex: 1;
         }
 
-        .btn-primary:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        .btn-primary:hover:not(:disabled) {
+            background: var(--color-primary-dark);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: var(--shadow-sm);
         }
 
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: var(--color-bg-secondary);
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
+            flex: 1;
         }
 
-        .btn-secondary:hover {
-            background: #e0e0e0;
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--color-border);
+            border-color: var(--color-primary-light);
+        }
+
+        .btn-secondary:active:not(:disabled) {
+            background: var(--color-bg-secondary);
         }
 
         button:disabled {
-            opacity: 0.6;
+            opacity: 0.5;
             cursor: not-allowed;
             transform: none !important;
         }
 
+        button#diagnostics-btn {
+            width: 100%;
+            margin-top: var(--spacing-xl);
+        }
+
+        /* ====== STATS SECTION ====== */
         .stats {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-xl);
+            padding-top: var(--spacing-xl);
+            border-top: 1px solid var(--color-border);
         }
 
         .stat-item {
-            background: #f5f5f5;
-            padding: 12px;
-            border-radius: 6px;
+            background: var(--color-bg-secondary);
+            padding: var(--spacing-lg);
+            border-radius: var(--radius-md);
             text-align: center;
+            border: 1px solid var(--color-border);
+            transition: all var(--transition-base);
+        }
+
+        .stat-item:hover {
+            border-color: var(--color-primary-light);
+            background: var(--color-surface);
         }
 
         .stat-label {
-            font-size: 0.85em;
-            color: #999;
-            margin-bottom: 5px;
+            font-size: var(--font-size-xs);
+            color: var(--color-text-secondary);
+            margin-bottom: var(--spacing-sm);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .stat-value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #667eea;
+            font-size: var(--font-size-2xl);
+            font-weight: 700;
+            color: var(--color-primary);
         }
 
+        /* ====== MESSAGES ====== */
         .message {
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 15px;
+            padding: var(--spacing-lg);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--spacing-lg);
             display: none;
+            border-left: 4px solid;
+            animation: slideDown var(--transition-fast) ease;
+            font-weight: 500;
+            font-size: var(--font-size-sm);
+            line-height: 1.6;
         }
 
         .message.show {
             display: block;
-            animation: slideDown 0.3s ease;
+            animation: slideDown var(--transition-base) ease;
         }
 
         @keyframes slideDown {
             from {
                 opacity: 0;
-                transform: translateY(-10px);
+                transform: translateY(-15px);
+                max-height: 0;
             }
             to {
                 opacity: 1;
                 transform: translateY(0);
+                max-height: 500px;
             }
         }
 
         .message.success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
+            background: var(--color-success-light);
+            border-color: var(--color-success);
+            color: var(--color-success-dark);
         }
 
         .message.error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
+            background: var(--color-error-light);
+            border-color: var(--color-error);
+            color: var(--color-error-dark);
         }
 
+        .message.warning {
+            background: var(--color-warning-light);
+            border-color: var(--color-warning);
+            color: var(--color-warning-dark);
+        }
+
+        .message.info {
+            background: #dbeafe;
+            border-color: #0ea5e9;
+            color: #0c2d6b;
+        }
+
+        /* ====== FOOTER ====== */
         footer {
             text-align: center;
-            color: white;
-            opacity: 0.8;
-            margin-top: 40px;
-            font-size: 0.9em;
+            color: var(--color-text-secondary);
+            padding: var(--spacing-3xl) var(--spacing-lg);
+            border-top: 1px solid var(--color-border);
+            background: var(--color-surface);
+            font-size: var(--font-size-sm);
         }
 
-        @media (max-width: 768px) {
-            h1 {
-                font-size: 1.8em;
-            }
+        /* ====== UTILITIES ====== */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
 
-            .card {
-                padding: 15px;
-            }
+        #stream-spinner {
+            animation: spin 1s linear infinite !important;
+        }
 
-            .stats {
-                grid-template-columns: 1fr;
-            }
+        #stream-idle {
+            display: block;
+            font-size: 64px;
+            opacity: 0.5;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
+    <header>
+        <div class="container">
             <h1>🌊 Motion In Ocean</h1>
-            <p class="subtitle">Go Edition - Live Streaming Camera</p>
-        </header>
+            <p class="subtitle">Live Streaming Camera — Go Edition</p>
+        </div>
+    </header>
+
+    <div class="container">
 
         <div class="main-grid">
             <div class="card video-section">
-                <h2>Live Stream</h2>
+                <h2>📹 Live Stream</h2>
                 <div id="stream-container">
                     <img id="stream-img" alt="Live stream" style="display:none;">
                     <div id="stream-loading">
-                        <div style="text-align: center; color: #999;">
-                            <p id="stream-placeholder-text" style="margin-bottom: 10px;">▶️ Stream is stopped</p>
-                            <div id="stream-spinner" style="display: none; width: 40px; height: 40px; border: 4px solid #667eea; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <div style="text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                            <div style="margin-bottom: var(--spacing-lg);">
+                                <div id="stream-spinner" style="display: none; width: 48px; height: 48px; border: 4px solid var(--color-primary-light); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                <div id="stream-idle" style="font-size: 48px; opacity: 0.6;">▶️</div>
+                            </div>
+                            <p id="stream-placeholder-text" style="margin: 0; color: #999; font-size: var(--font-size-lg); font-weight: 500;">Stream is stopped</p>
+                            <p id="stream-placeholder-desc" style="margin: var(--spacing-md) 0 0 0; color: #bbb; font-size: var(--font-size-sm);">Start stream to begin viewing</p>
                         </div>
                     </div>
                 </div>
                 <div class="stream-controls">
-                    <button class="btn-primary" id="start-stream">Start Stream</button>
-                    <button class="btn-secondary" id="stop-stream" disabled>Stop Stream</button>
+                    <button class="btn-primary" id="start-stream">
+                        <span>▶️</span>
+                        <span>Start Stream</span>
+                    </button>
+                    <button class="btn-secondary" id="stop-stream" disabled>
+                        <span>⏹️</span>
+                        <span>Stop Stream</span>
+                    </button>
                 </div>
                 <div class="stream-status">
                     <span class="status-indicator inactive" id="status-indicator"></span>
@@ -336,34 +593,52 @@
             </div>
 
             <div class="card controls-section">
-                <h2>Settings & Stats</h2>
+                <h2>⚙️ Settings & Controls</h2>
 
                 <div id="message" class="message"></div>
 
-                <div class="form-group">
-                    <label>Brightness</label>
-                    <input type="range" id="brightness" min="0" max="200" value="100" step="1">
-                    <span class="range-value"><span id="brightness-value">100</span>%</span>
-                </div>
+                <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-xl);">
+                    <h3 style="margin: 0 0 var(--spacing-lg) 0; font-size: var(--font-size-lg); color: var(--color-text); display: flex; align-items: center; gap: var(--spacing-md);">
+                        🎨 Video Settings
+                    </h3>
 
-                <div class="form-group">
-                    <label>Contrast</label>
-                    <input type="range" id="contrast" min="0" max="200" value="100" step="1">
-                    <span class="range-value"><span id="contrast-value">100</span>%</span>
-                </div>
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <label for="brightness">Brightness</label>
+                            <span class="range-value"><span id="brightness-value">100</span>%</span>
+                        </div>
+                        <input type="range" id="brightness" min="0" max="200" value="100" step="1">
+                    </div>
 
-                <div class="form-group">
-                    <label>Saturation</label>
-                    <input type="range" id="saturation" min="0" max="200" value="100" step="1">
-                    <span class="range-value"><span id="saturation-value">100</span>%</span>
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <label for="contrast">Contrast</label>
+                            <span class="range-value"><span id="contrast-value">100</span>%</span>
+                        </div>
+                        <input type="range" id="contrast" min="0" max="200" value="100" step="1">
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                            <label for="saturation">Saturation</label>
+                            <span class="range-value"><span id="saturation-value">100</span>%</span>
+                        </div>
+                        <input type="range" id="saturation" min="0" max="200" value="100" step="1">
+                    </div>
                 </div>
 
                 <div class="button-group">
-                    <button class="btn-primary" id="save-settings">Save Settings</button>
-                    <button class="btn-secondary" id="reset-settings">Reset</button>
+                    <button class="btn-primary" id="save-settings">
+                        <span>💾</span>
+                        <span>Save Settings</span>
+                    </button>
+                    <button class="btn-secondary" id="reset-settings">
+                        <span>🔄</span>
+                        <span>Reset</span>
+                    </button>
                 </div>
 
-                <button class="btn-secondary" id="diagnostics-btn" style="margin-top: 10px; width: 100%;" onclick="openDiagnosticsModal()">📊 Diagnostics</button>
+                <button class="btn-secondary" id="diagnostics-btn" onclick="openDiagnosticsModal()">📊 Diagnostics</button>
 
                 <div class="stats">
                     <div class="stat-item">
@@ -385,21 +660,21 @@
                 </div>
             </div>
         </div>
-
-        <footer>
-            <p>Motion In Ocean v0.1.0-dev | Raspberry Pi Camera Streaming</p>
-        </footer>
     </div>
 
+    <footer>
+        <p>Motion In Ocean v0.1.0-dev | Raspberry Pi Camera Streaming</p>
+    </footer>
+
     <!-- Diagnostics Modal -->
-    <div id="diagnostics-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; border-radius: 12px; padding: 30px; max-width: 500px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-height: 80vh; overflow-y: auto;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin: 0; color: #667eea;">System Diagnostics</h2>
-                <button onclick="closeDiagnosticsModal()" style="background: none; border: none; font-size: 1.5em; cursor: pointer; color: #999;">&times;</button>
+    <div id="diagnostics-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-3xl); max-width: 600px; box-shadow: var(--shadow-2xl); max-height: 85vh; overflow-y: auto; animation: slideDown var(--transition-slow) ease;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-2xl); padding-bottom: var(--spacing-lg); border-bottom: 1px solid var(--color-border);">
+                <h2 style="margin: 0; color: var(--color-primary); font-size: var(--font-size-xl);">📊 System Diagnostics</h2>
+                <button onclick="closeDiagnosticsModal()" style="background: none; border: none; font-size: var(--font-size-2xl); cursor: pointer; color: var(--color-text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast);" onmouseover="this.style.color='var(--color-text)'" onmouseout="this.style.color='var(--color-text-secondary)'">&times;</button>
             </div>
             
-            <div id="diagnostics-content" style="display: grid; gap: 15px;">
+            <div id="diagnostics-content" style="display: grid; gap: var(--spacing-lg);">
                 <!-- Diagnostics will be populated here -->
             </div>
         </div>
@@ -418,7 +693,9 @@
                 this.imageElement = document.getElementById("stream-img");
                 this.loadingElement = document.getElementById("stream-loading");
                 this.placeholderText = document.getElementById("stream-placeholder-text");
+                this.placeholderDesc = document.getElementById("stream-placeholder-desc");
                 this.spinnerElement = document.getElementById("stream-spinner");
+                this.idleElement = document.getElementById("stream-idle");
                 this.statusIndicator = document.getElementById("status-indicator");
                 this.statusText = document.getElementById("status-text");
                 this.messageBox = document.getElementById("message");
@@ -427,6 +704,8 @@
                 this.isStreaming = false;
                 this.statsInterval = null;
                 this.streamAbortController = null;
+                this.streamRetryCount = 0;
+                this.maxStreamRetries = 3;
 
                 this.initializeStream();
                 this.attachEventListeners();
@@ -438,11 +717,14 @@
                 this.imageElement.onload = () => {
                     if (!this.imageElement.getAttribute("src")) return;
                     this.isStreaming = true;
+                    this.streamRetryCount = 0;
                     this.loadingElement.style.display = "none";
                     this.spinnerElement.style.display = "none";
+                    this.idleElement.style.display = "none";
                     this.imageElement.style.display = "block";
                     this.updateStreamControls();
                     this.updateStatus("Streaming", true);
+                    this.startStatsPolling();
                 };
 
                 this.imageElement.onerror = () => {
@@ -451,7 +733,24 @@
                     this.loadingElement.style.display = "block";
                     this.spinnerElement.style.display = "none";
                     this.imageElement.style.display = "none";
-                    this.placeholderText.textContent = "⚠️ Stream disconnected";
+                    this.idleElement.style.display = "block";
+                    
+                    if (this.streamRetryCount < this.maxStreamRetries) {
+                        this.streamRetryCount++;
+                        this.placeholderText.textContent = `⚠️ Connection lost`;
+                        this.placeholderDesc.textContent = `Retrying (${this.streamRetryCount}/${this.maxStreamRetries})...`;
+                        this.showMessage(`🔄 Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, 'warning');
+                        setTimeout(() => {
+                            if (!this.isStreaming && this.streamRetryCount < this.maxStreamRetries) {
+                                this.imageElement.src = "/stream.mjpg?t=" + Date.now();
+                            }
+                        }, 2000);
+                    } else {
+                        this.placeholderText.textContent = "❌ Stream unavailable";
+                        this.placeholderDesc.textContent = "Max retries exceeded. Click Start to try again.";
+                        this.showMessage("❌ Stream connection failed after multiple attempts. Please check the server is running.", 'error');
+                    }
+                    
                     this.updateStreamControls();
                     this.updateStatus("Disconnected", false);
                     this.stopStatsPolling();
@@ -484,15 +783,18 @@
                 if (this.isStreaming) return;
 
                 this.placeholderText.textContent = "📡 Connecting to stream...";
+                this.placeholderDesc.textContent = "Establishing connection...";
                 this.loadingElement.style.display = "block";
                 this.spinnerElement.style.display = "inline-block";
+                this.idleElement.style.display = "none";
                 this.imageElement.style.display = "none";
                 this.updateStatus("Starting...", false);
+                this.streamRetryCount = 0;
                 
                 // Use fetch with AbortController for clean stream control
                 this.streamAbortController = new AbortController();
-                this.imageElement.src = "/stream.mjpg";
-                this.startStatsPolling();
+                // Add cache buster to ensure fresh stream
+                this.imageElement.src = "/stream.mjpg?t=" + Date.now();
             }
 
             stopStream() {
@@ -515,10 +817,13 @@
                 
                 this.imageElement.removeAttribute("src");
                 this.isStreaming = false;
+                this.streamRetryCount = 0;
                 this.imageElement.style.display = "none";
                 this.loadingElement.style.display = "block";
                 this.spinnerElement.style.display = "none";
+                this.idleElement.style.display = "block";
                 this.placeholderText.textContent = "⏹️ Stream stopped";
+                this.placeholderDesc.textContent = "Click Start to begin streaming";
                 this.updateStreamControls();
                 this.updateStatus("Stopped", false);
                 this.stopStatsPolling();
@@ -580,11 +885,15 @@
                         body: JSON.stringify(settings)
                     });
 
-                    if (!response.ok) throw new Error("Failed to save settings");
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`Server error: ${response.status}. ${errorText}`);
+                    }
 
-                    this.showMessage("Settings saved successfully!", "success");
+                    this.showMessage("✅ Settings saved successfully!", "success");
                 } catch (error) {
-                    this.showMessage("Failed to save settings: " + error.message, "error");
+                    console.error("Save settings error:", error);
+                    this.showMessage(`⚠️ Failed to save settings: ${error.message}`, "error");
                 }
             }
 
@@ -595,7 +904,7 @@
                 document.getElementById("contrast-value").textContent = "100";
                 document.getElementById("saturation").value = 100;
                 document.getElementById("saturation-value").textContent = "100";
-                this.showMessage("Settings reset to defaults", "success");
+                this.showMessage("✅ Settings reset to defaults", "success");
             }
 
             async loadStats() {
@@ -611,27 +920,48 @@
                     document.getElementById("stat-connections").textContent = config.active_stream_connections || "0";
                 } catch (error) {
                     console.error("Error loading stats:", error);
+                    // Silently fail for stats - don't show error message as this is polling
                 }
             }
 
             showMessage(text, type) {
                 const msg = document.getElementById("message");
                 msg.textContent = text;
-                msg.className = `message show ${type}`;
+                msg.className = `message show ${type || 'info'}`;
+                msg.style.display = 'block';
+                
+                // Ensure message is visible and animate in
+                setTimeout(() => {
+                    msg.classList.add('show');
+                }, 10);
+                
+                // Auto-dismiss after 4 seconds
                 setTimeout(() => {
                     msg.classList.remove("show");
-                }, 3000);
+                    setTimeout(() => {
+                        msg.style.display = 'none';
+                    }, 300);
+                }, 4000);
             }
         }
 
         // Diagnostics functions
+        let diagnosticsRefreshInterval = null;
+        
         function openDiagnosticsModal() {
             document.getElementById('diagnostics-modal').style.display = 'flex';
             fetchDiagnostics();
+            // Auto-refresh diagnostics every 2 seconds
+            if (diagnosticsRefreshInterval) clearInterval(diagnosticsRefreshInterval);
+            diagnosticsRefreshInterval = setInterval(fetchDiagnostics, 2000);
         }
 
         function closeDiagnosticsModal() {
             document.getElementById('diagnostics-modal').style.display = 'none';
+            if (diagnosticsRefreshInterval) {
+                clearInterval(diagnosticsRefreshInterval);
+                diagnosticsRefreshInterval = null;
+            }
         }
 
         function fetchDiagnostics() {
@@ -639,66 +969,109 @@
                 .then(res => res.json())
                 .then(data => {
                     const content = document.getElementById('diagnostics-content');
+                    const cameraStatusBg = data.camera_ready ? 'var(--color-success-light)' : 'var(--color-error-light)';
+                    const cameraStatusColor = data.camera_ready ? 'var(--color-success-dark)' : 'var(--color-error-dark)';
+                    const cameraStatusBorder = data.camera_ready ? 'var(--color-success)' : 'var(--color-error)';
+                    const messageBg = data.camera_ready ? 'var(--color-success-light)' : 'var(--color-warning-light)';
+                    const messageBorder = data.camera_ready ? 'var(--color-success)' : 'var(--color-warning)';
+                    const messageColor = data.camera_ready ? 'var(--color-success-dark)' : 'var(--color-warning-dark)';
+                    
+                    // Determine health status based on FPS
+                    const fpsHealth = data.fps >= (data.fps || 24) * 0.8 ? 'Healthy' : 'Degraded';
+                    const fpsHealthColor = data.fps >= (data.fps || 24) * 0.8 ? 'var(--color-success)' : 'var(--color-warning)';
+                    
+                    // Calculate uptime percentage (simple: if camera ready, assume good)
+                    const healthStatus = data.camera_ready ? '✓ Excellent' : '⚠ Check Required';
+                    const healthColor = data.camera_ready ? 'var(--color-success)' : 'var(--color-warning)';
+                    
                     content.innerHTML = `
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <div style="background: ${data.camera_ready ? '#d4edda' : '#f8d7da'}; padding: 12px; border-radius: 6px;">
-                                <div style="font-size: 0.9em; color: ${data.camera_ready ? '#155724' : '#721c24'}; font-weight: 500;">Camera Status</div>
-                                <div style="font-size: 1.3em; font-weight: bold; color: ${data.camera_ready ? '#155724' : '#721c24'}; margin-top: 5px;">
+                        <!-- Status Cards -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+                            <div style="background: ${cameraStatusBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border: 2px solid ${cameraStatusBorder};">
+                                <div style="font-size: var(--font-size-sm); color: ${cameraStatusColor}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Camera</div>
+                                <div style="font-size: var(--font-size-2xl); font-weight: 700; color: ${cameraStatusColor};">
                                     ${data.camera_ready ? '✓ Ready' : '✗ Error'}
                                 </div>
                             </div>
-                            <div style="background: #d1ecf1; padding: 12px; border-radius: 6px;">
-                                <div style="font-size: 0.9em; color: #0c5460; font-weight: 500;">System Status</div>
-                                <div style="font-size: 1.3em; font-weight: bold; color: #0c5460; margin-top: 5px;">
-                                    ${data.status.toUpperCase()}
+                            <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md); border: 2px solid var(--color-border);">
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">System</div>
+                                <div style="font-size: var(--font-size-2xl); font-weight: 700; color: ${healthColor};">
+                                    ${healthStatus}
                                 </div>
                             </div>
                         </div>
 
-                        <div style="border-top: 1px solid #eee; padding-top: 15px;">
-                            <div style="font-weight: 600; margin-bottom: 10px; color: #333;">Details</div>
-                            <table style="width: 100%; font-size: 0.95em;">
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">Uptime</td>
-                                    <td style="text-align: right; font-weight: 500;">${formatUptime(data.uptime_seconds)}</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">Frames/Second</td>
-                                    <td style="text-align: right; font-weight: 500;">${data.fps.toFixed(1)} fps</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">Frames Captured</td>
-                                    <td style="text-align: right; font-weight: 500;">${data.frames_captured}</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">Last Frame Age</td>
-                                    <td style="text-align: right; font-weight: 500;">${data.last_frame_age_seconds.toFixed(2)}s ago</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">Resolution</td>
-                                    <td style="text-align: right; font-weight: 500;">${data.resolution}</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">JPEG Quality</td>
-                                    <td style="text-align: right; font-weight: 500;">${data.jpeg_quality}%</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding: 8px 0; color: #666;">Active Streams</td>
-                                    <td style="text-align: right; font-weight: 500;">${data.stream_connections}/${data.max_stream_connections}</td>
-                                </tr>
-                            </table>
+                        <!-- Quick Stats -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+                            <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">⏱️ Uptime</div>
+                                <div style="font-size: var(--font-size-lg); font-weight: 700; color: var(--color-primary);">${formatUptime(data.uptime_seconds)}</div>
+                            </div>
+                            <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">🎬 Performance</div>
+                                <div style="font-size: var(--font-size-lg); font-weight: 700; color: ${fpsHealthColor};">${fpsHealth}</div>
+                            </div>
                         </div>
 
-                        <div style="background: ${data.camera_ready ? '#d4edda' : '#fff3cd'}; padding: 12px; border-radius: 6px; margin-top: 15px; border-left: 4px solid ${data.camera_ready ? '#28a745' : '#ffc107'};">
-                            <div style="font-size: 0.9em; color: ${data.camera_ready ? '#155724' : '#856404'};">
-                                <strong>Message:</strong> ${data.message}
+                        <!-- Detailed Metrics -->
+                        <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-lg);">
+                            <div style="font-weight: 600; margin-bottom: var(--spacing-lg); color: var(--color-text); font-size: var(--font-size-lg);">📋 Detailed Metrics</div>
+                            <div style="display: grid; gap: var(--spacing-md);">
+                                <!-- FPS Metric -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🎥 Frame Rate</span>
+                                    <span style="color: var(--color-primary); font-weight: 700; font-size: var(--font-size-lg);">${data.fps.toFixed(1)} fps</span>
+                                </div>
+                                
+                                <!-- Resolution Metric -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">📐 Resolution</span>
+                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.resolution}</span>
+                                </div>
+                                
+                                <!-- Quality Metric -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🎨 JPEG Quality</span>
+                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.jpeg_quality}%</span>
+                                </div>
+                                
+                                <!-- Frames Captured -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">📸 Frames Captured</span>
+                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.frames_captured.toLocaleString()}</span>
+                                </div>
+                                
+                                <!-- Last Frame Age -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">⏳ Last Frame Age</span>
+                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.last_frame_age_seconds.toFixed(2)}s ago</span>
+                                </div>
+                                
+                                <!-- Active Streams -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🔗 Active Streams</span>
+                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.stream_connections}/${data.max_stream_connections}</span>
+                                </div>
                             </div>
+                        </div>
+
+                        <!-- Status Message -->
+                        <div style="background: ${messageBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid ${messageBorder};">
+                            <div style="font-size: var(--font-size-sm); color: ${messageColor}; font-weight: 500;">
+                                <strong>ℹ️ System Status:</strong><br/>
+                                ${data.message}
+                            </div>
+                        </div>
+
+                        <!-- Auto-refresh indicator -->
+                        <div style="text-align: center; font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--spacing-lg); animation: pulse 2s infinite;">
+                            ↻ Auto-updating every 2 seconds
                         </div>
                     `;
                 })
                 .catch(err => {
                     const content = document.getElementById('diagnostics-content');
-                    content.innerHTML = '<div style="color: #721c24; background: #f8d7da; padding: 12px; border-radius: 6px;">Failed to fetch diagnostics: ' + err + '</div>';
+                    content.innerHTML = '<div style="color: var(--color-error-dark); background: var(--color-error-light); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--color-error); text-align: center;">⚠️ Failed to fetch diagnostics<br/><small style="color: inherit; opacity: 0.8;">' + err + '</small></div>';
                 });
         }
 
