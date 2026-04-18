@@ -22,6 +22,15 @@ func newLegacyFrameBuffer() *legacyFrameBuffer {
 	return &legacyFrameBuffer{notifyCh: make(chan struct{})}
 }
 
+func (fb *legacyFrameBuffer) publish(frame []byte) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	fb.frame = append([]byte(nil), frame...)
+	fb.frameSeq++
+	close(fb.notifyCh)
+	fb.notifyCh = make(chan struct{})
+}
+
 func (fb *legacyFrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
 	fb.mu.Lock()
 
@@ -120,10 +129,10 @@ func benchmarkWaitFrameTimeoutConcurrent(b *testing.B, readers int, waitFn func(
 			defer wg.Done()
 			<-start
 			for {
-			idx := int(atomic.AddInt64(&opIdx, 1))
-			if idx >= b.N {
-				return
-			}
+				idx := int(atomic.AddInt64(&opIdx, 1))
+				if idx >= b.N {
+					return
+				}
 				waitFn(250 * time.Microsecond)
 			}
 		}()
@@ -148,4 +157,34 @@ func BenchmarkWaitFrameTimeout_Legacy(b *testing.B) {
 			benchmarkWaitFrameTimeoutLegacy(b, readers)
 		})
 	}
+}
+
+func BenchmarkWaitFrameSteadyStateAllocations(b *testing.B) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+	frame := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	_, _ = fb.Write(frame)
+
+	legacy := newLegacyFrameBuffer()
+	legacy.publish(frame)
+
+	b.Run("shared_read_only_snapshot", func(b *testing.B) {
+		b.ReportAllocs()
+		lastSeenSeq := uint64(0)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, seq := fb.WaitFrame(0, lastSeenSeq)
+			lastSeenSeq = seq - 1
+		}
+	})
+
+	b.Run("copy_per_wait_legacy", func(b *testing.B) {
+		b.ReportAllocs()
+		lastSeenSeq := uint64(0)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, seq := legacy.WaitFrameWithContext(context.Background(), 0, lastSeenSeq)
+			lastSeenSeq = seq - 1
+		}
+	})
 }

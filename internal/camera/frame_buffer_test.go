@@ -23,12 +23,12 @@ func TestFrameBufferWrite(t *testing.T) {
 		t.Errorf("Write returned %d, want %d", n, len(testFrame))
 	}
 
-	if fb.frame == nil {
+	if fb.snapshot.data == nil {
 		t.Error("frame is nil after write")
 	}
 
-	if !bytes.Equal(fb.frame, testFrame) {
-		t.Errorf("frame mismatch: got %v, want %v", fb.frame, testFrame)
+	if !bytes.Equal(fb.snapshot.data, testFrame) {
+		t.Errorf("frame mismatch: got %v, want %v", fb.snapshot.data, testFrame)
 	}
 }
 
@@ -86,8 +86,8 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	}
 
 	// Frame should NOT have changed if throttled
-	if !bytes.Equal(fb.frame, frame1) {
-		t.Errorf("frame should still be frame1 after throttled write, got %v", fb.frame)
+	if !bytes.Equal(fb.snapshot.data, frame1) {
+		t.Errorf("frame should still be frame1 after throttled write, got %v", fb.snapshot.data)
 	}
 
 	// Wait for throttle interval
@@ -100,8 +100,8 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	}
 
 	// Frame should now be frame3
-	if !bytes.Equal(fb.frame, frame3) {
-		t.Errorf("frame should be frame3 after throttle interval, got %v", fb.frame)
+	if !bytes.Equal(fb.snapshot.data, frame3) {
+		t.Errorf("frame should be frame3 after throttle interval, got %v", fb.snapshot.data)
 	}
 
 	// Timestamp should have advanced
@@ -173,8 +173,8 @@ func TestFrameBufferMultipleWrites(t *testing.T) {
 		_, _ = fb.Write(frame)
 	}
 
-	if !bytes.Equal(fb.frame, frames[len(frames)-1]) {
-		t.Errorf("last frame is %v, want %v", fb.frame, frames[len(frames)-1])
+	if !bytes.Equal(fb.snapshot.data, frames[len(frames)-1]) {
+		t.Errorf("last frame is %v, want %v", fb.snapshot.data, frames[len(frames)-1])
 	}
 }
 
@@ -354,5 +354,43 @@ func TestFrameBufferWaitFrameWithContextCancel(t *testing.T) {
 	}
 	if elapsed > 100*time.Millisecond {
 		t.Fatalf("WaitFrameWithContext canceled too slowly: elapsed=%v", elapsed)
+	}
+}
+
+// TestFrameBufferWaitFrameReturnsSharedReadOnlyData validates WaitFrame reuses
+// the published immutable snapshot to avoid per-read allocations.
+func TestFrameBufferWaitFrameReturnsSharedReadOnlyData(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+	frame := []byte{7, 8, 9}
+	_, _ = fb.Write(frame)
+
+	first, firstSeq := fb.WaitFrame(0, 0)
+	second, secondSeq := fb.WaitFrame(0, 0)
+
+	if firstSeq == 0 || secondSeq == 0 {
+		t.Fatalf("expected non-zero sequence, got first=%d second=%d", firstSeq, secondSeq)
+	}
+	if len(first) == 0 || len(second) == 0 {
+		t.Fatal("expected non-empty frames")
+	}
+	if &first[0] != &second[0] {
+		t.Fatalf("expected shared underlying frame storage, got %p and %p", &first[0], &second[0])
+	}
+}
+
+// TestFrameBufferGetFrameReturnsCopy ensures snapshot reads remain safe against
+// caller-side mutation.
+func TestFrameBufferGetFrameReturnsCopy(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+	_, _ = fb.Write([]byte{1, 2, 3})
+
+	snap := fb.GetFrame()
+	snap[0] = 9
+
+	current, _ := fb.WaitFrame(0, 0)
+	if current[0] != 1 {
+		t.Fatalf("snapshot mutation leaked into buffer: got %d, want 1", current[0])
 	}
 }
