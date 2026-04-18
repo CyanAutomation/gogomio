@@ -233,20 +233,72 @@ func TestConfigEndpoint(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
+		t.Fatalf("expected status 200, got %d", w.Code)
 	}
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-		t.Errorf("failed to parse JSON response: %v", err)
+		t.Fatalf("failed to parse JSON response: %v", err)
 	}
 
-	// Check resolution
-	if res, ok := result["resolution"]; ok {
-		resolution := res.([]interface{})
-		if int(resolution[0].(float64)) != cfg.Resolution[0] {
-			t.Errorf("expected resolution width %d, got %v", cfg.Resolution[0], resolution[0])
-		}
+	fieldChecks := []struct {
+		name  string
+		check func(t *testing.T, payload map[string]interface{})
+	}{
+		{
+			name: "resolution matches configured dimensions",
+			check: func(t *testing.T, payload map[string]interface{}) {
+				t.Helper()
+				resRaw, ok := payload["resolution"]
+				if !ok {
+					t.Fatal("response missing resolution field")
+				}
+				resolution, ok := resRaw.([]interface{})
+				if !ok {
+					t.Fatalf("resolution has unexpected type %T", resRaw)
+				}
+				if len(resolution) != 2 {
+					t.Fatalf("resolution has unexpected length %d", len(resolution))
+				}
+				width, ok := resolution[0].(float64)
+				if !ok {
+					t.Fatalf("resolution[0] has unexpected type %T", resolution[0])
+				}
+				height, ok := resolution[1].(float64)
+				if !ok {
+					t.Fatalf("resolution[1] has unexpected type %T", resolution[1])
+				}
+				if int(width) != cfg.Resolution[0] {
+					t.Errorf("expected resolution width %d, got %v", cfg.Resolution[0], width)
+				}
+				if int(height) != cfg.Resolution[1] {
+					t.Errorf("expected resolution height %d, got %v", cfg.Resolution[1], height)
+				}
+			},
+		},
+		{
+			name: "max_stream_connections is present and matches configured value",
+			check: func(t *testing.T, payload map[string]interface{}) {
+				t.Helper()
+				maxConnRaw, ok := payload["max_stream_connections"]
+				if !ok {
+					t.Fatal("response missing max_stream_connections field")
+				}
+				maxConn, ok := maxConnRaw.(float64)
+				if !ok {
+					t.Fatalf("max_stream_connections has unexpected type %T", maxConnRaw)
+				}
+				if int(maxConn) != cfg.MaxStreamConnections {
+					t.Errorf("max_stream_connections mismatch: %v vs %d", maxConn, cfg.MaxStreamConnections)
+				}
+			},
+		},
+	}
+
+	for _, tc := range fieldChecks {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.check(t, result)
+		})
 	}
 }
 
@@ -437,28 +489,6 @@ func TestCORSHeaders(t *testing.T) {
 			t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
 		}
 	})
-}
-
-// TestConnectionLimitNotification tests connection limiting feedback
-func TestConnectionLimitNotification(t *testing.T) {
-	router, cam, cfg := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
-
-	// The actual connection limit is tested in unit tests
-	// This just verifies the endpoint handles connection count reporting
-	req, _ := http.NewRequest("GET", "/api/config", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	var result map[string]interface{}
-	_ = json.Unmarshal(w.Body.Bytes(), &result)
-
-	// Check that max_stream_connections is reported
-	if maxConn, ok := result["max_stream_connections"]; ok {
-		if int(maxConn.(float64)) != cfg.MaxStreamConnections {
-			t.Errorf("max_stream_connections mismatch: %v vs %d", maxConn, cfg.MaxStreamConnections)
-		}
-	}
 }
 
 // TestMJPEGStreamingEndpoint tests the /stream.mjpg endpoint with frame transmission
