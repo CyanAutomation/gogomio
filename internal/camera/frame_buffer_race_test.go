@@ -80,15 +80,16 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 	fb := NewFrameBuffer(stats, 0) // No throttling
 
 	done := make(chan struct{})
-	var wg sync.WaitGroup
+	var readersWG sync.WaitGroup
+	var writerWG sync.WaitGroup
 	successCount := 0
 	timeoutCount := 0
 	mu := &sync.Mutex{}
 
 	// Write frames continuously
-	wg.Add(1)
+	writerWG.Add(1)
 	go func() {
-		defer wg.Done()
+		defer writerWG.Done()
 		frame := []byte{0xFF, 0xD8, 0x00, 0xFF, 0xD9}
 		for {
 			select {
@@ -103,9 +104,9 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 
 	// Many readers waiting with timeout
 	for i := 0; i < 30; i++ {
-		wg.Add(1)
+		readersWG.Add(1)
 		go func(id int) {
-			defer wg.Done()
+			defer readersWG.Done()
 			for j := 0; j < 50; j++ {
 				frame, _ := fb.WaitFrame(20*time.Millisecond, 0)
 				mu.Lock()
@@ -119,8 +120,9 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 		}(i)
 	}
 
-	wg.Wait()
+	readersWG.Wait()
 	close(done)
+	writerWG.Wait()
 
 	mu.Lock()
 	total := successCount + timeoutCount
