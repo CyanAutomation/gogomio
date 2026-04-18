@@ -102,8 +102,9 @@ func TestWebUISemanticStructureAndFunctionalReferences(t *testing.T) {
 	}
 }
 
-// TestWebUIContainsJavaScript tests that JavaScript is included
-func TestWebUIContainsJavaScript(t *testing.T) {
+// TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes ensures the page ships a
+// stable script entrypoint and references the public routes used by the UI.
+func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterStaticFiles(router)
 
@@ -112,17 +113,19 @@ func TestWebUIContainsJavaScript(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	body := w.Body.String()
-	jsElements := []string{
-		"StreamController",
-		"fetch",
-		"api/settings",
-		"api/config",
-		"stream.mjpg",
+	requiredReferences := []string{
+		"<script>",
+		"</script>",
+		`document.addEventListener("DOMContentLoaded", () => {`,
+		"/stream.mjpg",
+		"/api/settings",
+		"/api/config",
+		"/api/diagnostics",
 	}
 
-	for _, elem := range jsElements {
-		if !strings.Contains(body, elem) {
-			t.Errorf("Expected JavaScript element %q not found", elem)
+	for _, ref := range requiredReferences {
+		if !strings.Contains(body, ref) {
+			t.Errorf("Expected script/bootstrap reference %q not found", ref)
 		}
 	}
 }
