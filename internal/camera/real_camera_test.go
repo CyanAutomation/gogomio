@@ -320,12 +320,64 @@ func TestRealCameraBuildFFmpegCommandMapsJPEGQualityToQuantizer(t *testing.T) {
 	}
 }
 
+func TestRealCameraBuildRpiCamVidCommandIncludesQualityFlag(t *testing.T) {
+	tests := []struct {
+		name        string
+		jpegQuality int
+		wantQuality string
+	}{
+		{name: "low quality", jpegQuality: 1, wantQuality: "1"},
+		{name: "mid quality", jpegQuality: 50, wantQuality: "50"},
+		{name: "high quality", jpegQuality: 100, wantQuality: "100"},
+		{name: "below range clamps", jpegQuality: -5, wantQuality: "1"},
+		{name: "above range clamps", jpegQuality: 160, wantQuality: "100"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rc := NewRealCamera()
+			rc.width, rc.height, rc.fps = 1280, 720, 30
+			rc.jpegQuality = tc.jpegQuality
+
+			cmd := rc.buildRpiCamVidCommand()
+			if got := findCommandArgValue(cmd.Args, "--quality"); got != tc.wantQuality {
+				t.Fatalf("jpegQuality=%d => --quality %q, want %q (args=%v)", tc.jpegQuality, got, tc.wantQuality, cmd.Args)
+			}
+		})
+	}
+}
+
+func TestRealCameraBuildLibcameraVidCommandIncludesQualityFlag(t *testing.T) {
+	tests := []struct {
+		name        string
+		jpegQuality int
+		wantQuality string
+	}{
+		{name: "low quality", jpegQuality: 1, wantQuality: "1"},
+		{name: "mid quality", jpegQuality: 50, wantQuality: "50"},
+		{name: "high quality", jpegQuality: 100, wantQuality: "100"},
+		{name: "below range clamps", jpegQuality: -5, wantQuality: "1"},
+		{name: "above range clamps", jpegQuality: 160, wantQuality: "100"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rc := NewRealCamera()
+			rc.width, rc.height, rc.fps = 1280, 720, 30
+			rc.jpegQuality = tc.jpegQuality
+
+			cmd := rc.buildLibcameraVidCommand()
+			if got := findCommandArgValue(cmd.Args, "--quality"); got != tc.wantQuality {
+				t.Fatalf("jpegQuality=%d => --quality %q, want %q (args=%v)", tc.jpegQuality, got, tc.wantQuality, cmd.Args)
+			}
+		})
+	}
+}
+
 func TestFFmpegMJPEGQuantizerFromQualityMatchesRoundedLinearMapping(t *testing.T) {
 	const (
-		jpegQualityMin = 1
-		jpegQualityMax = 100
-		ffmpegQMax     = 31
-		ffmpegQMin     = 2
+		ffmpegQMax = 31
+		ffmpegQMin = 2
 	)
 
 	span := float64(ffmpegQMax - ffmpegQMin)
@@ -342,6 +394,27 @@ func TestFFmpegMJPEGQuantizerFromQualityMatchesRoundedLinearMapping(t *testing.T
 		want := ffmpegQMax - int(math.Round(progress*span))
 		if got := ffmpegMJPEGQuantizerFromQuality(quality); got != want {
 			t.Fatalf("quality=%d (clamped=%d) => q:v=%d, want %d", quality, clamped, got, want)
+		}
+	}
+}
+
+func TestNativeMJPEGQualityFromQualityClampsToAppRange(t *testing.T) {
+	tests := []struct {
+		in   int
+		want int
+	}{
+		{in: -20, want: 1},
+		{in: 0, want: 1},
+		{in: 1, want: 1},
+		{in: 55, want: 55},
+		{in: 100, want: 100},
+		{in: 101, want: 100},
+		{in: 200, want: 100},
+	}
+
+	for _, tc := range tests {
+		if got := nativeMJPEGQualityFromQuality(tc.in); got != tc.want {
+			t.Fatalf("quality=%d => %d, want %d", tc.in, got, tc.want)
 		}
 	}
 }

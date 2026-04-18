@@ -23,6 +23,8 @@ const (
 	readChunkSize             = 32 * 1024
 	maxReadBufferSize         = 10 * 1024 * 1024
 	v4l2ProbeTimeout          = 3 * time.Second
+	jpegQualityMin            = 1
+	jpegQualityMax            = 100
 )
 
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
@@ -461,6 +463,10 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 }
 
 func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
+	// rpicam-vid uses JPEG quality with the same direction as app-level quality:
+	// higher number = better image quality (typically more CPU/bandwidth).
+	// Keep app contract fixed at 1-100 and clamp before passing to backend.
+	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
 	return exec.Command(
 		"rpicam-vid",
 		"--codec", "mjpeg",
@@ -469,11 +475,16 @@ func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
 		"--width", fmt.Sprintf("%d", rc.width),
 		"--height", fmt.Sprintf("%d", rc.height),
 		"--framerate", fmt.Sprintf("%d", rc.fps),
+		"--quality", fmt.Sprintf("%d", nativeQuality),
 		"-o", "-",
 	)
 }
 
 func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
+	// libcamera-vid uses JPEG quality with the same direction as app-level quality:
+	// higher number = better image quality (typically more CPU/bandwidth).
+	// Keep app contract fixed at 1-100 and clamp before passing to backend.
+	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
 	return exec.Command(
 		"libcamera-vid",
 		"--codec", "mjpeg",
@@ -482,6 +493,7 @@ func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
 		"--width", fmt.Sprintf("%d", rc.width),
 		"--height", fmt.Sprintf("%d", rc.height),
 		"--framerate", fmt.Sprintf("%d", rc.fps),
+		"--quality", fmt.Sprintf("%d", nativeQuality),
 		"-o", "-",
 	)
 }
@@ -493,6 +505,8 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 	// App-level JPEG quality is exposed as 1-100 where higher means better quality.
 	// FFmpeg's MJPEG encoder uses -q:v with the opposite direction and a narrower
 	// effective range (lower values are higher quality; practical values are ~2-31).
+	// This differs from native rpicam/libcamera backends which use "higher = better"
+	// quality-like scales.
 	// Map intentionally so:
 	//   100 -> 2   (highest quality, heavier CPU/bandwidth)
 	//    50 -> 17  (balanced default-like behavior)
@@ -513,10 +527,8 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 
 func ffmpegMJPEGQuantizerFromQuality(jpegQuality int) int {
 	const (
-		jpegQualityMin = 1
-		jpegQualityMax = 100
-		ffmpegQMax     = 31 // lowest visual quality
-		ffmpegQMin     = 2  // highest visual quality
+		ffmpegQMax = 31 // lowest visual quality
+		ffmpegQMin = 2  // highest visual quality
 	)
 
 	if jpegQuality < jpegQualityMin {
@@ -532,8 +544,18 @@ func ffmpegMJPEGQuantizerFromQuality(jpegQuality int) int {
 	// because 99 is odd and cannot produce exact .5 ties.
 	span := ffmpegQMax - ffmpegQMin
 	numerator := (jpegQuality - jpegQualityMin) * span
-	scaled := (numerator + ((jpegQualityMax-jpegQualityMin)/2)) / (jpegQualityMax - jpegQualityMin)
+	scaled := (numerator + ((jpegQualityMax - jpegQualityMin) / 2)) / (jpegQualityMax - jpegQualityMin)
 	return ffmpegQMax - scaled
+}
+
+func nativeMJPEGQualityFromQuality(jpegQuality int) int {
+	if jpegQuality < jpegQualityMin {
+		return jpegQualityMin
+	}
+	if jpegQuality > jpegQualityMax {
+		return jpegQualityMax
+	}
+	return jpegQuality
 }
 
 func (rc *RealCamera) probeV4L2CaptureNode() error {
