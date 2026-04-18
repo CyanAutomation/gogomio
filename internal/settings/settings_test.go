@@ -1,9 +1,12 @@
 package settings
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -156,19 +159,118 @@ func TestSettingsPersistence(t *testing.T) {
 func TestSettingsAtomicWrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	filepath := filepath.Join(tmpDir, "atomic_test.json")
+	tempPath := filepath + ".tmp"
 
 	m := NewManager(filepath)
-	_ = m.Set("key", "value1")
-	_ = m.Set("key", "value2")
 
-	// Verify file exists and contains correct data
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		t.Fatalf("Failed to read settings file: %v", err)
+	readAndValidate := func(expectedValue string) {
+		t.Helper()
+
+		data, err := os.ReadFile(filepath)
+		if err != nil {
+			t.Fatalf("Failed to read settings file: %v", err)
+		}
+		if len(data) == 0 {
+			t.Fatal("settings file is empty")
+		}
+
+		var payload map[string]interface{}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			t.Fatalf("settings file contains invalid JSON: %v; payload=%q", err, string(data))
+		}
+
+		if got, ok := payload["key"].(string); !ok || got != expectedValue {
+			t.Fatalf("settings file has key=%v, want %q", payload["key"], expectedValue)
+		}
 	}
 
-	if len(data) == 0 {
-		t.Error("settings file is empty")
+	// Repeated writes should always leave valid JSON and no dangling temp file.
+	for i := 0; i < 20; i++ {
+		value := fmt.Sprintf("value-%d", i)
+		if err := m.Set("key", value); err != nil {
+			t.Fatalf("Set failed for %q: %v", value, err)
+		}
+		readAndValidate(value)
+
+		if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+			t.Fatalf("temp file should not exist after successful write, stat err=%v", err)
+		}
+	}
+
+	// Concurrent reader/writer stress: no partial/truncated JSON should ever be observable.
+	var stop int32
+	readerErr := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for atomic.LoadInt32(&stop) == 0 {
+			data, err := os.ReadFile(filepath)
+			if err != nil {
+				readerErr <- fmt.Errorf("read failed: %w", err)
+				return
+			}
+			if len(data) == 0 {
+				readerErr <- fmt.Errorf("observed empty payload")
+				return
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(data, &payload); err != nil {
+				readerErr <- fmt.Errorf("observed invalid/truncated JSON: %w; payload=%q", err, string(data))
+				return
+			}
+		}
+	}()
+
+	for i := 20; i < 120; i++ {
+		value := fmt.Sprintf("value-%d", i)
+		if err := m.Set("key", value); err != nil {
+			atomic.StoreInt32(&stop, 1)
+			wg.Wait()
+			t.Fatalf("Set failed during stress for %q: %v", value, err)
+		}
+	}
+	atomic.StoreInt32(&stop, 1)
+	wg.Wait()
+
+	select {
+	case err := <-readerErr:
+		t.Fatal(err)
+	default:
+	}
+
+	// Interrupted write path: make final destination path non-renamable and ensure old file remains valid.
+	if err := m.Set("key", "stable-before-failure"); err != nil {
+		t.Fatalf("failed to set stable state: %v", err)
+	}
+	beforeFailureData, err := os.ReadFile(filepath)
+	if err != nil {
+		t.Fatalf("failed to read baseline file: %v", err)
+	}
+	if err := os.Remove(filepath); err != nil {
+		t.Fatalf("failed to remove settings file for fault setup: %v", err)
+	}
+	if err := os.Mkdir(filepath, 0755); err != nil {
+		t.Fatalf("failed to create directory at settings path for fault setup: %v", err)
+	}
+
+	err = m.Set("key", "should-fail")
+	if err == nil {
+		t.Fatal("expected Set to fail when rename destination is a directory")
+	}
+
+	// Restore original file and verify it is still valid/unchanged from before the interrupted path.
+	if err := os.Remove(filepath); err != nil {
+		t.Fatalf("failed to remove fault directory: %v", err)
+	}
+	if err := os.WriteFile(filepath, beforeFailureData, 0644); err != nil {
+		t.Fatalf("failed to restore baseline file: %v", err)
+	}
+	readAndValidate("stable-before-failure")
+
+	// Failed path should also clean up temp file.
+	if _, statErr := os.Stat(tempPath); !os.IsNotExist(statErr) {
+		t.Fatalf("temp file should be cleaned up after failed rename, stat err=%v", statErr)
 	}
 }
 
