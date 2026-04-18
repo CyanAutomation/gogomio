@@ -95,69 +95,52 @@ func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]b
 // WaitFrameWithContext waits for a frame newer than lastSeenSeq within timeout.
 // Returns (nil, lastSeenSeq) when context is canceled or timeout is exceeded.
 func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
-	fb.mu.Lock()
-
-	if fb.frameSeq > lastSeenSeq && fb.frame != nil {
-		frameCopy := make([]byte, len(fb.frame))
-		copy(frameCopy, fb.frame)
-		seq := fb.frameSeq
-		fb.mu.Unlock()
-		return frameCopy, seq
-	}
-
 	if timeout <= 0 {
-		fb.mu.Unlock()
+		fb.mu.Lock()
+		defer fb.mu.Unlock()
+		if fb.frameSeq > lastSeenSeq && fb.frame != nil {
+			frameCopy := make([]byte, len(fb.frame))
+			copy(frameCopy, fb.frame)
+			return frameCopy, fb.frameSeq
+		}
 		return nil, lastSeenSeq
 	}
 
-	deadline := time.Now().Add(timeout)
+	if err := ctx.Err(); err != nil {
+		return nil, lastSeenSeq
+	}
 
-	for fb.frameSeq <= lastSeenSeq {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			fb.mu.Unlock()
-			return nil, lastSeenSeq
-		}
-
-		notifyCh := fb.notifyCh
-		fb.mu.Unlock()
-
-		timer := time.NewTimer(remaining)
-		timedOut := false
-		select {
-		case <-notifyCh:
-		case <-ctx.Done():
-		case <-timer.C:
-			timedOut = true
-		}
+	timer := time.NewTimer(timeout)
+	defer func() {
 		if !timer.Stop() {
 			select {
 			case <-timer.C:
 			default:
 			}
 		}
+	}()
 
+	for {
 		fb.mu.Lock()
-		if ctx.Err() != nil {
+		if fb.frameSeq > lastSeenSeq && fb.frame != nil {
+			frameCopy := make([]byte, len(fb.frame))
+			copy(frameCopy, fb.frame)
+			seq := fb.frameSeq
 			fb.mu.Unlock()
-			return nil, lastSeenSeq
+			return frameCopy, seq
 		}
-		if timedOut && fb.frameSeq <= lastSeenSeq {
-			fb.mu.Unlock()
-			return nil, lastSeenSeq
-		}
-	}
-
-	if fb.frameSeq <= lastSeenSeq || fb.frame == nil {
+		notifyCh := fb.notifyCh
 		fb.mu.Unlock()
-		return nil, lastSeenSeq
-	}
 
-	frameCopy := make([]byte, len(fb.frame))
-	copy(frameCopy, fb.frame)
-	seq := fb.frameSeq
-	fb.mu.Unlock()
-	return frameCopy, seq
+		select {
+		case <-notifyCh:
+			// A frame may have been published; re-check under lock.
+		case <-ctx.Done():
+			return nil, lastSeenSeq
+		case <-timer.C:
+			return nil, lastSeenSeq
+		}
+	}
 }
 
 // Ensure FrameBuffer implements io.Writer
