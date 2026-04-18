@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -101,7 +102,24 @@ func initializeCamera(
 	log.Println("   Checking for CSI camera access...")
 	realCam := newRealCamera()
 	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-		log.Printf("❌ Real camera initialization failed (%v)", err)
+		attemptedBackend := "unknown"
+		failureReason := err.Error()
+		var initErr *camera.InitializationError
+		if errors.As(err, &initErr) {
+			if initErr.Backend != "" {
+				attemptedBackend = initErr.Backend
+			}
+			if initErr.Reason != "" {
+				failureReason = initErr.Reason
+			}
+		}
+
+		log.Printf("❌ Real camera initialization failed")
+		log.Printf("   Backend attempted: %s", attemptedBackend)
+		log.Printf("   Failure reason: %s", failureReason)
+		if !errors.As(err, &initErr) || errors.Unwrap(err) != nil {
+			log.Printf("   Error details: %v", err)
+		}
 		log.Println("   Troubleshooting steps:")
 		log.Println("   1. Verify CSI camera is physically connected to the camera port")
 		log.Println("   2. Enable camera in raspi-config: sudo raspi-config → Interface → Camera")
