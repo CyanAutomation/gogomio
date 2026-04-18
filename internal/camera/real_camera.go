@@ -545,9 +545,13 @@ func (rc *RealCamera) readMJPEGStream() {
 	defer close(rc.readerDone)
 
 	buf := make([]byte, readChunkSize)
+	readAttempts := 0
+	framesExtracted := 0
+	
 	for {
 		// Check if stopping before attempting read
 		if rc.isStopping.Load() {
+			log.Printf("📹 Frame reader: stopping (graceful shutdown)")
 			return
 		}
 
@@ -561,18 +565,28 @@ func (rc *RealCamera) readMJPEGStream() {
 		}
 
 		n, err := stdout.Read(buf)
+		readAttempts++
 		if n > 0 {
+			if readAttempts <= 5 {
+				log.Printf("📹 Frame reader: read %d bytes (attempt %d)", n, readAttempts)
+			}
+			
 			rc.frameMutex.Lock()
 			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
 			if len(rc.readBuffer) > maxReadBufferSize {
 				rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
 				rc.frameMutex.Unlock()
+				log.Printf("❌ Frame reader: buffer overflow (%d bytes)", len(rc.readBuffer))
 				return
 			}
 			for {
 				frame, remaining, found := extractJPEGFrame(rc.readBuffer)
 				if !found {
 					break
+				}
+				framesExtracted++
+				if framesExtracted <= 3 {
+					log.Printf("✓ Frame extracted: seq=%d size=%d bytes", rc.frameSeq+1, len(frame))
 				}
 				rc.latestFrame = append([]byte(nil), frame...)
 				rc.frameSeq++
@@ -583,11 +597,13 @@ func (rc *RealCamera) readMJPEGStream() {
 
 		if err != nil {
 			if errors.Is(err, io.EOF) && rc.isStopping.Load() {
+				log.Printf("📹 Frame reader: EOF (graceful shutdown), extracted %d frames total", framesExtracted)
 				return
 			}
 			rc.frameMutex.Lock()
 			if rc.readerErr == nil {
 				rc.readerErr = err
+				log.Printf("❌ Frame reader: error after %d bytes, %d frames extracted: %v", readAttempts*readChunkSize, framesExtracted, err)
 			}
 			rc.frameMutex.Unlock()
 			return
