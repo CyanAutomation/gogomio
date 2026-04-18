@@ -266,7 +266,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 				log.Printf("camera capture recovered after %d consecutive failures", consecutive)
 			}
 			retryDelay = initialCaptureRetryDelay
-			_, _ = fm.frameBuffer.Write(frame)
+			_, _ = fm.frameBuffer.WriteImmutable(frame)
 		}
 	}
 }
@@ -396,6 +396,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 }
 
 func writeMultipartFrame(w http.ResponseWriter, frameWriteBuf *bytes.Buffer, contentLengthScratch *[]byte, frame []byte) error {
+	// frame is shared immutable bytes from FrameBuffer; only read from it.
 	frameWriteBuf.Reset()
 	frameWriteBuf.Grow(len(frame) + 128)
 
