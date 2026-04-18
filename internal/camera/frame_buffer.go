@@ -93,8 +93,9 @@ func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]b
 	if fb.frameSeq > lastSeenSeq && fb.frame != nil {
 		frameCopy := make([]byte, len(fb.frame))
 		copy(frameCopy, fb.frame)
+		seq := fb.frameSeq
 		fb.mu.Unlock()
-		return frameCopy, fb.frameSeq
+		return frameCopy, seq
 	}
 
 	if timeout <= 0 {
