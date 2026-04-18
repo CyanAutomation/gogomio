@@ -49,8 +49,10 @@ type RealCamera struct {
 	frameMutex         sync.Mutex
 	latestFrame        []byte
 	frameSeq           uint64
+	lastDeliveredSeq   uint64
 	readerErr          error
 	readBuffer         []byte
+	frameUpdateCh      chan struct{}
 	captureWaitTimeout time.Duration
 
 	readerDone chan struct{}
@@ -148,8 +150,10 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.frameMutex.Lock()
 	rc.latestFrame = nil
 	rc.frameSeq = 0
+	rc.lastDeliveredSeq = 0
 	rc.readerErr = nil
 	rc.readBuffer = nil
+	rc.frameUpdateCh = make(chan struct{})
 	rc.frameMutex.Unlock()
 
 	cmd, stdin, stdout, stderr, err := rc.launchFn()
@@ -276,8 +280,8 @@ func (rc *RealCamera) getBackendAttempted() string {
 	return rc.backendAttempted
 }
 
-// CaptureFrame returns the latest buffered frame, waiting for an initial frame
-// when necessary.
+// CaptureFrame returns a newer buffered frame than the previous call, waiting
+// for frame sequence advancement when necessary.
 func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 	if !rc.isReady.Load() {
 		return nil, fmt.Errorf("camera not ready")
@@ -289,12 +293,14 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 	deadline := time.Now().Add(rc.captureWaitTimeout)
 	for {
 		rc.frameMutex.Lock()
-		if len(rc.latestFrame) > 0 {
+		if len(rc.latestFrame) > 0 && rc.frameSeq > rc.lastDeliveredSeq {
 			frame := append([]byte(nil), rc.latestFrame...)
+			rc.lastDeliveredSeq = rc.frameSeq
 			rc.frameMutex.Unlock()
 			return frame, nil
 		}
 		readerErr := rc.readerErr
+		updateCh := rc.frameUpdateCh
 		rc.frameMutex.Unlock()
 
 		if readerErr != nil {
@@ -303,10 +309,18 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 		if !rc.isReady.Load() || rc.isStopping.Load() {
 			return nil, fmt.Errorf("camera stopped")
 		}
-		if time.Now().After(deadline) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
 			return nil, fmt.Errorf("timed out waiting for frame")
 		}
-		time.Sleep(10 * time.Millisecond)
+
+		timer := time.NewTimer(remaining)
+		select {
+		case <-updateCh:
+			timer.Stop()
+		case <-timer.C:
+			return nil, fmt.Errorf("timed out waiting for frame")
+		}
 	}
 }
 
@@ -315,6 +329,13 @@ func (rc *RealCamera) Stop() error {
 	log.Printf("🛑 Camera Stop() called")
 	rc.isStopping.Store(true)
 	rc.isReady.Store(false)
+
+	rc.frameMutex.Lock()
+	if rc.frameUpdateCh != nil {
+		close(rc.frameUpdateCh)
+		rc.frameUpdateCh = nil
+	}
+	rc.frameMutex.Unlock()
 
 	rc.captureMutex.Lock()
 	proc := rc.proc
@@ -585,6 +606,10 @@ func (rc *RealCamera) readMJPEGStream() {
 			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
 			if len(rc.readBuffer) > maxReadBufferSize {
 				rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
+				if rc.frameUpdateCh != nil {
+					close(rc.frameUpdateCh)
+					rc.frameUpdateCh = nil
+				}
 				rc.frameMutex.Unlock()
 				log.Printf("❌ Frame reader: buffer overflow (%d bytes)", len(rc.readBuffer))
 				return
@@ -600,6 +625,10 @@ func (rc *RealCamera) readMJPEGStream() {
 				}
 				rc.latestFrame = append([]byte(nil), frame...)
 				rc.frameSeq++
+				if rc.frameUpdateCh != nil {
+					close(rc.frameUpdateCh)
+				}
+				rc.frameUpdateCh = make(chan struct{})
 				rc.readBuffer = remaining
 			}
 			rc.frameMutex.Unlock()
@@ -613,6 +642,10 @@ func (rc *RealCamera) readMJPEGStream() {
 			rc.frameMutex.Lock()
 			if rc.readerErr == nil {
 				rc.readerErr = err
+				if rc.frameUpdateCh != nil {
+					close(rc.frameUpdateCh)
+					rc.frameUpdateCh = nil
+				}
 				log.Printf("❌ Frame reader: error after %d bytes, %d frames extracted: %v", readAttempts*readChunkSize, framesExtracted, err)
 			}
 			rc.frameMutex.Unlock()
