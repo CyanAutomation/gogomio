@@ -48,10 +48,13 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
 
 # Update package lists and install runtime dependencies
-# Debian Trixie includes libcamera-apps with libcamera-vid binary
+# libcamera-apps is specific to Raspberry Pi OS and not in standard Debian repos
+# When running on Raspberry Pi hardware, libcamera is passed through via device mapping
+# FFmpeg serves as a fallback for V4L2 devices
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates tzdata curl ffmpeg libcamera-apps; \
+    apt-get install -y --no-install-recommends ca-certificates tzdata curl ffmpeg; \
+    apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || true; \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
