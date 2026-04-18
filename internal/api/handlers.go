@@ -501,6 +501,10 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 		handleAPIStatus(w, r, fm, startTime)
 	})
 
+	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
+		handleStopStream(w, r, fm)
+	})
+
 	// Settings management endpoints
 	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsGet(w, r, fm)
@@ -689,6 +693,24 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "ok",
 		"message": fmt.Sprintf("saved %d settings", len(req.Settings)),
+	})
+}
+
+func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
+	// Force stop capture by resetting client count and stopping
+	fm.captureMu.Lock()
+	if fm.captureStarted {
+		log.Printf("🛑 API: Stop stream requested - stopping capture")
+		close(fm.doneChan)
+		fm.captureStarted = false
+		fm.clientCount = 0
+	}
+	fm.captureMu.Unlock()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"message": "stream stopped",
 	})
 }
 
