@@ -190,6 +190,9 @@ func (fm *FrameManager) scheduleStopCapture() {
 // cleanupLoop runs in a background goroutine and handles deferred capture stops
 func (fm *FrameManager) cleanupLoop() {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ PANIC in cleanupLoop: %v", r)
+		}
 		log.Printf("📊 Cleanup loop EXIT")
 		close(fm.cleanupDone)
 	}()
@@ -248,6 +251,9 @@ func (fm *FrameManager) stopCapture() {
 func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	log.Printf("🎬 Capture loop STARTED")
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ PANIC in captureLoop: %v", r)
+		}
 		log.Printf("🎬 Capture loop EXITING")
 		fm.captureMu.Lock()
 		if fm.doneChan == done {
@@ -491,17 +497,21 @@ type HealthResponse struct {
 
 // DiagnosticsResponse is the JSON response for /api/diagnostics endpoint.
 type DiagnosticsResponse struct {
-	Status              string  `json:"status"`
-	CameraReady         bool    `json:"camera_ready"`
-	FramesPerSecond     float64 `json:"fps"`
-	UptimeSeconds       int64   `json:"uptime_seconds"`
-	StreamConnections   int     `json:"stream_connections"`
-	FramesCaptured      int64   `json:"frames_captured"`
-	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds"`
-	Resolution          string  `json:"resolution"`
-	JPEGQuality         int     `json:"jpeg_quality"`
-	MaxConnections      int     `json:"max_stream_connections"`
-	Message             string  `json:"message"`
+	Status               string  `json:"status"`
+	CameraReady          bool    `json:"camera_ready"`
+	FramesPerSecond      float64 `json:"fps"`
+	UptimeSeconds        int64   `json:"uptime_seconds"`
+	StreamConnections    int     `json:"stream_connections"`
+	FramesCaptured       int64   `json:"frames_captured"`
+	LastFrameAgeSeconds  float64 `json:"last_frame_age_seconds"`
+	Resolution           string  `json:"resolution"`
+	JPEGQuality          int     `json:"jpeg_quality"`
+	MaxConnections       int     `json:"max_stream_connections"`
+	CaptureFailures      int64   `json:"capture_failures_recent"`
+	CaptureFailuresTotal int64   `json:"capture_failures_total"`
+	ErrorRate            float64 `json:"error_rate_percent"`
+	HealthStatus         string  `json:"health_status"`
+	Message              string  `json:"message"`
 }
 
 // RegisterHandlers registers all API endpoints with the Chi router.
@@ -702,20 +712,48 @@ func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 		message = "Camera is not ready or failed to initialize"
 	}
 
+	// Calculate capture error metrics
+	consecutiveFailures, totalFailures, degraded := fm.captureFailureStats()
+
+	// Calculate error rate
+	var errorRate float64
+	if frameCount > 0 {
+		errorRate = (float64(totalFailures) / (float64(totalFailures) + float64(frameCount))) * 100
+	}
+
+	// Determine health status
+	healthStatus := "Excellent"
+	if errorRate > 5 {
+		healthStatus = "Degraded"
+		status = "degraded"
+	}
+	if errorRate > 20 || consecutiveFailures > 5 {
+		healthStatus = "Poor"
+		status = "error"
+	}
+	if degraded && status != "error" {
+		healthStatus = "Degraded"
+		status = "degraded"
+	}
+
 	resolution := fmt.Sprintf("%dx%d", cfg.Resolution[0], cfg.Resolution[1])
 
 	response := DiagnosticsResponse{
-		Status:              status,
-		CameraReady:         fm.cam.IsReady(),
-		FramesPerSecond:     fps,
-		UptimeSeconds:       int64(time.Since(startTime).Seconds()),
-		StreamConnections:   fm.connTracker.Count(),
-		FramesCaptured:      frameCount,
-		LastFrameAgeSeconds: fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
-		Resolution:          resolution,
-		JPEGQuality:         cfg.JPEGQuality,
-		MaxConnections:      cfg.MaxStreamConnections,
-		Message:             message,
+		Status:               status,
+		CameraReady:          fm.cam.IsReady(),
+		FramesPerSecond:      fps,
+		UptimeSeconds:        int64(time.Since(startTime).Seconds()),
+		StreamConnections:    fm.connTracker.Count(),
+		FramesCaptured:       frameCount,
+		LastFrameAgeSeconds:  fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		Resolution:           resolution,
+		JPEGQuality:          cfg.JPEGQuality,
+		MaxConnections:       cfg.MaxStreamConnections,
+		CaptureFailures:      consecutiveFailures,
+		CaptureFailuresTotal: totalFailures,
+		ErrorRate:            errorRate,
+		HealthStatus:         healthStatus,
+		Message:              message,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

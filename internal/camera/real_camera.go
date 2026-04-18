@@ -182,6 +182,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 
 	go rc.readMJPEGStream()
 	go rc.drainStderr()
+	go rc.healthMonitor()
 
 	if err := rc.waitForFirstFrame(); err != nil {
 		_ = rc.Stop()
@@ -632,6 +633,9 @@ func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd
 
 func (rc *RealCamera) readMJPEGStream() {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ PANIC in readMJPEGStream: %v", r)
+		}
 		log.Printf("📹 Frame reader: EXIT (closing readerDone channel)")
 		close(rc.readerDone)
 	}()
@@ -722,6 +726,9 @@ func (rc *RealCamera) readMJPEGStream() {
 
 func (rc *RealCamera) drainStderr() {
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ PANIC in drainStderr: %v", r)
+		}
 		log.Printf("📹 Stderr drainer: EXIT (closing stderrDone channel)")
 		close(rc.stderrDone)
 	}()
@@ -788,4 +795,66 @@ func encodeFrameToJPEG(img image.Image, quality int) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// healthMonitor runs in a background goroutine and periodically checks subprocess health.
+func (rc *RealCamera) healthMonitor() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("❌ PANIC in healthMonitor: %v", r)
+		}
+		log.Printf("🏥 Health monitor EXIT")
+	}()
+
+	log.Printf("🏥 Health monitor STARTED - checking every 10 seconds")
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	var lastFrameTime time.Time
+	var lastFrameSeq uint64
+
+	for {
+		select {
+		case <-ticker.C:
+			if rc.isStopping.Load() {
+				return
+			}
+
+			// Check if process is still running
+			rc.captureMutex.Lock()
+			proc := rc.proc
+			rc.captureMutex.Unlock()
+
+			if proc != nil && proc.Process != nil {
+				// Process is still alive, good sign
+				log.Printf("🏥 Health check: process running (PID: %d)", proc.Process.Pid)
+			}
+
+			// Check for frame progress (detect stalled capture)
+			rc.frameMutex.Lock()
+			currentFrameSeq := rc.frameSeq
+			readerErr := rc.readerErr
+			rc.frameMutex.Unlock()
+
+			if currentFrameSeq > lastFrameSeq {
+				lastFrameTime = time.Now()
+				lastFrameSeq = currentFrameSeq
+				log.Printf("🏥 Health check: frames flowing normally (seq: %d)", currentFrameSeq)
+			} else {
+				if !lastFrameTime.IsZero() {
+					stalledDuration := time.Since(lastFrameTime)
+					if stalledDuration > 30*time.Second {
+						log.Printf("⚠️  Health check: frame capture stalled for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
+					} else if stalledDuration > 10*time.Second {
+						log.Printf("ℹ️  Health check: no recent frames for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
+					}
+				}
+			}
+
+			if readerErr != nil {
+				log.Printf("⚠️  Health check: reader error detected: %v", readerErr)
+			}
+		}
+	}
 }

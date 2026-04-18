@@ -976,13 +976,20 @@
                     const messageBorder = data.camera_ready ? 'var(--color-success)' : 'var(--color-warning)';
                     const messageColor = data.camera_ready ? 'var(--color-success-dark)' : 'var(--color-warning-dark)';
                     
-                    // Determine health status based on FPS
-                    const fpsHealth = data.fps >= (data.fps || 24) * 0.8 ? 'Healthy' : 'Degraded';
-                    const fpsHealthColor = data.fps >= (data.fps || 24) * 0.8 ? 'var(--color-success)' : 'var(--color-warning)';
-                    
-                    // Calculate uptime percentage (simple: if camera ready, assume good)
-                    const healthStatus = data.camera_ready ? '✓ Excellent' : '⚠ Check Required';
-                    const healthColor = data.camera_ready ? 'var(--color-success)' : 'var(--color-warning)';
+                    // Determine health indicator colors based on error rate
+                    let healthColor = 'var(--color-success)';
+                    let healthBg = 'var(--color-success-light)';
+                    let healthBorder = 'var(--color-success)';
+                    if (data.error_rate_percent > 5) {
+                        healthColor = 'var(--color-warning)';
+                        healthBg = 'var(--color-warning-light)';
+                        healthBorder = 'var(--color-warning)';
+                    }
+                    if (data.error_rate_percent > 20) {
+                        healthColor = 'var(--color-error)';
+                        healthBg = 'var(--color-error-light)';
+                        healthBorder = 'var(--color-error)';
+                    }
                     
                     content.innerHTML = `
                         <!-- Status Cards -->
@@ -993,10 +1000,10 @@
                                     ${data.camera_ready ? '✓ Ready' : '✗ Error'}
                                 </div>
                             </div>
-                            <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md); border: 2px solid var(--color-border);">
-                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">System</div>
+                            <div style="background: ${healthBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border: 2px solid ${healthBorder};">
+                                <div style="font-size: var(--font-size-sm); color: ${healthColor}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Health</div>
                                 <div style="font-size: var(--font-size-2xl); font-weight: 700; color: ${healthColor};">
-                                    ${healthStatus}
+                                    ${data.health_status}
                                 </div>
                             </div>
                         </div>
@@ -1008,8 +1015,8 @@
                                 <div style="font-size: var(--font-size-lg); font-weight: 700; color: var(--color-primary);">${formatUptime(data.uptime_seconds)}</div>
                             </div>
                             <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
-                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">🎬 Performance</div>
-                                <div style="font-size: var(--font-size-lg); font-weight: 700; color: ${fpsHealthColor};">${fpsHealth}</div>
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">⚠️ Error Rate</div>
+                                <div style="font-size: var(--font-size-lg); font-weight: 700; color: ${healthColor};">${data.error_rate_percent.toFixed(1)}%</div>
                             </div>
                         </div>
 
@@ -1051,6 +1058,18 @@
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
                                     <span style="color: var(--color-text-secondary); font-weight: 500;">🔗 Active Streams</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.stream_connections}/${data.max_stream_connections}</span>
+                                </div>
+
+                                <!-- Capture Failures -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🚨 Recent Failures</span>
+                                    <span style="color: ${data.capture_failures_recent > 0 ? 'var(--color-error)' : 'var(--color-text)'}; font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_recent}</span>
+                                </div>
+
+                                <!-- Total Capture Failures -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">📊 Total Failures</span>
+                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_total}</span>
                                 </div>
                             </div>
                         </div>
