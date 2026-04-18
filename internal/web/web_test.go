@@ -112,6 +112,15 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code: got %d, want 200", w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Fatalf("Content-Type: got %q, want text/html", ct)
+	}
+
 	body := w.Body.String()
 	requiredReferences := []string{
 		"<script>",
