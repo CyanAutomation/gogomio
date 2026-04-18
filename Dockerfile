@@ -48,15 +48,27 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
 
 # Update package lists and install runtime dependencies
-# Ubuntu 24.04 LTS on ARM has libcamera packages (v0.2+)
-# Note: libcamera-apps package may have limited availability; ffmpeg provides robust fallback
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    tzdata \
-    curl \
-    ffmpeg \
-    libcamera-tools \
-    && rm -rf /var/lib/apt/lists/*
+# Camera package selection is architecture-aware:
+# - arm64: prefer rpicam-apps when available (provides rpicam-vid on modern Pi OS),
+#          otherwise fall back to libcamera-tools/libcamera-apps-lite (provides libcamera-vid)
+# - non-arm64: install ffmpeg-only fallback
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates tzdata curl ffmpeg; \
+    arch="$(dpkg --print-architecture)"; \
+    if [ "${arch}" = "arm64" ]; then \
+      if apt-cache show rpicam-apps >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends rpicam-apps; \
+      else \
+        if apt-cache show libcamera-tools >/dev/null 2>&1; then \
+          apt-get install -y --no-install-recommends libcamera-tools; \
+        fi; \
+        if apt-cache show libcamera-apps-lite >/dev/null 2>&1; then \
+          apt-get install -y --no-install-recommends libcamera-apps-lite; \
+        fi; \
+      fi; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
 RUN useradd -m -u 1001 -s /bin/bash gogomio && \
@@ -69,6 +81,7 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=builder /build/gogomio /app/gogomio
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 # Copy static assets (when available)
 # COPY static/ /app/static/
@@ -93,4 +106,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
 USER gogomio
 
 # Run the application
-ENTRYPOINT ["/app/gogomio"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
