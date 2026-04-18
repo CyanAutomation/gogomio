@@ -205,7 +205,7 @@ func (rc *RealCamera) waitForFirstFrame() error {
 		}
 
 		rc.frameMutex.Lock()
-		frame := append([]byte(nil), rc.latestFrame...)
+		frame := rc.latestFrame
 		readerErr := rc.readerErr
 		rc.frameMutex.Unlock()
 
@@ -282,6 +282,8 @@ func (rc *RealCamera) getBackendAttempted() string {
 
 // CaptureFrame returns a newer buffered frame than the previous call, waiting
 // for frame sequence advancement when necessary.
+//
+// Returned frame bytes are shared and MUST be treated as immutable.
 func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 	if !rc.isReady.Load() {
 		return nil, fmt.Errorf("camera not ready")
@@ -294,7 +296,9 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 	for {
 		rc.frameMutex.Lock()
 		if len(rc.latestFrame) > 0 && rc.frameSeq > rc.lastDeliveredSeq {
-			frame := append([]byte(nil), rc.latestFrame...)
+			// latestFrame points at immutable frame storage published by
+			// readMJPEGStream; return shared read-only bytes to avoid a second copy.
+			frame := rc.latestFrame
 			rc.lastDeliveredSeq = rc.frameSeq
 			rc.frameMutex.Unlock()
 			return frame, nil
@@ -626,6 +630,9 @@ func (rc *RealCamera) readMJPEGStream() {
 				if framesExtracted <= 3 {
 					log.Printf("✓ Frame extracted: seq=%d size=%d bytes", rc.frameSeq+1, len(frame))
 				}
+				// Take one ownership-transfer copy per extracted frame.
+				// frame aliases rc.readBuffer, which is mutated as reads continue.
+				// latestFrame is therefore published from dedicated immutable storage.
 				rc.latestFrame = append([]byte(nil), frame...)
 				rc.frameSeq++
 				if rc.frameUpdateCh != nil {

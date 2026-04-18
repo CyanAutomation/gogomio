@@ -394,3 +394,34 @@ func TestFrameBufferGetFrameReturnsCopy(t *testing.T) {
 		t.Fatalf("snapshot mutation leaked into buffer: got %d, want 1", current[0])
 	}
 }
+
+// TestFrameBufferWriteImmutableAdoptsStorage ensures immutable writes do not
+// clone and readers observe the adopted shared bytes.
+func TestFrameBufferWriteImmutableAdoptsStorage(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+	frame := []byte{4, 5, 6}
+
+	_, _ = fb.WriteImmutable(frame)
+	current, _ := fb.WaitFrame(0, 0)
+
+	if &current[0] != &frame[0] {
+		t.Fatalf("expected adopted frame storage, got %p and %p", &current[0], &frame[0])
+	}
+}
+
+// TestFrameBufferWriteCopiesInput ensures standard Write remains defensive for
+// mutable callers.
+func TestFrameBufferWriteCopiesInput(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+	frame := []byte{1, 2, 3}
+
+	_, _ = fb.Write(frame)
+	frame[0] = 9
+
+	current, _ := fb.WaitFrame(0, 0)
+	if current[0] != 1 {
+		t.Fatalf("Write should clone caller bytes: got %d, want 1", current[0])
+	}
+}
