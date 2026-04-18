@@ -247,6 +247,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte("Max stream connections reached (limit: 2)"))
+		log.Printf("⚠️  Stream client rejected: connection limit exceeded")
 		return fmt.Errorf("connection limit exceeded")
 	}
 	defer fm.connTracker.Decrement()
@@ -254,6 +255,8 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	// Track client lifecycle for lazy capture
 	fm.IncrementClients()
 	defer fm.DecrementClients()
+
+	log.Printf("🔗 Stream client connected (total clients: %d, remote: %s)", atomic.LoadInt64(&fm.clientCount), r.RemoteAddr)
 
 	// Set MJPEG headers
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
@@ -265,6 +268,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		log.Printf("❌ Stream client: response writer does not support flushing")
 		return fmt.Errorf("response writer does not support flushing")
 	}
 
@@ -276,12 +280,19 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	ctx := r.Context()
 	var frameWriteBuf bytes.Buffer
 	contentLengthScratch := make([]byte, 0, 20)
+	
+	framesSent := 0
+	timeoutCount := 0
+	startTime := time.Now()
 
 	for {
 		select {
 		case <-ctx.Done():
+			duration := time.Since(startTime)
+			log.Printf("🔗 Stream client disconnected: %d frames sent in %v (remote: %s)", framesSent, duration, r.RemoteAddr)
 			return ctx.Err()
 		case <-streamDone:
+			log.Printf("⚠️  Stream stopped for client (frames sent: %d)", framesSent)
 			return fmt.Errorf("stream stopped")
 		default:
 		}
@@ -290,6 +301,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 		select {
 		case <-ctx.Done():
+			log.Printf("🔗 Stream client disconnected during frame wait")
 			return ctx.Err()
 		case <-streamDone:
 			return fmt.Errorf("stream stopped")
@@ -298,13 +310,25 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 		if frame == nil {
 			// Timeout waiting for frame, keep connection open or retry.
+			timeoutCount++
+			if timeoutCount == 1 {
+				log.Printf("⏱️  Stream: waiting for first frame (initial timeout)")
+			} else if timeoutCount%10 == 0 {
+				log.Printf("⏱️  Stream: timeout waiting for frames (%d timeouts, %d frames sent)", timeoutCount, framesSent)
+			}
 			continue
 		}
 
 		lastSeenSeq = seq
 
 		if err := writeMultipartFrame(w, &frameWriteBuf, &contentLengthScratch, frame); err != nil {
+			log.Printf("❌ Stream write error after %d frames: %v", framesSent, err)
 			return err
+		}
+
+		framesSent++
+		if framesSent == 1 {
+			log.Printf("✓ First MJPEG frame sent to client after %v", time.Since(startTime))
 		}
 
 		flusher.Flush()
