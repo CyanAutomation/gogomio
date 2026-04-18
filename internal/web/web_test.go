@@ -49,8 +49,9 @@ func TestWebUIServingRoot(t *testing.T) {
 	}
 }
 
-// TestWebUIContentLength tests that Content-Length header is reasonable
-func TestWebUIContentLength(t *testing.T) {
+// TestWebUISemanticStructureAndFunctionalReferences tests stable semantic landmarks
+// and user-visible functional selectors/routes.
+func TestWebUISemanticStructureAndFunctionalReferences(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterStaticFiles(router)
 
@@ -58,10 +59,46 @@ func TestWebUIContentLength(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code: got %d, want 200", w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Fatalf("Content-Type: got %q, want text/html", ct)
+	}
+
 	body := w.Body.String()
-	// HTML file should be at least 5KB (account for CSS and JS)
-	if len(body) < 5000 {
-		t.Errorf("Response body too small: got %d bytes, want > 5000", len(body))
+
+	// Stable top-level landmarks should remain present even if formatting is minified.
+	requiredLandmarks := []string{"<header", "<footer"}
+	for _, landmark := range requiredLandmarks {
+		if !strings.Contains(body, landmark) {
+			t.Errorf("Expected landmark %q not found in response body", landmark)
+		}
+	}
+
+	// Validate user-facing functionality hooks via IDs and API/stream routes.
+	requiredReferences := []string{
+		`id="stream-img"`,
+		`id="start-stream"`,
+		`id="stop-stream"`,
+		`id="save-settings"`,
+		`id="reset-settings"`,
+		`id="diagnostics-btn"`,
+		`id="brightness"`,
+		`id="contrast"`,
+		`id="saturation"`,
+		"/stream.mjpg",
+		"/api/settings",
+		"/api/config",
+		"/api/diagnostics",
+	}
+
+	for _, ref := range requiredReferences {
+		if !strings.Contains(body, ref) {
+			t.Errorf("Expected functional reference %q not found in response body", ref)
+		}
 	}
 }
 
