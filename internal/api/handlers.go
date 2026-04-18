@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -338,7 +337,6 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	streamDone := fm.doneChan
 	fm.captureMu.Unlock()
 	ctx := r.Context()
-	var frameWriteBuf bytes.Buffer
 	contentLengthScratch := make([]byte, 0, 20)
 
 	framesSent := 0
@@ -381,7 +379,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 		lastSeenSeq = seq
 
-		if err := writeMultipartFrame(w, &frameWriteBuf, &contentLengthScratch, frame); err != nil {
+		if err := writeMultipartFrame(w, &contentLengthScratch, frame); err != nil {
 			log.Printf("❌ Stream write error after %d frames: %v", framesSent, err)
 			return err
 		}
@@ -395,21 +393,28 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	}
 }
 
-func writeMultipartFrame(w http.ResponseWriter, frameWriteBuf *bytes.Buffer, contentLengthScratch *[]byte, frame []byte) error {
+func writeMultipartFrame(w http.ResponseWriter, contentLengthScratch *[]byte, frame []byte) error {
 	// frame is shared immutable bytes from FrameBuffer; only read from it.
-	frameWriteBuf.Reset()
-	frameWriteBuf.Grow(len(frame) + 128)
-
-	frameWriteBuf.Write(mjpegBoundaryBytes)
-	frameWriteBuf.Write(mjpegContentTypeBytes)
-	frameWriteBuf.Write(mjpegContentLengthBytes)
 	*contentLengthScratch = strconv.AppendInt((*contentLengthScratch)[:0], int64(len(frame)), 10)
-	frameWriteBuf.Write(*contentLengthScratch)
-	frameWriteBuf.Write(mjpegHeaderEndBytes)
-	frameWriteBuf.Write(frame)
-	frameWriteBuf.Write(mjpegTrailerBytes)
-
-	_, err := w.Write(frameWriteBuf.Bytes())
+	if _, err := w.Write(mjpegBoundaryBytes); err != nil {
+		return err
+	}
+	if _, err := w.Write(mjpegContentTypeBytes); err != nil {
+		return err
+	}
+	if _, err := w.Write(mjpegContentLengthBytes); err != nil {
+		return err
+	}
+	if _, err := w.Write(*contentLengthScratch); err != nil {
+		return err
+	}
+	if _, err := w.Write(mjpegHeaderEndBytes); err != nil {
+		return err
+	}
+	if _, err := w.Write(frame); err != nil {
+		return err
+	}
+	_, err := w.Write(mjpegTrailerBytes)
 	return err
 }
 

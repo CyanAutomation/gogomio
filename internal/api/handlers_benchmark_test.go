@@ -43,12 +43,11 @@ func BenchmarkWriteMultipartFrame(b *testing.B) {
 
 	frame := bytes.Repeat([]byte{0xFF, 0xD8, 0xFF, 0xD9}, 16*1024/4)
 	writer := &discardResponseWriter{}
-	var frameWriteBuf bytes.Buffer
 	contentLengthScratch := make([]byte, 0, 20)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := writeMultipartFrame(writer, &frameWriteBuf, &contentLengthScratch, frame); err != nil {
+		if err := writeMultipartFrame(writer, &contentLengthScratch, frame); err != nil {
 			b.Fatal(err)
 		}
 	}
