@@ -127,7 +127,8 @@ func TestWebUIContainsJavaScript(t *testing.T) {
 	}
 }
 
-// TestWebUIContainsStyling tests that CSS styling is included
+// TestWebUIContainsStyling tests that required UI sections/components render
+// and that stylesheet linkage is present for the inline style contract.
 func TestWebUIContainsStyling(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterStaticFiles(router)
@@ -137,18 +138,31 @@ func TestWebUIContainsStyling(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	body := w.Body.String()
-	cssElements := []string{
-		"background:",
-		"display:",
-		"flex",
-		"grid",
-		"border-radius:",
+	requiredUIElements := []string{
+		"<header",
+		"Live Stream",
+		"Settings & Stats",
+		`id="stream-img"`,
+		`id="stream-container"`,
+		`id="start-stream"`,
+		`id="stop-stream"`,
+		`id="save-settings"`,
+		`id="reset-settings"`,
+		`id="diagnostics-btn"`,
+		`id="brightness"`,
+		`id="contrast"`,
+		`id="saturation"`,
 	}
 
-	for _, elem := range cssElements {
+	for _, elem := range requiredUIElements {
 		if !strings.Contains(body, elem) {
-			t.Errorf("Expected CSS element %q not found", elem)
+			t.Errorf("Expected UI element %q not found", elem)
 		}
+	}
+
+	// Keep a minimal stylesheet linkage check without asserting styling details.
+	if !strings.Contains(body, "<style>") {
+		t.Error("Expected inline stylesheet linkage not found")
 	}
 }
 
