@@ -68,13 +68,7 @@ RUN set -eux; \
      gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
      echo "⚠️  GPG key fetch failed, continuing without signature verification"); \
     \
-    cat > /etc/apt/sources.list.d/raspi.sources << 'RASPI_SOURCES'; \
-Types: deb deb-src
-URIs: http://archive.raspberrypi.org/debian
-Suites: bookworm
-Components: main
-Signed-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg
-RASPI_SOURCES; \
+    printf "Types: deb deb-src\nURIs: http://archive.raspberrypi.org/debian\nSuites: bookworm\nComponents: main\nSigned-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg\n" > /etc/apt/sources.list.d/raspi.sources; \
     \
     apt-get update 2>/dev/null || echo "⚠️  Raspberry Pi repository update had issues, continuing..."; \
     \
