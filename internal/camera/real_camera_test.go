@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"io"
 	"log"
+	"math"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -316,6 +317,32 @@ func TestRealCameraBuildFFmpegCommandMapsJPEGQualityToQuantizer(t *testing.T) {
 				t.Fatalf("jpegQuality=%d => -q:v %q, want %q (args=%v)", tc.jpegQuality, got, tc.wantQuantizerQV, cmd.Args)
 			}
 		})
+	}
+}
+
+func TestFFmpegMJPEGQuantizerFromQualityMatchesRoundedLinearMapping(t *testing.T) {
+	const (
+		jpegQualityMin = 1
+		jpegQualityMax = 100
+		ffmpegQMax     = 31
+		ffmpegQMin     = 2
+	)
+
+	span := float64(ffmpegQMax - ffmpegQMin)
+	for quality := -20; quality <= 140; quality++ {
+		clamped := quality
+		if clamped < jpegQualityMin {
+			clamped = jpegQualityMin
+		}
+		if clamped > jpegQualityMax {
+			clamped = jpegQualityMax
+		}
+
+		progress := float64(clamped-jpegQualityMin) / float64(jpegQualityMax-jpegQualityMin)
+		want := ffmpegQMax - int(math.Round(progress*span))
+		if got := ffmpegMJPEGQuantizerFromQuality(quality); got != want {
+			t.Fatalf("quality=%d (clamped=%d) => q:v=%d, want %d", quality, clamped, got, want)
+		}
 	}
 }
 
