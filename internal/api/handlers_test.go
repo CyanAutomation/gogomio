@@ -90,11 +90,10 @@ func (w *countingStreamWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if string(p) == "--frame\r\n" {
-		w.boundaries++
-		if w.boundaries >= w.targetFrames {
-			return 0, errStopStream
-		}
+	// Count how many frame boundaries are in the data
+	w.boundaries += strings.Count(string(p), "--frame\r\n")
+	if w.boundaries >= w.targetFrames {
+		return 0, errStopStream
 	}
 	return len(p), nil
 }
