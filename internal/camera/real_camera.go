@@ -512,21 +512,27 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 }
 
 func ffmpegMJPEGQuantizerFromQuality(jpegQuality int) int {
-	if jpegQuality < 1 {
-		jpegQuality = 1
+	const (
+		jpegQualityMin = 1
+		jpegQualityMax = 100
+		ffmpegQMax     = 31 // lowest visual quality
+		ffmpegQMin     = 2  // highest visual quality
+	)
+
+	if jpegQuality < jpegQualityMin {
+		jpegQuality = jpegQualityMin
 	}
-	if jpegQuality > 100 {
-		jpegQuality = 100
+	if jpegQuality > jpegQualityMax {
+		jpegQuality = jpegQualityMax
 	}
 
 	// Invert and scale app quality [1..100] to FFmpeg MJPEG q:v [31..2].
-	// Integer rounding keeps the mapping stable and predictable.
-	const (
-		ffmpegQMax = 31 // lowest visual quality
-		ffmpegQMin = 2  // highest visual quality
-	)
+	// This uses nearest-integer rounding for division by 99:
+	//   round(n/99) == (n + floor(99/2)) / 99 == (n + 49) / 99
+	// because 99 is odd and cannot produce exact .5 ties.
 	span := ffmpegQMax - ffmpegQMin
-	scaled := ((jpegQuality-1)*span + 49) / 99
+	numerator := (jpegQuality - jpegQualityMin) * span
+	scaled := (numerator + ((jpegQualityMax-jpegQualityMin)/2)) / (jpegQualityMax - jpegQualityMin)
 	return ffmpegQMax - scaled
 }
 
