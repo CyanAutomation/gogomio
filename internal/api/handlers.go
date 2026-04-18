@@ -209,15 +209,12 @@ func (fm *FrameManager) stopCapture() {
 
 // captureLoop continuously captures frames from the camera and writes to the frame buffer.
 func (fm *FrameManager) captureLoop(done <-chan struct{}) {
-	log.Printf("🎬 Capture loop started")
 	defer func() {
-		log.Printf("🎬 Capture loop exiting (stopping camera)")
 		fm.captureMu.Lock()
 		if fm.doneChan == done {
 			fm.captureStarted = false
 		}
 		fm.captureMu.Unlock()
-		log.Printf("✓ Capture loop ended")
 	}()
 
 	retryDelay := initialCaptureRetryDelay
@@ -225,7 +222,6 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	for {
 		select {
 		case <-done:
-			log.Printf("📊 Capture loop: done signal received")
 			return
 		default:
 		}

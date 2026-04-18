@@ -553,8 +553,7 @@ func (rc *RealCamera) readMJPEGStream() {
 	}()
 
 	log.Printf("📹 Frame reader: STARTED")
-
-	buf := make([]byte, readChunkSize)
+	
 	readAttempts := 0
 	framesExtracted := 0
 
