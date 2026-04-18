@@ -1,9 +1,11 @@
 package camera
 
 import (
+	"bytes"
 	"errors"
 	"image"
 	"io"
+	"log"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -207,8 +209,91 @@ func TestRealCameraStartMissingBinaries(t *testing.T) {
 	rc.launchFn = rc.launchContinuousProducer
 
 	err := rc.Start(640, 480, 24, 80)
-	if err == nil || !strings.Contains(err.Error(), "neither libcamera-vid nor ffmpeg") {
+	if err == nil || !strings.Contains(err.Error(), "none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH") {
 		t.Fatalf("expected missing binary error, got: %v", err)
+	}
+}
+
+func TestRealCameraStartFFmpegFallbackProbeFails(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.lookPath = func(bin string) (string, error) {
+		if bin == "ffmpeg" {
+			return "/usr/bin/ffmpeg", nil
+		}
+		return "", errors.New("missing")
+	}
+	rc.runCmdFn = func(*exec.Cmd) ([]byte, error) {
+		return []byte("VIDIOC_STREAMON: Invalid argument"), errors.New("probe failed")
+	}
+
+	err := rc.Start(640, 480, 24, 80)
+	if err == nil {
+		t.Fatal("expected probe failure")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "streamon failed") {
+		t.Fatalf("expected streamon mapping, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "rpicam-vid/libcamera-vid") {
+		t.Fatalf("expected CSI guidance, got: %v", err)
+	}
+}
+
+func TestRealCameraBuildFFmpegCommandIncludesInputNegotiation(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/video0"
+	rc.width, rc.height, rc.fps = 1280, 720, 30
+
+	cmd := rc.buildFFmpegCommand()
+	args := strings.Join(cmd.Args, " ")
+	if !strings.Contains(args, "-input_format mjpeg") {
+		t.Fatalf("expected explicit input format, args=%q", args)
+	}
+	if !strings.Contains(args, "-framerate 30") {
+		t.Fatalf("expected explicit framerate, args=%q", args)
+	}
+}
+
+func TestMapFFmpegInputError(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/video0"
+
+	tests := []struct {
+		name       string
+		stderr     string
+		wantSubstr string
+	}{
+		{name: "streamon", stderr: "VIDIOC_STREAMON: Invalid argument", wantSubstr: "STREAMON failed"},
+		{name: "open input", stderr: "Error opening input: Permission denied", wantSubstr: "could not open the V4L2 input"},
+		{name: "default", stderr: "some unknown ffmpeg message", wantSubstr: "V4L2 probe failed before ffmpeg fallback"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := rc.mapFFmpegInputError(tc.stderr, errors.New("boom"))
+			if err == nil || !strings.Contains(err.Error(), tc.wantSubstr) {
+				t.Fatalf("expected %q in %v", tc.wantSubstr, err)
+			}
+		})
+	}
+}
+
+func TestProbeV4L2CaptureNodeSuccess(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/video0"
+	rc.runCmdFn = func(*exec.Cmd) ([]byte, error) {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	orig := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(orig)
+
+	if err := rc.probeV4L2CaptureNode(); err != nil {
+		t.Fatalf("expected probe success, got %v", err)
+	}
+	if !strings.Contains(buf.String(), "V4L2 probe succeeded") {
+		t.Fatalf("expected success log, got %q", buf.String())
 	}
 }
 
