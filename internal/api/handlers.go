@@ -37,9 +37,19 @@ type FrameManager struct {
 
 	idleStopDelay time.Duration
 	captureStarts int64
+
+	consecutiveCaptureFailures int64
+	captureFailureTotal        int64
 }
 
 const defaultIdleStopDelay = 3 * time.Second
+
+const (
+	initialCaptureRetryDelay              = 100 * time.Millisecond
+	maxCaptureRetryDelay                  = 2 * time.Second
+	captureFailureDegradedThreshold int64 = 5
+	captureFailureLogInterval       int64 = 10
+)
 
 var (
 	mjpegBoundaryBytes      = []byte("--frame\r\n")
@@ -196,6 +206,8 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 		fm.captureMu.Unlock()
 	}()
 
+	retryDelay := initialCaptureRetryDelay
+
 	for {
 		select {
 		case <-done:
@@ -206,15 +218,43 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 		// Capture frame (with internal FPS throttling in mock camera)
 		frame, err := fm.cam.CaptureFrame()
 		if err != nil {
-			// Camera error, wait before retry
-			time.Sleep(100 * time.Millisecond)
+			consecutive := atomic.AddInt64(&fm.consecutiveCaptureFailures, 1)
+			total := atomic.AddInt64(&fm.captureFailureTotal, 1)
+			if consecutive == 1 || consecutive%captureFailureLogInterval == 0 {
+				log.Printf("camera capture failure: consecutive=%d total=%d retry_delay=%s err=%v", consecutive, total, retryDelay, err)
+			}
+
+			timer := time.NewTimer(retryDelay)
+			select {
+			case <-done:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			case <-timer.C:
+			}
+
+			retryDelay *= 2
+			if retryDelay > maxCaptureRetryDelay {
+				retryDelay = maxCaptureRetryDelay
+			}
 			continue
 		}
 
 		if frame != nil {
+			if consecutive := atomic.SwapInt64(&fm.consecutiveCaptureFailures, 0); consecutive > 0 {
+				log.Printf("camera capture recovered after %d consecutive failures", consecutive)
+			}
+			retryDelay = initialCaptureRetryDelay
 			_, _ = fm.frameBuffer.Write(frame)
 		}
 	}
+}
+
+func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
+	consecutive := atomic.LoadInt64(&fm.consecutiveCaptureFailures)
+	total := atomic.LoadInt64(&fm.captureFailureTotal)
+	return consecutive, total, consecutive >= captureFailureDegradedThreshold
 }
 
 // Stop stops the frame capture loop.
@@ -343,11 +383,14 @@ type ConfigResponse struct {
 
 // HealthResponse is the JSON response for /health endpoint.
 type HealthResponse struct {
-	Status            string  `json:"status"`
-	CameraReady       bool    `json:"camera_ready"`
-	UptimeSeconds     int64   `json:"uptime_seconds"`
-	StreamConnections int     `json:"stream_connections"`
-	FramesPerSecond   float64 `json:"fps"`
+	Status             string  `json:"status"`
+	CameraReady        bool    `json:"camera_ready"`
+	UptimeSeconds      int64   `json:"uptime_seconds"`
+	StreamConnections  int     `json:"stream_connections"`
+	FramesPerSecond    float64 `json:"fps"`
+	Degraded           bool    `json:"degraded,omitempty"`
+	CaptureFailures    int64   `json:"capture_consecutive_failures,omitempty"`
+	CaptureErrorsTotal int64   `json:"capture_failures_total,omitempty"`
 }
 
 // DiagnosticsResponse is the JSON response for /api/diagnostics endpoint.
@@ -497,13 +540,24 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 
 func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
 	_, _, fps := fm.streamStats.Snapshot()
+	consecutiveFailures, captureFailuresTotal, degraded := fm.captureFailureStats()
+
+	status := "ok"
+	if !fm.cam.IsReady() {
+		status = "error"
+	} else if degraded {
+		status = "degraded"
+	}
 
 	response := HealthResponse{
-		Status:            "ok",
-		CameraReady:       fm.cam.IsReady(),
-		UptimeSeconds:     int64(time.Since(startTime).Seconds()),
-		StreamConnections: fm.connTracker.Count(),
-		FramesPerSecond:   fps,
+		Status:             status,
+		CameraReady:        fm.cam.IsReady(),
+		UptimeSeconds:      int64(time.Since(startTime).Seconds()),
+		StreamConnections:  fm.connTracker.Count(),
+		FramesPerSecond:    fps,
+		Degraded:           degraded,
+		CaptureFailures:    consecutiveFailures,
+		CaptureErrorsTotal: captureFailuresTotal,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
