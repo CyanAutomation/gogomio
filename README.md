@@ -147,6 +147,26 @@ export MIO_BIND_HOST=0.0.0.0
 export MOCK_CAMERA=false
 ```
 
+### JPEG quality behavior by backend
+
+`MIO_JPEG_QUALITY` is always configured as `1-100` at the app level, but camera backends interpret quality differently:
+
+- **rpicam-vid / libcamera-vid (preferred on Raspberry Pi CSI):** quality is handled by backend defaults and MJPEG encoder behavior.
+- **ffmpeg fallback (`video4linux2`):** app quality is intentionally remapped to FFmpeg MJPEG `-q:v` quantizer (`2-31`), where:
+  - higher app quality => lower quantizer (better image, more CPU/bandwidth),
+  - lower app quality => higher quantizer (smaller output, less CPU/bandwidth).
+
+Practical ffmpeg mapping examples:
+
+- `MIO_JPEG_QUALITY=100` → `-q:v 2` (highest quality)
+- `MIO_JPEG_QUALITY=50` → `-q:v 17` (balanced)
+- `MIO_JPEG_QUALITY=1` → `-q:v 31` (lowest quality)
+
+For **low-CPU operation** on constrained devices, start around:
+
+- `MIO_JPEG_QUALITY=35-60` for 640x480 / 720p,
+- reduce FPS first (for example `15-20`) before raising quality.
+
 ## API Endpoints
 
 ### Streaming
