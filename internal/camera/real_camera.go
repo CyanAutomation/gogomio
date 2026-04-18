@@ -309,6 +309,9 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 		if !rc.isReady.Load() || rc.isStopping.Load() {
 			return nil, fmt.Errorf("camera stopped")
 		}
+		if updateCh == nil {
+			return nil, fmt.Errorf("camera stopped")
+		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return nil, fmt.Errorf("timed out waiting for frame")
