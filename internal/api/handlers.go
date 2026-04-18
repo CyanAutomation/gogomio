@@ -226,39 +226,16 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	retryDelay := initialCaptureRetryDelay
 	captureCount := 0
 
-	// Calculate frame interval to throttle to target FPS
-	frameInterval := time.Second / time.Duration(fm.cfg.TargetFPS)
-	if frameInterval <= 0 {
-		frameInterval = time.Second / time.Duration(fm.cfg.FPS)
-	}
-	ticker := time.NewTicker(frameInterval)
-	defer ticker.Stop()
-	log.Printf("🎬 Capture loop: FPS throttle set to %d FPS (interval: %v)", fm.cfg.TargetFPS, frameInterval)
-
 	for {
 		select {
 		case <-done:
 			log.Printf("🎬 Capture loop: done signal received, exiting (captured %d frames)", captureCount)
 			return
-		case <-ticker.C:
-			// Throttle to target FPS
+		default:
 		}
 
-		// Capture frame (with internal FPS throttling in mock camera)
-		frame, err := fm.cam.CaptureFrame()
-		if err != nil {
-			consecutive := atomic.AddInt64(&fm.consecutiveCaptureFailures, 1)
-			total := atomic.AddInt64(&fm.captureFailureTotal, 1)
-			if consecutive == 1 || consecutive%captureFailureLogInterval == 0 {
-				log.Printf("camera capture failure: consecutive=%d total=%d retry_delay=%s err=%v", consecutive, total, retryDelay, err)
-			}
-
-			timer := time.NewTimer(retryDelay)
-			select {
-			case <-done:
-				timer.Stop()
-				log.Printf("🎬 Capture loop: done signal received during error retry, exiting")
-				return
+		// Capture frame - CaptureFrame() already does its own throttling with internal sleep
+		// No need for external ticker
 			case <-timer.C:
 			}
 
