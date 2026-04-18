@@ -31,29 +31,22 @@ func TestFrameBufferWrite(t *testing.T) {
 	}
 }
 
-// TestFrameBufferConditionSignaling tests condition variable notification
+// TestFrameBufferConditionSignaling tests waiter notification on writes.
 func TestFrameBufferConditionSignaling(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 0)
 
 	testFrame := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-	received := make(chan []byte)
+	received := make(chan []byte, 1)
 
-	// Reader goroutine
 	go func() {
-		fb.condition.L.Lock()
-		defer fb.condition.L.Unlock()
-		fb.condition.Wait()
-		received <- fb.frame
+		frame, _ := fb.WaitFrame(2*time.Second, 0)
+		received <- frame
 	}()
 
-	// Give reader time to block on Wait()
 	time.Sleep(100 * time.Millisecond)
 
-	// Writer goroutine
-	go func() {
-		_, _ = fb.Write(testFrame)
-	}()
+	_, _ = fb.Write(testFrame)
 
 	// Should receive frame within timeout
 	select {
@@ -131,10 +124,8 @@ func TestFrameBufferConcurrentReads(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			fb.condition.L.Lock()
-			defer fb.condition.L.Unlock()
-			fb.condition.Wait()
-			results[idx] = fb.frame
+			frame, _ := fb.WaitFrame(2*time.Second, 0)
+			results[idx] = frame
 		}(i)
 	}
 
@@ -237,9 +228,9 @@ func TestFrameBufferConcurrentWrites(t *testing.T) {
 		t.Fatalf("last frame length is %d, want 1", len(gotFrame))
 	}
 
-	fb.condition.L.Lock()
+	fb.mu.Lock()
 	lastMonotonic := fb.lastFrameMonotonic
-	fb.condition.L.Unlock()
+	fb.mu.Unlock()
 
 	if lastMonotonic <= 0 {
 		t.Fatalf("lastFrameMonotonic is %d, want > 0", lastMonotonic)

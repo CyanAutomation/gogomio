@@ -1,6 +1,7 @@
 package camera
 
 import (
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -133,4 +134,40 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 	}
 
 	t.Logf("WaitFrame race test: %d successful waits, %d timeouts", successCount, timeoutCount)
+}
+
+// TestFrameBufferWaitFrameNoPerWaiterGoroutine validates timeout waits do not
+// leak or grow goroutines linearly with waiter count.
+func TestFrameBufferWaitFrameNoPerWaiterGoroutine(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 0)
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	before := runtime.NumGoroutine()
+
+	const waiters = 200
+	var wg sync.WaitGroup
+	wg.Add(waiters)
+	for i := 0; i < waiters; i++ {
+		go func() {
+			defer wg.Done()
+			frame, seq := fb.WaitFrame(20*time.Millisecond, 0)
+			if frame != nil || seq != 0 {
+				t.Errorf("expected timeout result, got frame=%v seq=%d", frame != nil, seq)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Allow timer internals and goroutines to settle before measuring.
+	time.Sleep(100 * time.Millisecond)
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	after := runtime.NumGoroutine()
+
+	// Large growth would indicate per-wait goroutine behavior.
+	if delta := after - before; delta > 20 {
+		t.Fatalf("goroutine growth too large after waits: before=%d after=%d delta=%d", before, after, delta)
+	}
 }

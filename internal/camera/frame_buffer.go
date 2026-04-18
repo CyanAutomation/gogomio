@@ -9,9 +9,10 @@ import (
 // FrameBuffer is a thread-safe circular buffer for JPEG frames.
 // It implements io.Writer interface for use with Picamera2-style encoders.
 type FrameBuffer struct {
+	mu                    sync.Mutex
 	frame                 []byte
 	frameSeq              uint64
-	condition             *sync.Cond
+	notifyCh              chan struct{}
 	stats                 *StreamStats
 	lastFrameMonotonic    int64
 	targetFrameIntervalNS int64
@@ -21,8 +22,8 @@ type FrameBuffer struct {
 // targetFPS <= 0 means no throttling.
 func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 	fb := &FrameBuffer{
-		condition: sync.NewCond(&sync.Mutex{}),
-		stats:     stats,
+		notifyCh: make(chan struct{}),
+		stats:    stats,
 	}
 	if targetFPS > 0 {
 		fb.targetFrameIntervalNS = 1e9 / int64(targetFPS)
@@ -35,8 +36,8 @@ func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	size := len(buf)
 
-	fb.condition.L.Lock()
-	defer fb.condition.L.Unlock()
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
 
 	// Check if we should throttle based on target FPS.
 	now := time.Now().UnixNano()
@@ -55,16 +56,17 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	fb.lastFrameMonotonic = now
 	fb.stats.RecordFrame(now)
 
-	// Signal all waiting readers
-	fb.condition.Broadcast()
+	// Signal all waiting readers with a fresh publish channel.
+	close(fb.notifyCh)
+	fb.notifyCh = make(chan struct{})
 
 	return size, nil
 }
 
 // GetFrame returns a copy of the current frame (for snapshot endpoints).
 func (fb *FrameBuffer) GetFrame() []byte {
-	fb.condition.L.Lock()
-	defer fb.condition.L.Unlock()
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
 
 	if fb.frame == nil {
 		return nil
@@ -78,57 +80,69 @@ func (fb *FrameBuffer) GetFrame() []byte {
 
 // CurrentSequence returns the latest published frame sequence.
 func (fb *FrameBuffer) CurrentSequence() uint64 {
-	fb.condition.L.Lock()
-	defer fb.condition.L.Unlock()
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
 	return fb.frameSeq
 }
 
 // WaitFrame waits for a frame newer than lastSeenSeq within timeout.
 // Returns (nil, lastSeenSeq) if timeout is exceeded.
 func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
-	fb.condition.L.Lock()
-	defer fb.condition.L.Unlock()
+	fb.mu.Lock()
 
 	if fb.frameSeq > lastSeenSeq && fb.frame != nil {
 		frameCopy := make([]byte, len(fb.frame))
 		copy(frameCopy, fb.frame)
+		fb.mu.Unlock()
 		return frameCopy, fb.frameSeq
 	}
 
 	if timeout <= 0 {
+		fb.mu.Unlock()
 		return nil, lastSeenSeq
 	}
 
-	// Use WaitWithTimeout by creating a goroutine that broadcasts after timeout
 	deadline := time.Now().Add(timeout)
-	timeoutCh := make(chan struct{})
-
-	go func() {
-		remaining := time.Until(deadline)
-		if remaining > 0 {
-			time.Sleep(remaining)
-		}
-		fb.condition.L.Lock()
-		fb.condition.Broadcast()
-		fb.condition.L.Unlock()
-		close(timeoutCh)
-	}()
 
 	for fb.frameSeq <= lastSeenSeq {
-		// Check if timeout has occurred
-		if time.Now().After(deadline) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			fb.mu.Unlock()
 			return nil, lastSeenSeq
 		}
 
-		fb.condition.Wait()
+		notifyCh := fb.notifyCh
+		fb.mu.Unlock()
+
+		timer := time.NewTimer(remaining)
+		timedOut := false
+		select {
+		case <-notifyCh:
+		case <-timer.C:
+			timedOut = true
+		}
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+
+		fb.mu.Lock()
+		if timedOut && fb.frameSeq <= lastSeenSeq {
+			fb.mu.Unlock()
+			return nil, lastSeenSeq
+		}
 	}
 
 	if fb.frameSeq <= lastSeenSeq || fb.frame == nil {
+		fb.mu.Unlock()
 		return nil, lastSeenSeq
 	}
 
 	frameCopy := make([]byte, len(fb.frame))
 	copy(frameCopy, fb.frame)
+	fb.mu.Unlock()
 	return frameCopy, fb.frameSeq
 }
 
