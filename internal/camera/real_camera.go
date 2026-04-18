@@ -461,6 +461,7 @@ func (rc *RealCamera) probeV4L2CaptureNode() error {
 		"-f", "video4linux2",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
 		"-framerate", fmt.Sprintf("%d", rc.fps),
+		"-i", rc.devicePath,
 		"-frames:v", "1",
 		"-f", "null",
 		"-",
