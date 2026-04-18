@@ -19,11 +19,29 @@ type MockCamera struct {
 	jpegQuality   int
 	lastFrameTime time.Time
 	frameCounter  int64
+	now           func() time.Time
+	sleep         func(time.Duration)
 }
 
 // NewMockCamera creates a new mock camera.
 func NewMockCamera() *MockCamera {
-	return &MockCamera{}
+	return NewMockCameraWithClock(time.Now, time.Sleep)
+}
+
+// NewMockCameraWithClock creates a mock camera with injectable time functions.
+// This is primarily intended for deterministic tests.
+func NewMockCameraWithClock(now func() time.Time, sleep func(time.Duration)) *MockCamera {
+	if now == nil {
+		now = time.Now
+	}
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+
+	return &MockCamera{
+		now:   now,
+		sleep: sleep,
+	}
 }
 
 // Start initializes the mock camera.
@@ -46,7 +64,7 @@ func (mc *MockCamera) Start(width, height, fps, jpegQuality int) error {
 	mc.fps = fps
 	mc.jpegQuality = jpegQuality
 	mc.ready = true
-	mc.lastFrameTime = time.Now()
+	mc.lastFrameTime = mc.now()
 	mc.frameCounter = 0
 
 	return nil
@@ -71,14 +89,14 @@ func (mc *MockCamera) CaptureFrame() ([]byte, error) {
 
 	// Rate limit to fps
 	frameInterval := time.Duration(float64(time.Second) / float64(mc.fps))
-	if elapsed := time.Since(lastFrameTime); elapsed < frameInterval {
-		time.Sleep(frameInterval - elapsed)
+	if elapsed := mc.now().Sub(lastFrameTime); elapsed < frameInterval {
+		mc.sleep(frameInterval - elapsed)
 	}
 
 	// Update frame counter and time
 	mc.mu.Lock()
 	mc.frameCounter++
-	mc.lastFrameTime = time.Now()
+	mc.lastFrameTime = mc.now()
 	mc.mu.Unlock()
 
 	// Generate a synthetic frame
