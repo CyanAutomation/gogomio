@@ -196,7 +196,7 @@ func (fm *FrameManager) cleanupLoop() {
 
 	log.Printf("📊 Cleanup loop STARTED")
 
-	for {
+	for { //nolint:staticcheck // for-select is idiomatic for multi-channel listening goroutine
 		select {
 		case req, ok := <-fm.cleanupCh:
 			if !ok {
