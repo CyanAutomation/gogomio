@@ -41,13 +41,19 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 curl http://localhost:8000/api/config | jq
 ```
 
-### Raspberry Pi (Real Camera)
+### Raspberry Pi (Real Camera - arm64 Optimized Build)
 
 **Prerequisites:**
 
-- Raspberry Pi 3B+, 4, or 5
-- CSI camera connected
+- Raspberry Pi 3B+, 4, or 5 (arm64)
+- CSI camera connected and enabled
 - Docker installed (`curl -sSL https://get.docker.com | sh`)
+
+**Important:** The Dockerfile has been optimized for **Raspberry Pi arm64 deployments** with native libcamera support. See [Raspberry Pi Build Guide](docs/RASPBERRY_PI_BUILD.md) for:
+- Build instructions
+- Camera initialization troubleshooting  
+- Performance optimization
+- Cross-compilation from x86/amd64
 - 64-bit Raspberry Pi OS (arm64) recommended so camera packages are available
 - Camera backend package on host:
   - Preferred: `rpicam-apps` (`rpicam-vid`)
