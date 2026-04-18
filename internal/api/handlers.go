@@ -236,6 +236,20 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 
 		// Capture frame - CaptureFrame() already does its own throttling with internal sleep
 		// No need for external ticker
+		frame, err := fm.cam.CaptureFrame()
+		if err != nil {
+			consecutive := atomic.AddInt64(&fm.consecutiveCaptureFailures, 1)
+			total := atomic.AddInt64(&fm.captureFailureTotal, 1)
+			if consecutive == 1 || consecutive%captureFailureLogInterval == 0 {
+				log.Printf("camera capture failure: consecutive=%d total=%d retry_delay=%s err=%v", consecutive, total, retryDelay, err)
+			}
+
+			timer := time.NewTimer(retryDelay)
+			select {
+			case <-done:
+				timer.Stop()
+				log.Printf("🎬 Capture loop: done signal received during error retry, exiting")
+				return
 			case <-timer.C:
 			}
 
