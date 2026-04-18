@@ -489,6 +489,15 @@ func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
 func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 	// For libcamera V4L2 devices, avoid strict format constraints
 	// Let FFmpeg auto-detect the device's native format
+	//
+	// App-level JPEG quality is exposed as 1-100 where higher means better quality.
+	// FFmpeg's MJPEG encoder uses -q:v with the opposite direction and a narrower
+	// effective range (lower values are higher quality; practical values are ~2-31).
+	// Map intentionally so:
+	//   100 -> 2   (highest quality, heavier CPU/bandwidth)
+	//    50 -> 17  (balanced default-like behavior)
+	//     1 -> 31  (lowest quality, lightest CPU/bandwidth)
+	ffmpegQ := ffmpegMJPEGQuantizerFromQuality(rc.jpegQuality)
 	return exec.Command(
 		"ffmpeg",
 		"-f", "video4linux2",
@@ -496,10 +505,29 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
 		"-c:v", "mjpeg",
-		"-q:v", fmt.Sprintf("%d", rc.jpegQuality),
+		"-q:v", fmt.Sprintf("%d", ffmpegQ),
 		"-f", "mjpeg",
 		"pipe:1",
 	)
+}
+
+func ffmpegMJPEGQuantizerFromQuality(jpegQuality int) int {
+	if jpegQuality < 1 {
+		jpegQuality = 1
+	}
+	if jpegQuality > 100 {
+		jpegQuality = 100
+	}
+
+	// Invert and scale app quality [1..100] to FFmpeg MJPEG q:v [31..2].
+	// Integer rounding keeps the mapping stable and predictable.
+	const (
+		ffmpegQMax = 31 // lowest visual quality
+		ffmpegQMin = 2  // highest visual quality
+	)
+	span := ffmpegQMax - ffmpegQMin
+	scaled := ((jpegQuality-1)*span + 49) / 99
+	return ffmpegQMax - scaled
 }
 
 func (rc *RealCamera) probeV4L2CaptureNode() error {
