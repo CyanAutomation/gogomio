@@ -227,9 +227,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 			timer := time.NewTimer(retryDelay)
 			select {
 			case <-done:
-				if !timer.Stop() {
-					<-timer.C
-				}
+				timer.Stop()
 				return
 			case <-timer.C:
 			}
