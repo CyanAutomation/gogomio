@@ -41,7 +41,20 @@ func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 
 // Write writes a frame to the buffer and signals waiting readers.
 // Implements io.Writer interface.
+//
+// Write always clones buf before publishing so callers may safely reuse or
+// mutate buf after this method returns.
 func (fb *FrameBuffer) Write(buf []byte) (int, error) {
+	size := len(buf)
+	frameData := make([]byte, size)
+	copy(frameData, buf)
+	return fb.WriteImmutable(frameData)
+}
+
+// WriteImmutable publishes frame bytes without cloning.
+//
+// The caller transfers ownership and MUST NOT mutate buf after this call.
+func (fb *FrameBuffer) WriteImmutable(buf []byte) (int, error) {
 	size := len(buf)
 
 	fb.mu.Lock()
@@ -57,12 +70,8 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 		}
 	}
 
-	// Clone once on publication to preserve immutability for all readers.
-	frameData := make([]byte, size)
-	copy(frameData, buf)
-
 	fb.snapshot = frameSnapshot{
-		data: frameData,
+		data: buf,
 		seq:  fb.snapshot.seq + 1,
 	}
 	fb.lastFrameMonotonic = now
