@@ -117,6 +117,10 @@ environment:
 - Raspberry Pi 3/4/5 with 64-bit OS
 - Docker and Docker Compose installed
 - Raspberry Pi Camera Module (CSI or USB)
+- Camera backend packages on Pi/container runtime:
+  - Preferred: `rpicam-apps` (provides `rpicam-vid`)
+  - Fallback: `libcamera-tools` / `libcamera-apps-lite` (provides `libcamera-vid`)
+  - `ffmpeg` is kept as a generic fallback backend
 
 ### Installation
 
@@ -147,6 +151,9 @@ docker-compose up -d
 
 # View logs
 docker-compose logs -f
+
+# Verify detected camera binaries from startup probe
+docker-compose logs gogomio | grep camera-check
 
 # Stop
 docker-compose down
@@ -285,6 +292,12 @@ docker ps
 ```bash
 # List available camera devices
 ls -la /dev/video*
+
+# Verify expected camera binaries in container logs
+docker-compose logs gogomio | grep camera-check
+
+# Optional inside container: directly check binary paths
+docker exec gogomio-gogomio-1 sh -c 'which rpicam-vid; which libcamera-vid; which ffmpeg'
 
 # Check device permissions
 getfacl /dev/video0
