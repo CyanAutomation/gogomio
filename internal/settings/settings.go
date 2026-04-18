@@ -3,9 +3,11 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // Manager handles persistent settings storage.
@@ -125,12 +127,13 @@ func (m *Manager) Clear() error {
 	return m.persist()
 }
 
-// persist writes current settings to disk atomically.
+// persist writes current settings to disk atomically with backup.
 func (m *Manager) persist() error {
 	// Create directory if needed
 	dir := filepath.Dir(m.filePath)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Printf("❌ Settings: failed to create settings directory: %v", err)
 			return fmt.Errorf("failed to create settings directory: %w", err)
 		}
 	}
@@ -138,38 +141,84 @@ func (m *Manager) persist() error {
 	// Marshal to JSON
 	data, err := json.MarshalIndent(m.data, "", "  ")
 	if err != nil {
+		log.Printf("❌ Settings: failed to marshal settings: %v", err)
 		return fmt.Errorf("failed to marshal settings: %w", err)
+	}
+
+	// Create backup of existing file before writing new one
+	if fileInfo, err := os.Stat(m.filePath); err == nil && fileInfo.Size() > 0 {
+		backupFile := m.filePath + ".bak"
+		if err := m.copyFile(m.filePath, backupFile); err != nil {
+			log.Printf("⚠️  Settings: could not create backup, proceeding anyway: %v", err)
+			// Don't fail here - backup is nice-to-have, not critical
+		}
 	}
 
 	// Atomic write: write to temp file then rename
 	tempFile := m.filePath + ".tmp"
 	if err := os.WriteFile(tempFile, data, 0644); err != nil {
+		log.Printf("❌ Settings: failed to write temp settings file: %v", err)
 		return fmt.Errorf("failed to write temp settings file: %w", err)
 	}
 
 	if err := os.Rename(tempFile, m.filePath); err != nil {
 		// Cleanup temp file
 		_ = os.Remove(tempFile)
+		log.Printf("❌ Settings: failed to rename settings file: %v", err)
 		return fmt.Errorf("failed to rename settings file: %w", err)
 	}
 
+	log.Printf("✓ Settings: persisted %d settings", len(m.data))
 	return nil
 }
 
-// load reads settings from disk.
+// load reads settings from disk with error recovery.
 func (m *Manager) load() error {
 	data, err := os.ReadFile(m.filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// File doesn't exist yet, that's ok
+			log.Printf("ℹ️  Settings: no existing settings file at %s (will be created on first save)", m.filePath)
 			return nil
 		}
+		log.Printf("❌ Settings: failed to read settings file: %v", err)
 		return fmt.Errorf("failed to read settings file: %w", err)
 	}
 
 	var loaded map[string]interface{}
 	if err := json.Unmarshal(data, &loaded); err != nil {
-		return fmt.Errorf("failed to unmarshal settings: %w", err)
+		log.Printf("❌ Settings: corrupted JSON in settings file, attempting backup recovery...")
+
+		// Try to recover from backup file
+		backupFile := m.filePath + ".bak"
+		backupData, backupErr := os.ReadFile(backupFile)
+		if backupErr == nil {
+			if backupErr := json.Unmarshal(backupData, &loaded); backupErr == nil {
+				log.Printf("✓ Settings: recovered from backup file")
+				m.data = loaded
+				// Attempt to restore backup over corrupted file
+				if restoreErr := os.WriteFile(m.filePath, backupData, 0644); restoreErr != nil {
+					log.Printf("⚠️  Settings: could not restore from backup: %v", restoreErr)
+				} else {
+					log.Printf("✓ Settings: restored from backup")
+				}
+				return nil
+			}
+		}
+
+		// No backup available or backup also corrupted
+		log.Printf("❌ Settings: backup also corrupted or unavailable, starting with clean state")
+		loaded = make(map[string]interface{})
+
+		// Move corrupted file to timestamped archive
+		archiveFile := m.filePath + ".corrupted." + time.Now().Format("20060102_150405")
+		if err := os.Rename(m.filePath, archiveFile); err != nil {
+			log.Printf("⚠️  Settings: could not archive corrupted file: %v", err)
+		} else {
+			log.Printf("✓ Settings: archived corrupted file to %s", archiveFile)
+		}
+	} else {
+		log.Printf("✓ Settings: loaded from file (%d entries)", len(loaded))
 	}
 
 	if loaded == nil {
@@ -178,4 +227,13 @@ func (m *Manager) load() error {
 
 	m.data = loaded
 	return nil
+}
+
+// copyFile is a helper to copy source file to destination.
+func (m *Manager) copyFile(src, dst string) error {
+	srcData, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, srcData, 0644)
 }
