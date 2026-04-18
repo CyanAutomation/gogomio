@@ -18,7 +18,7 @@ func TestSettingsCorruptionRecovery(t *testing.T) {
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	settingsPath := filepath.Join(tmpDir, "settings.json")
-	
+
 	// Create manager and set a value
 	m := NewManager(settingsPath)
 	_ = m.Set("test_key", "test_value")
@@ -100,20 +100,20 @@ func TestSettingsBackupCreation(t *testing.T) {
 
 	settingsPath := filepath.Join(tmpDir, "settings.json")
 	backupPath := settingsPath + ".bak"
-	
+
 	m := NewManager(settingsPath)
 	_ = m.Set("key1", "value1")
 	_ = m.persist()
-	
+
 	// First write should create settings file
 	if _, err := os.Stat(settingsPath); err != nil {
 		t.Fatalf("Settings file not created: %v", err)
 	}
-	
+
 	// Second write should create backup
 	_ = m.Set("key2", "value2")
 	_ = m.persist()
-	
+
 	// Backup may or may not exist depending on implementation details,
 	// but if it does, it should contain valid JSON
 	if _, err := os.Stat(backupPath); err == nil {
@@ -138,17 +138,17 @@ func TestSettingsEmptyFileRecovery(t *testing.T) {
 
 	settingsPath := filepath.Join(tmpDir, "settings.json")
 	backupPath := settingsPath + ".bak"
-	
+
 	// Create empty primary file
 	if err := os.WriteFile(settingsPath, []byte(""), 0644); err != nil {
 		t.Fatalf("Failed to create empty file: %v", err)
 	}
-	
+
 	// Create valid backup
 	if err := os.WriteFile(backupPath, []byte(`{"key":"value"}`), 0644); err != nil {
 		t.Fatalf("Failed to create backup: %v", err)
 	}
-	
+
 	// Create manager - should recover from backup
 	m := NewManager(settingsPath)
 	_ = m.load()
@@ -199,11 +199,11 @@ func TestSettingsTimestampedArchive(t *testing.T) {
 func BenchmarkSettingsPersist(b *testing.B) {
 	tmpDir, _ := os.MkdirTemp("", "gogomio_bench_*")
 	defer func() { _ = os.RemoveAll(tmpDir) }()
-	
+
 	settingsPath := filepath.Join(tmpDir, "settings.json")
 	m := NewManager(settingsPath)
 	_ = m.Set("key", "value")
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = m.persist()
