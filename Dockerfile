@@ -49,26 +49,29 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
 
 # Update package lists and install runtime dependencies
 # Camera package selection is architecture-aware:
-# - arm64: prefer rpicam-apps when available (provides rpicam-vid on modern Pi OS),
-#          otherwise fall back to libcamera-tools/libcamera-apps-lite (provides libcamera-vid)
+# - arm64: Add Raspberry Pi repository and install rpicam-apps (provides rpicam-vid/libcamera-vid)
 # - non-arm64: install ffmpeg-only fallback
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates tzdata curl ffmpeg; \
     arch="$(dpkg --print-architecture)"; \
     if [ "${arch}" = "arm64" ]; then \
+      echo "Adding Raspberry Pi repository for arm64 camera tools..."; \
+      apt-get install -y --no-install-recommends wget gnupg; \
+      mkdir -p /etc/apt/keyrings; \
+      wget -qO - https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || true; \
+      echo "deb [signed-by=/etc/apt/keyrings/raspberrypi-archive-keyring.gpg] http://archive.raspberrypi.org/debian $(grep VERSION_CODENAME= /etc/os-release | cut -d= -f2) main" | tee /etc/apt/sources.list.d/raspberry.list; \
+      apt-get update || true; \
       if apt-cache show rpicam-apps >/dev/null 2>&1; then \
         apt-get install -y --no-install-recommends rpicam-apps; \
       else \
-        if apt-cache show libcamera-tools >/dev/null 2>&1; then \
-          apt-get install -y --no-install-recommends libcamera-tools; \
-        fi; \
-        if apt-cache show libcamera-apps-lite >/dev/null 2>&1; then \
-          apt-get install -y --no-install-recommends libcamera-apps-lite; \
+        if apt-cache show libcamera-apps >/dev/null 2>&1; then \
+          apt-get install -y --no-install-recommends libcamera-apps; \
         fi; \
       fi; \
+      apt-get purge -y wget gnupg || true; \
     fi; \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raspberry.list
 
 # Create non-root user with explicit umask
 RUN useradd -m -u 1001 -s /bin/bash gogomio && \
