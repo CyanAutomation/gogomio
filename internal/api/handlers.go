@@ -198,32 +198,50 @@ func (fm *FrameManager) stopCapture() {
 	fm.captureMu.Lock()
 	if !fm.captureStarted {
 		fm.captureMu.Unlock()
+		log.Printf("📊 stopCapture called but captureStarted=false, already stopped")
 		return
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
 	fm.captureMu.Unlock()
+	log.Printf("📊 stopCapture: closing done channel to signal captureLoop to exit")
 	close(done)
 	time.Sleep(50 * time.Millisecond) // Allow goroutine to exit cleanly
+	log.Printf("✓ stopCapture: done channel closed")
 }
 
 // captureLoop continuously captures frames from the camera and writes to the frame buffer.
 func (fm *FrameManager) captureLoop(done <-chan struct{}) {
+	log.Printf("🎬 Capture loop STARTED")
 	defer func() {
+		log.Printf("🎬 Capture loop EXITING")
 		fm.captureMu.Lock()
 		if fm.doneChan == done {
 			fm.captureStarted = false
+			log.Printf("🎬 Marked captureStarted=false in defer")
 		}
 		fm.captureMu.Unlock()
 	}()
 
 	retryDelay := initialCaptureRetryDelay
+	captureCount := 0
+	
+	// Calculate frame interval to throttle to target FPS
+	frameInterval := time.Second / time.Duration(fm.cfg.TargetFPS)
+	if frameInterval <= 0 {
+		frameInterval = time.Second / time.Duration(fm.cfg.FPS)
+	}
+	ticker := time.NewTicker(frameInterval)
+	defer ticker.Stop()
+	log.Printf("🎬 Capture loop: FPS throttle set to %d FPS (interval: %v)", fm.cfg.TargetFPS, frameInterval)
 
 	for {
 		select {
 		case <-done:
+			log.Printf("🎬 Capture loop: done signal received, exiting (captured %d frames)", captureCount)
 			return
-		default:
+		case <-ticker.C:
+			// Throttle to target FPS
 		}
 
 		// Capture frame (with internal FPS throttling in mock camera)
@@ -239,6 +257,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 			select {
 			case <-done:
 				timer.Stop()
+				log.Printf("🎬 Capture loop: done signal received during error retry, exiting")
 				return
 			case <-timer.C:
 			}
@@ -251,6 +270,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 		}
 
 		if frame != nil {
+			captureCount++
 			if consecutive := atomic.SwapInt64(&fm.consecutiveCaptureFailures, 0); consecutive > 0 {
 				log.Printf("camera capture recovered after %d consecutive failures", consecutive)
 			}
