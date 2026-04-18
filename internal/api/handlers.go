@@ -280,7 +280,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	ctx := r.Context()
 	var frameWriteBuf bytes.Buffer
 	contentLengthScratch := make([]byte, 0, 20)
-	
+
 	framesSent := 0
 	timeoutCount := 0
 	startTime := time.Now()
