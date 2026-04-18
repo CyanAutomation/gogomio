@@ -391,7 +391,7 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		return nil, nil, nil, nil, fmt.Errorf("none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH")
 	}
 	rc.setBackendAttempted("ffmpeg")
-	
+
 	// Skip V4L2 probe for libcamera CSI cameras without libcamera-vid
 	// These devices require libcamera initialization which FFmpeg can't do
 	// The probe would fail anyway, so we skip it and provide clear guidance
