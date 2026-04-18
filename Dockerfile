@@ -38,7 +38,7 @@ RUN CGO_ENABLED=0 go build \
 # - Includes libcamera-apps with libcamera-vid for native CSI camera access
 # - Includes Raspberry Pi-specific camera middleware
 # - For multi-architecture builds, use a separate generic Dockerfile
-FROM arm64v8/debian:bookworm
+FROM debian:bookworm
 
 # Build arguments for runtime stage
 ARG VERSION
