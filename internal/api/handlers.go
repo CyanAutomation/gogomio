@@ -234,8 +234,8 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 		default:
 		}
 
-		// Capture frame - CaptureFrame() already does its own throttling with internal sleep
-		// No need for external ticker
+		// CaptureFrame blocks until a newer frame sequence is published (or timeout/error),
+		// so this loop tracks upstream frame cadence without CPU spinning.
 		frame, err := fm.cam.CaptureFrame()
 		if err != nil {
 			consecutive := atomic.AddInt64(&fm.consecutiveCaptureFailures, 1)
