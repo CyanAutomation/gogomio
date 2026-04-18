@@ -96,7 +96,7 @@ steps:
       - ${_SERVICE_PORT}
       - --allow-unauthenticated
       - --set-env-vars
-      - MOCK_CAMERA=true,MIO_PORT=${_SERVICE_PORT}
+      - MOCK_CAMERA=true
     waitFor:
       - push-image
 
