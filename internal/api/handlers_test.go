@@ -297,29 +297,66 @@ func TestStreamEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
 
-	// Create a request with context to timeout
-	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Create a custom ResponseWriter that captures the first frame boundary
+	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	req = req.WithContext(ctx)
 	recorder := httptest.NewRecorder()
 
-	// Run with a timeout channel to prevent hanging
 	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		router.ServeHTTP(recorder, req)
-		done <- struct{}{}
 	}()
 
-	// Wait for response or timeout
-	select {
-	case <-time.After(500 * time.Millisecond):
-		// Expected behavior - stream should hang here (waiting for frames)
-		t.Logf("stream endpoint initiating (expected behavior)")
-	case <-done:
-		// Response finished
-		if recorder.Code != http.StatusOK {
-			t.Logf("stream endpoint returned status %d", recorder.Code)
+	headerDeadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(headerDeadline) {
+		if recorder.Header().Get("Content-Type") != "" {
+			break
 		}
+		select {
+		case <-done:
+			t.Fatal("stream ended before headers were written")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+	contentType := recorder.Header().Get("Content-Type")
+	if contentType != "multipart/x-mixed-replace; boundary=frame" {
+		t.Fatalf("expected content type %q, got %q", "multipart/x-mixed-replace; boundary=frame", contentType)
+	}
+	if !strings.Contains(contentType, "boundary=frame") {
+		t.Fatalf("expected stream boundary in content type, got %q", contentType)
+	}
+
+	boundaryDeadline := time.Now().Add(750 * time.Millisecond)
+	for time.Now().Before(boundaryDeadline) {
+		if strings.Contains(recorder.Body.String(), "--frame\r\n") {
+			break
+		}
+		select {
+		case <-done:
+			t.Fatal("stream ended before first frame boundary")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	if !strings.Contains(recorder.Body.String(), "--frame\r\n") {
+		t.Fatal("expected at least one frame boundary before cancellation")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("stream did not stop after context cancellation")
 	}
 }
 
