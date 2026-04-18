@@ -556,6 +556,7 @@ func (rc *RealCamera) readMJPEGStream() {
 
 	readAttempts := 0
 	framesExtracted := 0
+	buf := make([]byte, readChunkSize)
 
 	for {
 		// Check if stopping before attempting read
