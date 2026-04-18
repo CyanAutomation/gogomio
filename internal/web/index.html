@@ -426,6 +426,7 @@
                 this.stopButton = document.getElementById("stop-stream");
                 this.isStreaming = false;
                 this.statsInterval = null;
+                this.streamAbortController = null;
 
                 this.initializeStream();
                 this.attachEventListeners();
@@ -487,11 +488,24 @@
                 this.spinnerElement.style.display = "inline-block";
                 this.imageElement.style.display = "none";
                 this.updateStatus("Starting...", false);
+                
+                // Use fetch with AbortController for clean stream control
+                this.streamAbortController = new AbortController();
                 this.imageElement.src = "/stream.mjpg";
                 this.startStatsPolling();
             }
 
             stopStream() {
+                // Call server endpoint to cleanly stop the stream
+                fetch("/api/stream/stop", { method: "POST" })
+                    .catch(err => console.log("Stream stop call:", err));
+                
+                // Remove image source to stop displaying stream in UI
+                if (this.streamAbortController) {
+                    this.streamAbortController.abort();
+                    this.streamAbortController = null;
+                }
+                
                 this.imageElement.removeAttribute("src");
                 this.isStreaming = false;
                 this.imageElement.style.display = "none";

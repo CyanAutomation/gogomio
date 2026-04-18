@@ -201,15 +201,15 @@ func TestConfigTimeouts(t *testing.T) {
 		MockCamera:           false,
 	}
 
-	// Frame timeout should be ~2 frame intervals
+	// Frame timeout should be ~3 frame intervals
 	timeout := cfg.FrameTimeout()
 	if timeout <= 0 {
 		t.Errorf("FrameTimeout is %v, want positive duration", timeout)
 	}
 
-	// Should be roughly 1/24 * 2 = ~83ms at 24 FPS
+	// Should be roughly 1/24 * 3 = ~125ms at 24 FPS
 	frameIntervalMS := 1000.0 / float64(cfg.TargetFPS)
-	expected := time.Duration(int64(frameIntervalMS*2)) * time.Millisecond
+	expected := time.Duration(int64(frameIntervalMS*3)) * time.Millisecond
 	if timeout < expected-50*time.Millisecond || timeout > expected+50*time.Millisecond {
 		t.Logf("FrameTimeout is %v (expected ~%v)", timeout, expected)
 	}
