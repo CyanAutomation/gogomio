@@ -281,36 +281,68 @@ func TestMockCameraFrameIsValid(t *testing.T) {
 	}
 }
 
-// TestMockCameraFPSAdjustment tests frame rate under load
-func TestMockCameraFPSAdjustment(t *testing.T) {
-	mc := NewMockCamera()
+type fakeClock struct {
+	mu      sync.Mutex
+	current time.Time
+	sleeps  []time.Duration
+}
 
-	targetFPS := 30
+func newFakeClock(start time.Time) *fakeClock {
+	return &fakeClock{current: start}
+}
+
+func (fc *fakeClock) Now() time.Time {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	return fc.current
+}
+
+func (fc *fakeClock) Sleep(d time.Duration) {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	fc.sleeps = append(fc.sleeps, d)
+	fc.current = fc.current.Add(d)
+}
+
+func (fc *fakeClock) Sleeps() []time.Duration {
+	fc.mu.Lock()
+	defer fc.mu.Unlock()
+	out := make([]time.Duration, len(fc.sleeps))
+	copy(out, fc.sleeps)
+	return out
+}
+
+// TestMockCameraFPSAdjustment tests deterministic frame pacing logic.
+func TestMockCameraFPSAdjustment(t *testing.T) {
+	const targetFPS = 30
+	frameInterval := time.Second / targetFPS
+	start := time.Unix(1700000000, 0) // deterministic baseline
+	clock := newFakeClock(start)
+
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
 	err := mc.Start(640, 480, targetFPS, 90)
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 	defer func() { _ = mc.Stop() }()
 
-	// Capture frames and measure time
-	start := time.Now()
-	frameCount := 0
-	targetFrames := 30 // Capture for ~1 second at 30 FPS
-
-	for frameCount < targetFrames {
+	const captures = 5
+	for i := 0; i < captures; i++ {
 		_, err := mc.CaptureFrame()
 		if err != nil {
 			t.Fatalf("CaptureFrame failed: %v", err)
 		}
-		frameCount++
 	}
 
-	elapsed := time.Since(start)
-	actualFPS := float64(frameCount) / elapsed.Seconds()
+	sleeps := clock.Sleeps()
+	if len(sleeps) != captures {
+		t.Fatalf("expected %d sleep calls, got %d", captures, len(sleeps))
+	}
 
-	// Allow ±50% tolerance due to timing variations
-	expected := float64(targetFPS)
-	if actualFPS < expected*0.5 || actualFPS > expected*1.5 {
-		t.Logf("FPS is %v, expected ~%v (±50%% tolerance OK)", actualFPS, expected)
+	// With a controllable clock, each capture should pace by exactly one frame interval.
+	for i, slept := range sleeps {
+		if slept != frameInterval {
+			t.Fatalf("sleep %d = %v, expected %v", i, slept, frameInterval)
+		}
 	}
 }
