@@ -88,7 +88,9 @@ func (mc *MockCamera) CaptureFrame() ([]byte, error) {
 	mc.mu.RUnlock()
 
 	// Rate limit to fps
-	frameInterval := time.Duration(float64(time.Second) / float64(mc.fps))
+	// Rate limit to fps
+	fps := mc.fps
+	frameInterval := time.Duration(float64(time.Second) / float64(fps))
 	if elapsed := mc.now().Sub(lastFrameTime); elapsed < frameInterval {
 		mc.sleep(frameInterval - elapsed)
 	}
