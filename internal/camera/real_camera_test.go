@@ -273,7 +273,7 @@ func TestRealCameraStartFFmpegFallbackProbeFails(t *testing.T) {
 func TestRealCameraBuildFFmpegCommandIncludesInputNegotiation(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/video0"
-	rc.width, rc.height, rc.fps = 1280, 720, 30
+	rc.width, rc.height, rc.fps, rc.jpegQuality = 1280, 720, 30, 80
 
 	cmd := rc.buildFFmpegCommand()
 	args := strings.Join(cmd.Args, " ")
@@ -291,6 +291,41 @@ func TestRealCameraBuildFFmpegCommandIncludesInputNegotiation(t *testing.T) {
 	if strings.Contains(args, "-input_format mjpeg") {
 		t.Fatalf("should not use restrictive input_format for libcamera compatibility, args=%q", args)
 	}
+}
+
+func TestRealCameraBuildFFmpegCommandMapsJPEGQualityToQuantizer(t *testing.T) {
+	tests := []struct {
+		name            string
+		jpegQuality     int
+		wantQuantizerQV string
+	}{
+		{name: "low quality", jpegQuality: 1, wantQuantizerQV: "31"},
+		{name: "mid quality", jpegQuality: 50, wantQuantizerQV: "17"},
+		{name: "high quality", jpegQuality: 100, wantQuantizerQV: "2"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rc := NewRealCamera()
+			rc.devicePath = "/dev/video0"
+			rc.width, rc.height, rc.fps = 1280, 720, 30
+			rc.jpegQuality = tc.jpegQuality
+
+			cmd := rc.buildFFmpegCommand()
+			if got := findCommandArgValue(cmd.Args, "-q:v"); got != tc.wantQuantizerQV {
+				t.Fatalf("jpegQuality=%d => -q:v %q, want %q (args=%v)", tc.jpegQuality, got, tc.wantQuantizerQV, cmd.Args)
+			}
+		})
+	}
+}
+
+func findCommandArgValue(args []string, key string) string {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == key {
+			return args[i+1]
+		}
+	}
+	return ""
 }
 
 func TestMapFFmpegInputError(t *testing.T) {
