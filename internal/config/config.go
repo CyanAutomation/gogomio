@@ -117,14 +117,14 @@ func (c *Config) String() string {
 }
 
 // FrameTimeout returns the timeout for waiting on a frame from the camera.
-// Roughly 1.5x the frame interval to account for occasional delays.
+// 2x the frame interval to account for normal system timing variations.
 func (c *Config) FrameTimeout() time.Duration {
 	if c.TargetFPS <= 0 {
 		return 5 * time.Second // Default if no FPS set
 	}
 
 	frameIntervalMS := 1000.0 / float64(c.TargetFPS)
-	timeoutMS := frameIntervalMS * 1.5
+	timeoutMS := frameIntervalMS * 2.0
 
 	return time.Duration(int64(timeoutMS)) * time.Millisecond
 }
