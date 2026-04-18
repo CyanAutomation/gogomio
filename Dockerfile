@@ -33,6 +33,14 @@ RUN CGO_ENABLED=0 go build \
     ./cmd/gogomio
 
 # Stage 2: Runtime
+# Note on CSI Camera Support:
+# - For native Raspberry Pi CSI camera support, libcamera-apps with libcamera-vid binary is required
+# - libcamera-apps is specific to Raspberry Pi OS and not available in standard Debian repositories
+# - Current base: Debian Trixie (generic arm64 support)
+# - Alternative: Use Raspberry Pi OS base image for full libcamera support
+#   (requires removing multi-architecture support, build only for arm64)
+# - Workaround: FFmpeg V4L2 fallback (limited compatibility with libcamera devices)
+# - When libcamera-vid unavailable: Application gracefully falls back to mock camera with diagnostics
 FROM debian:trixie
 
 # Build arguments for runtime stage
@@ -48,13 +56,12 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio"
 
 # Update package lists and install runtime dependencies
-# libcamera-apps is specific to Raspberry Pi OS and not in standard Debian repos
-# When running on Raspberry Pi hardware, libcamera is passed through via device mapping
-# FFmpeg serves as a fallback for V4L2 devices
+# Attempts to install libcamera-apps for CSI camera support (not in standard Debian repos)
+# Falls back gracefully if unavailable; FFmpeg serves as V4L2 fallback
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates tzdata curl ffmpeg; \
-    apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || true; \
+    apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || echo "ℹ️  libcamera-apps not available in Debian repos; native CSI camera tools not installed"; \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with explicit umask
