@@ -274,7 +274,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 		default:
 		}
 
-		frame, seq := fm.frameBuffer.WaitFrame(frameTimeout, lastSeenSeq)
+		frame, seq := fm.frameBuffer.WaitFrameWithContext(ctx, frameTimeout, lastSeenSeq)
 
 		select {
 		case <-ctx.Done():

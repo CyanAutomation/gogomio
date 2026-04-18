@@ -1,6 +1,7 @@
 package camera
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
@@ -88,6 +89,12 @@ func (fb *FrameBuffer) CurrentSequence() uint64 {
 // WaitFrame waits for a frame newer than lastSeenSeq within timeout.
 // Returns (nil, lastSeenSeq) if timeout is exceeded.
 func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
+	return fb.WaitFrameWithContext(context.Background(), timeout, lastSeenSeq)
+}
+
+// WaitFrameWithContext waits for a frame newer than lastSeenSeq within timeout.
+// Returns (nil, lastSeenSeq) when context is canceled or timeout is exceeded.
+func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
 	fb.mu.Lock()
 
 	if fb.frameSeq > lastSeenSeq && fb.frame != nil {
@@ -119,6 +126,7 @@ func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]b
 		timedOut := false
 		select {
 		case <-notifyCh:
+		case <-ctx.Done():
 		case <-timer.C:
 			timedOut = true
 		}
@@ -130,6 +138,10 @@ func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]b
 		}
 
 		fb.mu.Lock()
+		if ctx.Err() != nil {
+			fb.mu.Unlock()
+			return nil, lastSeenSeq
+		}
 		if timedOut && fb.frameSeq <= lastSeenSeq {
 			fb.mu.Unlock()
 			return nil, lastSeenSeq
