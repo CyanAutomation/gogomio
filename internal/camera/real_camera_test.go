@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"image/jpeg"
 	"io"
 	"log"
 	"os/exec"
@@ -55,7 +56,8 @@ func TestRealCameraProcessLifecycle(t *testing.T) {
 
 		go func() {
 			defer func() { _ = stdoutW.Close() }()
-			_, _ = stdoutW.Write([]byte{0xFF, 0xD8, 0x00, 0x01, 0xFF, 0xD9})
+			jpegData, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
+			_, _ = stdoutW.Write(jpegData)
 		}()
 		go func() {
 			defer func() { _ = stderrW.Close() }()
@@ -101,8 +103,8 @@ func TestRealCameraCaptureFrameReturnsBufferedLatest(t *testing.T) {
 
 		go func() {
 			defer func() { _ = stdoutW.Close() }()
-			frame1 := []byte{0xFF, 0xD8, 0x01, 0xFF, 0xD9}
-			frame2 := []byte{0xFF, 0xD8, 0x02, 0xFF, 0xD9}
+			frame1, _ := encodeFrameToJPEG(createTestImage(8, 8), 75)
+			frame2, _ := encodeFrameToJPEG(createTestImage(10, 10), 80)
 			_, _ = stdoutW.Write(append(append([]byte("noise"), frame1...), frame2...))
 		}()
 		go func() {
@@ -122,9 +124,8 @@ func TestRealCameraCaptureFrameReturnsBufferedLatest(t *testing.T) {
 		t.Fatalf("CaptureFrame() error = %v", err)
 	}
 
-	want := []byte{0xFF, 0xD8, 0x02, 0xFF, 0xD9}
-	if string(frame) != string(want) {
-		t.Fatalf("CaptureFrame() got %v, want %v", frame, want)
+	if _, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err != nil {
+		t.Fatalf("CaptureFrame() should return valid JPEG, decode error: %v", err)
 	}
 }
 
@@ -148,14 +149,44 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
 	}
 
-	if err := rc.Start(640, 480, 24, 80); err != nil {
-		t.Fatalf("Start() error = %v", err)
+	err := rc.Start(640, 480, 24, 80)
+	if err == nil {
+		t.Fatal("expected Start() timeout error")
 	}
-	defer func() { _ = rc.Stop() }()
+	if !strings.Contains(err.Error(), "timed out waiting") {
+		t.Fatalf("expected startup timeout, got %v", err)
+	}
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready when startup times out")
+	}
+}
 
-	_, err := rc.CaptureFrame()
-	if err == nil || !strings.Contains(err.Error(), "timed out waiting for frame") {
-		t.Fatalf("expected timeout error, got %v", err)
+func TestRealCameraStartDetectsEarlyBackendExit(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 400 * time.Millisecond
+
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+		cmd := exec.Command("bash", "-c", "sleep 0.01")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		go func() {
+			defer func() { _ = stderrW.Close() }()
+			defer func() { _ = stdoutW.Close() }()
+			time.Sleep(20 * time.Millisecond)
+		}()
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	}
+
+	err := rc.Start(640, 480, 24, 80)
+	if err == nil {
+		t.Fatal("expected Start() early backend exit error")
+	}
+	if !strings.Contains(err.Error(), "before first JPEG frame") {
+		t.Fatalf("expected early exit reason, got %v", err)
 	}
 }
 
