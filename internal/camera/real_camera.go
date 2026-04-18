@@ -547,7 +547,7 @@ func (rc *RealCamera) readMJPEGStream() {
 	buf := make([]byte, readChunkSize)
 	readAttempts := 0
 	framesExtracted := 0
-	
+
 	for {
 		// Check if stopping before attempting read
 		if rc.isStopping.Load() {
@@ -570,7 +570,7 @@ func (rc *RealCamera) readMJPEGStream() {
 			if readAttempts <= 5 {
 				log.Printf("📹 Frame reader: read %d bytes (attempt %d)", n, readAttempts)
 			}
-			
+
 			rc.frameMutex.Lock()
 			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
 			if len(rc.readBuffer) > maxReadBufferSize {
