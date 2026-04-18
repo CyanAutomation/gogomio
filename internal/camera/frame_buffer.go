@@ -7,12 +7,19 @@ import (
 	"time"
 )
 
-// FrameBuffer is a thread-safe circular buffer for JPEG frames.
+// frameSnapshot captures an immutable frame payload and its publish sequence.
+//
+// The []byte payload must never be mutated after publication.
+type frameSnapshot struct {
+	data []byte
+	seq  uint64
+}
+
+// FrameBuffer is a thread-safe latest-frame store for JPEG frames.
 // It implements io.Writer interface for use with Picamera2-style encoders.
 type FrameBuffer struct {
 	mu                    sync.Mutex
-	frame                 []byte
-	frameSeq              uint64
+	snapshot              frameSnapshot
 	notifyCh              chan struct{}
 	stats                 *StreamStats
 	lastFrameMonotonic    int64
@@ -50,10 +57,14 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 		}
 	}
 
-	// Store frame and update timestamp
-	fb.frame = make([]byte, len(buf))
-	copy(fb.frame, buf)
-	fb.frameSeq++
+	// Clone once on publication to preserve immutability for all readers.
+	frameData := make([]byte, size)
+	copy(frameData, buf)
+
+	fb.snapshot = frameSnapshot{
+		data: frameData,
+		seq:  fb.snapshot.seq + 1,
+	}
 	fb.lastFrameMonotonic = now
 	fb.stats.RecordFrame(now)
 
@@ -64,18 +75,17 @@ func (fb *FrameBuffer) Write(buf []byte) (int, error) {
 	return size, nil
 }
 
-// GetFrame returns a copy of the current frame (for snapshot endpoints).
+// GetFrame returns a defensive copy of the current frame (for snapshot endpoints).
 func (fb *FrameBuffer) GetFrame() []byte {
 	fb.mu.Lock()
 	defer fb.mu.Unlock()
 
-	if fb.frame == nil {
+	if fb.snapshot.data == nil {
 		return nil
 	}
 
-	// Return a copy to prevent external modifications
-	frameCopy := make([]byte, len(fb.frame))
-	copy(frameCopy, fb.frame)
+	frameCopy := make([]byte, len(fb.snapshot.data))
+	copy(frameCopy, fb.snapshot.data)
 	return frameCopy
 }
 
@@ -83,25 +93,27 @@ func (fb *FrameBuffer) GetFrame() []byte {
 func (fb *FrameBuffer) CurrentSequence() uint64 {
 	fb.mu.Lock()
 	defer fb.mu.Unlock()
-	return fb.frameSeq
+	return fb.snapshot.seq
 }
 
 // WaitFrame waits for a frame newer than lastSeenSeq within timeout.
+//
+// Returned frame bytes are shared and MUST be treated as read-only.
 // Returns (nil, lastSeenSeq) if timeout is exceeded.
 func (fb *FrameBuffer) WaitFrame(timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
 	return fb.WaitFrameWithContext(context.Background(), timeout, lastSeenSeq)
 }
 
 // WaitFrameWithContext waits for a frame newer than lastSeenSeq within timeout.
+//
+// Returned frame bytes are shared and MUST be treated as read-only.
 // Returns (nil, lastSeenSeq) when context is canceled or timeout is exceeded.
 func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Duration, lastSeenSeq uint64) ([]byte, uint64) {
 	if timeout <= 0 {
 		fb.mu.Lock()
 		defer fb.mu.Unlock()
-		if fb.frameSeq > lastSeenSeq && fb.frame != nil {
-			frameCopy := make([]byte, len(fb.frame))
-			copy(frameCopy, fb.frame)
-			return frameCopy, fb.frameSeq
+		if fb.snapshot.seq > lastSeenSeq && fb.snapshot.data != nil {
+			return fb.snapshot.data, fb.snapshot.seq
 		}
 		return nil, lastSeenSeq
 	}
@@ -122,12 +134,11 @@ func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Du
 
 	for {
 		fb.mu.Lock()
-		if fb.frameSeq > lastSeenSeq && fb.frame != nil {
-			frameCopy := make([]byte, len(fb.frame))
-			copy(frameCopy, fb.frame)
-			seq := fb.frameSeq
+		if fb.snapshot.seq > lastSeenSeq && fb.snapshot.data != nil {
+			frame := fb.snapshot.data
+			seq := fb.snapshot.seq
 			fb.mu.Unlock()
-			return frameCopy, seq
+			return frame, seq
 		}
 		notifyCh := fb.notifyCh
 		fb.mu.Unlock()
