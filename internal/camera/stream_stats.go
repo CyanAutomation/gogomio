@@ -13,6 +13,8 @@ type StreamStats struct {
 	lastFrameTimestamp *int64 // Unix nanoseconds, nil if no frames yet
 	frameTimestamps    *ring.Ring
 	maxFramesInWindow  int
+	cachedFPS          float64
+	fpsStale           bool // flag to indicate cached FPS needs recalculation
 }
 
 // NewStreamStats creates a new StreamStats tracker.
@@ -22,6 +24,7 @@ func NewStreamStats() *StreamStats {
 	return &StreamStats{
 		frameTimestamps:   ring.New(ringSize),
 		maxFramesInWindow: ringSize,
+		fpsStale:          true, // Start with stale cache to force initial calculation
 	}
 }
 
@@ -37,14 +40,17 @@ func (s *StreamStats) RecordFrame(timestamp int64) {
 	// Add to rolling window
 	s.frameTimestamps.Value = timestamp
 	s.frameTimestamps = s.frameTimestamps.Next()
+
+	// Mark FPS cache as stale; will be recalculated on next Snapshot()
+	s.fpsStale = true
 }
 
 // Snapshot returns a consistent view of frame count, last timestamp, and calculated FPS.
 // Returns (frameCount, lastTimestampPtr, fps).
 // lastTimestampPtr is nil if no frames have been recorded.
 func (s *StreamStats) Snapshot() (int64, *int64, float64) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	frameCount := s.frameCount
 
@@ -55,8 +61,13 @@ func (s *StreamStats) Snapshot() (int64, *int64, float64) {
 		lastTimestamp = &copied
 	}
 
-	// Calculate FPS from rolling window
-	fps := s.calculateFPS()
+	// Calculate FPS: use cached value if available, otherwise recalculate
+	fps := s.cachedFPS
+	if s.fpsStale {
+		fps = s.calculateFPS()
+		s.cachedFPS = fps
+		s.fpsStale = false
+	}
 
 	return frameCount, lastTimestamp, fps
 }

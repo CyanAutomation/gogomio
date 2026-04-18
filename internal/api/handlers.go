@@ -34,11 +34,22 @@ type FrameManager struct {
 	doneChan    chan struct{}
 	stopChancel chan struct{} // Channel to cancel pending stop
 
+	// Cleanup infrastructure for idle timeout
+	cleanupCh   chan cleanupRequest
+	cleanupDone chan struct{}
+
 	idleStopDelay time.Duration
 	captureStarts int64
 
 	consecutiveCaptureFailures int64
 	captureFailureTotal        int64
+}
+
+// cleanupRequest represents a pending cleanup task
+type cleanupRequest struct {
+	delay    time.Duration
+	stopCh   chan struct{}
+	done     chan struct{}
 }
 
 const defaultIdleStopDelay = 3 * time.Second
@@ -79,9 +90,14 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		settingsM:     settings.NewManager("/tmp/gogomio/settings.json"),
 		doneChan:      make(chan struct{}),
 		stopChancel:   make(chan struct{}),
+		cleanupCh:     make(chan cleanupRequest, 8),
+		cleanupDone:   make(chan struct{}),
 		clientCount:   0,
 		idleStopDelay: idleStopDelay,
 	}
+
+	// Start background cleanup goroutine
+	go fm.cleanupLoop()
 
 	// Capture loop starts lazily when first client connects
 	return fm
@@ -104,29 +120,19 @@ func (fm *FrameManager) IncrementClients() {
 
 // DecrementClients decrements the client count and stops capture if this is the last client.
 func (fm *FrameManager) DecrementClients() {
-	for attempts := 0; attempts < 100; attempts++ {
-		current := atomic.LoadInt64(&fm.clientCount)
-		if current <= 0 {
-			if atomic.CompareAndSwapInt64(&fm.clientCount, current, 0) {
-				imbalanceCount := atomic.AddInt64(&fm.clientImbalance, 1)
-				log.Printf("frame manager client count imbalance detected: decrement at count=%d, clamped to 0 (total imbalances=%d)", current, imbalanceCount)
-				return
-			}
-			continue
-		}
-
-		if atomic.CompareAndSwapInt64(&fm.clientCount, current, current-1) {
-			newCount := current - 1
-			log.Printf("🔗 Client count decremented to: %d", newCount)
-			if newCount == 0 {
-				log.Printf("🛑 Last client disconnected, scheduling capture stop")
-				fm.scheduleStopCapture()
-			}
-			return
-		}
+	newCount := atomic.AddInt64(&fm.clientCount, -1)
+	if newCount < 0 {
+		// Imbalance: tried to decrement below zero, clamp to zero
+		atomic.StoreInt64(&fm.clientCount, 0)
+		imbalanceCount := atomic.AddInt64(&fm.clientImbalance, 1)
+		log.Printf("frame manager client count imbalance detected: decrement at count < 0, clamped to 0 (total imbalances=%d)", imbalanceCount)
+		return
 	}
-	// Fallback: force clamp to 0 after max attempts
-	atomic.StoreInt64(&fm.clientCount, 0)
+	log.Printf("🔗 Client count decremented to: %d", newCount)
+	if newCount == 0 {
+		log.Printf("🛑 Last client disconnected, scheduling capture stop")
+		fm.scheduleStopCapture()
+	}
 }
 
 // startCapture starts the capture loop if not already running.
@@ -158,38 +164,67 @@ func (fm *FrameManager) scheduleStopCapture() {
 		delay = defaultIdleStopDelay
 	}
 
-	// Get current stopChancel and done to check against in the goroutine
+	// Get current stopChancel and done to check against in the cleanup loop
 	stopChancel := fm.stopChancel
 	done := fm.doneChan
 	fm.captureMu.Unlock()
 
 	log.Printf("⏳ Scheduling capture stop in %v (will stop if no new clients connect)", delay)
 
-	// Spawn a goroutine that will signal stop after the idle delay
-	// unless the stopChancel is replaced (indicating a new client connected)
-	go func() {
+	// Send stop request to cleanup goroutine instead of spawning new goroutine
+	req := cleanupRequest{
+		delay:  delay,
+		stopCh: stopChancel,
+		done:   done,
+	}
+
+	select {
+	case fm.cleanupCh <- req:
+		// Request queued successfully
+	default:
+		// Cleanup channel full, log and skip (shouldn't happen in normal operation)
+		log.Printf("⚠️  Cleanup channel full, stop request dropped")
+	}
+}
+
+// cleanupLoop runs in a background goroutine and handles deferred capture stops
+func (fm *FrameManager) cleanupLoop() {
+	defer func() {
+		log.Printf("📊 Cleanup loop EXIT")
+		close(fm.cleanupDone)
+	}()
+
+	log.Printf("📊 Cleanup loop STARTED")
+
+	for {
 		select {
-		case <-time.After(delay):
-			// Delay expired, proceed with stopping
-			fm.captureMu.Lock()
-			// Verify that the done channel is still the same and capture is still running
-			if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 || fm.doneChan != done {
-				fm.captureMu.Unlock()
-				log.Printf("📊 Stop cancelled: capture already restarted or new client connected")
+		case req, ok := <-fm.cleanupCh:
+			if !ok {
+				// Channel closed, exit
 				return
 			}
-			// Still no clients, close capture
-			fm.captureStarted = false
-			fm.captureMu.Unlock()
-			log.Printf("🛑 Stopping capture (idle timeout expired)")
-			// Safe to close because this goroutine owns this done channel
-			close(done)
-		case <-stopChancel:
-			// Stop was cancelled (new client connected)
-			log.Printf("📊 Stop cancelled: new client connected")
-			return
+
+			select {
+			case <-time.After(req.delay):
+				// Delay expired, proceed with stopping if conditions still met
+				fm.captureMu.Lock()
+				if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 || fm.doneChan != req.done {
+					fm.captureMu.Unlock()
+					log.Printf("📊 Stop cancelled: capture already restarted or new client connected")
+					continue
+				}
+				// Still no clients, close capture
+				fm.captureStarted = false
+				fm.captureMu.Unlock()
+				log.Printf("🛑 Stopping capture (idle timeout expired)")
+				close(req.done)
+
+			case <-req.stopCh:
+				// Stop was cancelled (new client connected)
+				log.Printf("📊 Stop cancelled: new client connected")
+			}
 		}
-	}()
+	}
 }
 
 // stopCapture stops the capture loop if currently running.
@@ -278,9 +313,18 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 	return consecutive, total, consecutive >= captureFailureDegradedThreshold
 }
 
-// Stop stops the frame capture loop.
+// Stop stops the frame capture loop and cleanup infrastructure.
 func (fm *FrameManager) Stop() {
 	fm.stopCapture()
+	// Close cleanup channel to signal cleanup loop to exit
+	close(fm.cleanupCh)
+	// Wait for cleanup loop to exit with timeout
+	select {
+	case <-fm.cleanupDone:
+		log.Printf("✓ Cleanup loop exited cleanly")
+	case <-time.After(2 * time.Second):
+		log.Printf("⚠️  Timeout waiting for cleanup loop to exit")
+	}
 }
 
 // GetFrame returns a copy of the current frame for snapshot endpoints.
