@@ -347,13 +347,55 @@ func TestCORSHeaders(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
 
-	req, _ := http.NewRequest("GET", "/api/config", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	t.Run("preflight request includes expected CORS headers", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodOptions, "/api/config", nil)
+		req.Header.Set("Origin", "https://example.com")
+		req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+		w := httptest.NewRecorder()
 
-	// Check CORS headers (if middleware is active)
-	_ = w.Header().Get("Access-Control-Allow-Origin")
-	// For MVP, CORS may not be required
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("expected status %d, got %d", http.StatusNoContent, w.Code)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+			t.Errorf("expected Access-Control-Allow-Origin %q, got %q", "*", got)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Methods"); got != "GET, POST, PUT, OPTIONS" {
+			t.Errorf("expected Access-Control-Allow-Methods %q, got %q", "GET, POST, PUT, OPTIONS", got)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Headers"); got != "Content-Type" {
+			t.Errorf("expected Access-Control-Allow-Headers %q, got %q", "Content-Type", got)
+		}
+	})
+
+	t.Run("normal request includes expected CORS headers", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+		req.Header.Set("Origin", "https://example.com")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
+		}
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+			t.Errorf("expected Access-Control-Allow-Origin %q, got %q", "*", got)
+		}
+	})
+
+	t.Run("preflight with disallowed method is rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodOptions, "/api/config", nil)
+		req.Header.Set("Origin", "https://example.com")
+		req.Header.Set("Access-Control-Request-Method", http.MethodDelete)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+		}
+	})
 }
 
 // TestConnectionLimitNotification tests connection limiting feedback
