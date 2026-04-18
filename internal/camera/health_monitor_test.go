@@ -48,9 +48,6 @@ func TestHealthMonitorFrameProgressDetection(t *testing.T) {
 		if stallDuration > 100*time.Millisecond {
 			stallDetected = true
 		}
-	} else {
-		lastSeq = currentSeq
-		lastTime = time.Now()
 	}
 
 	if currentSeq == 0 {
@@ -185,11 +182,7 @@ func BenchmarkHealthMonitorFrameProgressCheck(b *testing.B) {
 		var frameSeq uint64
 		atomic.StoreUint64(&frameSeq, uint64(i))
 
-		lastSeq := uint64(i - 1)
-		if frameSeq != lastSeq {
-			// Progress detected
-			lastSeq = frameSeq
-		}
+		_ = uint64(i - 1)
 	}
 }
 
