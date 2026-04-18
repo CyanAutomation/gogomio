@@ -224,13 +224,26 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 
 	retryDelay := initialCaptureRetryDelay
 	captureCount := 0
+	
+	// Calculate minimal frame throttle to prevent tight spinning
+	frameInterval := time.Second / time.Duration(fm.cfg.TargetFPS)
+	if frameInterval <= 0 {
+		frameInterval = time.Second / time.Duration(fm.cfg.FPS)
+	}
+	if frameInterval < 10*time.Millisecond {
+		frameInterval = 10 * time.Millisecond
+	}
+	ticker := time.NewTicker(frameInterval)
+	defer ticker.Stop()
+	log.Printf("🎬 Capture loop: throttle %v (target %d FPS)", frameInterval, fm.cfg.TargetFPS)
 
 	for {
 		select {
 		case <-done:
 			log.Printf("🎬 Capture loop: done signal received, exiting (captured %d frames)", captureCount)
 			return
-		default:
+		case <-ticker.C:
+			// Throttle to target FPS - proceed to capture next frame
 		}
 
 		// CaptureFrame blocks until a newer frame sequence is published (or timeout/error),
