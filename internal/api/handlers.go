@@ -47,9 +47,9 @@ type FrameManager struct {
 
 // cleanupRequest represents a pending cleanup task
 type cleanupRequest struct {
-	delay    time.Duration
-	stopCh   chan struct{}
-	done     chan struct{}
+	delay  time.Duration
+	stopCh chan struct{}
+	done   chan struct{}
 }
 
 const defaultIdleStopDelay = 3 * time.Second
