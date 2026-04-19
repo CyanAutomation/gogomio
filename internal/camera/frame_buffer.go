@@ -29,6 +29,10 @@ type FrameBuffer struct {
 // NewFrameBuffer creates a new FrameBuffer.
 // targetFPS <= 0 means no throttling.
 func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
+	if stats == nil {
+		stats = NewStreamStats()
+	}
+
 	fb := &FrameBuffer{
 		notifyCh: make(chan struct{}),
 		stats:    stats,
@@ -75,7 +79,9 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) (int, error) {
 		seq:  fb.snapshot.seq + 1,
 	}
 	fb.lastFrameMonotonic = now
-	fb.stats.RecordFrame(now)
+	if fb.stats != nil {
+		fb.stats.RecordFrame(now)
+	}
 
 	// Signal all waiting readers with a fresh publish channel.
 	close(fb.notifyCh)
