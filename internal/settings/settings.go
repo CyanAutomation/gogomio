@@ -38,6 +38,12 @@ func NewManager(filepath string) *Manager {
 
 // Set stores a key-value pair in memory and persists to file.
 func (m *Manager) Set(key string, value interface{}) error {
+	return m.SetMany(map[string]interface{}{key: value})
+}
+
+// SetMany stores multiple key-value pairs and persists them as a single atomic batch.
+// In-memory data is only updated after a successful persist.
+func (m *Manager) SetMany(values map[string]interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -45,8 +51,20 @@ func (m *Manager) Set(key string, value interface{}) error {
 		m.data = make(map[string]interface{})
 	}
 
-	m.data[key] = value
-	return m.persist()
+	updated := make(map[string]interface{}, len(m.data)+len(values))
+	for key, value := range m.data {
+		updated[key] = value
+	}
+	for key, value := range values {
+		updated[key] = value
+	}
+
+	if err := m.persistData(updated); err != nil {
+		return fmt.Errorf("batch persist failed: %w", err)
+	}
+
+	m.data = updated
+	return nil
 }
 
 // Get retrieves a value by key. Returns nil if key doesn't exist.
@@ -129,6 +147,11 @@ func (m *Manager) Clear() error {
 
 // persist writes current settings to disk atomically with backup.
 func (m *Manager) persist() error {
+	return m.persistData(m.data)
+}
+
+// persistData writes the provided settings map to disk atomically with backup.
+func (m *Manager) persistData(settings map[string]interface{}) error {
 	// Create directory if needed
 	dir := filepath.Dir(m.filePath)
 	if dir != "" && dir != "." {
@@ -139,7 +162,7 @@ func (m *Manager) persist() error {
 	}
 
 	// Marshal to JSON
-	data, err := json.MarshalIndent(m.data, "", "  ")
+	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		log.Printf("❌ Settings: failed to marshal settings: %v", err)
 		return fmt.Errorf("failed to marshal settings: %w", err)
@@ -168,7 +191,7 @@ func (m *Manager) persist() error {
 		return fmt.Errorf("failed to rename settings file: %w", err)
 	}
 
-	log.Printf("✓ Settings: persisted %d settings", len(m.data))
+	log.Printf("✓ Settings: persisted %d settings", len(settings))
 	return nil
 }
 
