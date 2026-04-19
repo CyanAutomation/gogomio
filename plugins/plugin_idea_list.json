@@ -23,6 +23,49 @@
       "comments": "Excellent first-party plugin candidate. Strong fit for hobbyist monitoring, local-first use, and single-container Raspberry Pi deployment. Although marked as core, this is a very good plugin-shaped capability."
     },
     {
+
+      "id": "snapshot-on-event",
+
+      "name": "Snapshot on Event",
+
+      "category": "core",
+
+      "type": "output",
+
+      "priority": 1,
+
+      "description": "Captures a high-quality still image whenever an event occurs.",
+
+      "value": "Often more useful than full video clips for quick inspection.",
+
+      "complexity": "low",
+
+      "score": 92,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 5,
+
+        "first_run_clarity": 5,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "must-have plugin",
+
+      "comments": "Extremely practical and lightweight. Strong complement to event recording."
+
+    },
+    {
       "id": "timelapse",
       "name": "Timelapse Generator",
       "category": "creative",
@@ -43,6 +86,49 @@
       },
       "verdict": "top-tier plugin",
       "comments": "One of the best first-party plugin ideas in the whole set. Great fit for makers, 3D printing, workshop monitoring, and creative hobby usage."
+    },
+    {
+
+      "id": "retention-policy",
+
+      "name": "Retention Policy Manager",
+
+      "category": "ecosystem",
+
+      "type": "storage-manager",
+
+      "priority": 1,
+
+      "description": "Automatically deletes old clips, snapshots, or timelapses based on age or storage limits.",
+
+      "value": "Prevents storage from filling up and keeps the system stable over time.",
+
+      "complexity": "low",
+
+      "score": 91,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 5,
+
+        "first_run_clarity": 5,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "Extremely practical and essential for real-world usage. Strong local-first alignment and very easy for users to understand."
+
     },
     {
       "id": "record-on-event",
@@ -67,6 +153,221 @@
       "comments": "Excellent fit for your audience and product shape. Highly practical, resource-aware, and aligned with local-first monitoring use cases."
     },
     {
+
+      "id": "mqtt-publisher",
+
+      "name": "MQTT Publisher",
+
+      "category": "ecosystem",
+
+      "type": "integration",
+
+      "priority": 1,
+
+      "description": "Publishes events to an MQTT broker for home automation systems.",
+
+      "value": "Enables integration with Home Assistant and other automation platforms.",
+
+      "complexity": "medium",
+
+      "score": 90,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 4,
+
+        "first_run_clarity": 3,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 4
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "One of the strongest ecosystem integrations for your audience. Perfect for tinkerers and home automation setups."
+
+    },
+    {
+
+      "id": "snapshot-capture",
+
+      "name": "Snapshot Capture",
+
+      "category": "core",
+
+      "type": "output",
+
+      "priority": 1,
+
+      "description": "Captures still images on interval, manual trigger, or event.",
+
+      "value": "Simple and versatile capture method for many use cases.",
+
+      "complexity": "low",
+
+      "score": 90,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 5,
+
+        "first_run_clarity": 5,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "Highly flexible and useful across all scenarios including pets, printers, and workshops."
+
+    },
+    {
+
+      "id": "disk-space-guard",
+
+      "name": "Disk Space Guard",
+
+      "category": "ecosystem",
+
+      "type": "system-monitor",
+
+      "priority": 1,
+
+      "description": "Monitors disk usage and warns or pauses recording when storage becomes critically low.",
+
+      "value": "Prevents crashes and data loss due to full storage.",
+
+      "complexity": "low",
+
+      "score": 89,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 5,
+
+        "first_run_clarity": 4,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "Highly practical safeguard. Complements recording plugins and prevents common real-world failure scenarios."
+
+    },
+    {
+
+      "id": "pir-assist",
+
+      "name": "PIR Assist",
+
+      "category": "ecosystem",
+
+      "type": "integration",
+
+      "priority": 2,
+
+      "description": "Combines GPIO PIR sensor input with motion detection to reduce false positives.",
+
+      "value": "Improves detection accuracy using physical sensors.",
+
+      "complexity": "medium",
+
+      "score": 89,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 4,
+
+        "first_run_clarity": 3,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "Excellent maker-focused plugin. Strong real-world accuracy improvements using cheap hardware."
+
+    },
+    {
+
+      "id": "smb-export",
+
+      "name": "SMB / NAS Export",
+
+      "category": "ecosystem",
+
+      "type": "integration",
+
+      "priority": 1,
+
+      "description": "Saves recordings and snapshots to a local network share.",
+
+      "value": "Provides local storage expansion without cloud dependency.",
+
+      "complexity": "medium",
+
+      "score": 88,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 4,
+
+        "reliability_on_pi4_single_container": 4,
+
+        "first_run_clarity": 3,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 4
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "Strong alternative to cloud storage. Keeps the system aligned with local-first principles."
+
+    },
+    {
       "id": "metrics-dashboard",
       "name": "Metrics Dashboard",
       "category": "power-user",
@@ -87,6 +388,92 @@
       },
       "verdict": "top-tier plugin",
       "comments": "Excellent fit for tinkerers, makers, and developers. Strong observability value with very good plugin boundaries and low trust risk."
+    },
+    {
+
+      "id": "event-timeline",
+
+      "name": "Event Timeline",
+
+      "category": "power-user",
+
+      "type": "ui-panel",
+
+      "priority": 1,
+
+      "description": "Displays a chronological timeline of detected events with thumbnails and playback.",
+
+      "value": "Makes reviewing footage intuitive and efficient.",
+
+      "complexity": "medium",
+
+      "score": 88,
+
+      "scoring": {
+
+        "practical_user_value": 5,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 4,
+
+        "reliability_on_pi4_single_container": 4,
+
+        "first_run_clarity": 4,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "top-tier plugin",
+
+      "comments": "Transforms raw detections into usable insight. Strong UX improvement for all users."
+
+    },
+    {
+
+      "id": "thermal-watchdog",
+
+      "name": "Thermal Watchdog",
+
+      "category": "power-user",
+
+      "type": "system-monitor",
+
+      "priority": 2,
+
+      "description": "Monitors Raspberry Pi temperature and warns about thermal throttling.",
+
+      "value": "Helps maintain system performance and reliability.",
+
+      "complexity": "low",
+
+      "score": 87,
+
+      "scoring": {
+
+        "practical_user_value": 4,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 5,
+
+        "first_run_clarity": 4,
+
+        "maintenance_burden": 5,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "excellent plugin",
+
+      "comments": "Highly relevant for Raspberry Pi users. Very low risk and strong practical benefit."
+
     },
     {
       "id": "gpio-trigger",
@@ -131,6 +518,49 @@
       },
       "verdict": "excellent plugin",
       "comments": "One of the strongest integration plugins in the list. Very extensible and works well for local automations, LAN tooling, and advanced hobbyist setups."
+    },
+    {
+
+      "id": "plugin-health",
+
+      "name": "Plugin Health Panel",
+
+      "category": "power-user",
+
+      "type": "ui-panel",
+
+      "priority": 2,
+
+      "description": "Displays status and health of all enabled plugins.",
+
+      "value": "Improves visibility and debugging of plugin system.",
+
+      "complexity": "medium",
+
+      "score": 85,
+
+      "scoring": {
+
+        "practical_user_value": 4,
+
+        "local_first_fit": 5,
+
+        "plugin_separability": 5,
+
+        "reliability_on_pi4_single_container": 4,
+
+        "first_run_clarity": 4,
+
+        "maintenance_burden": 4,
+
+        "safety_trustworthiness": 5
+
+      },
+
+      "verdict": "strong plugin",
+
+      "comments": "Very useful once plugin ecosystem grows. Enhances transparency and trust."
+
     },
     {
       "id": "motion-advanced",
