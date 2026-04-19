@@ -674,47 +674,6 @@
 
                 <div id="message" class="message"></div>
 
-                <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-xl);">
-                    <h3 style="margin: 0 0 var(--spacing-lg) 0; font-size: var(--font-size-lg); color: var(--color-text); display: flex; align-items: center; gap: var(--spacing-md);">
-                        🎨 Video Settings
-                    </h3>
-
-                    <div class="form-group">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                            <label for="brightness">Brightness</label>
-                            <span class="range-value"><span id="brightness-value">100</span>%</span>
-                        </div>
-                        <input type="range" id="brightness" min="0" max="200" value="100" step="1">
-                    </div>
-
-                    <div class="form-group">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                            <label for="contrast">Contrast</label>
-                            <span class="range-value"><span id="contrast-value">100</span>%</span>
-                        </div>
-                        <input type="range" id="contrast" min="0" max="200" value="100" step="1">
-                    </div>
-
-                    <div class="form-group">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                            <label for="saturation">Saturation</label>
-                            <span class="range-value"><span id="saturation-value">100</span>%</span>
-                        </div>
-                        <input type="range" id="saturation" min="0" max="200" value="100" step="1">
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button class="btn-primary" id="save-settings">
-                        <span>💾</span>
-                        <span>Save Settings</span>
-                    </button>
-                    <button class="btn-secondary" id="reset-settings">
-                        <span>🔄</span>
-                        <span>Reset</span>
-                    </button>
-                </div>
-
                 <button class="btn-secondary" id="diagnostics-btn" onclick="openDiagnosticsModal()">📊 Diagnostics</button>
 
                 <div class="stats">
@@ -813,7 +772,6 @@
                 this.initializeStream();
                 this.attachEventListeners();
                 this.loadStats();
-                this.loadSettings();
             }
 
             getPoseForState(state) {
@@ -912,18 +870,8 @@
             }
 
             attachEventListeners() {
-                document.getElementById("save-settings").addEventListener("click", () => this.saveSettings());
-                document.getElementById("reset-settings").addEventListener("click", () => this.resetSettings());
                 this.startButton.addEventListener("click", () => this.startStream());
                 this.stopButton.addEventListener("click", () => this.stopStream());
-
-                // Update range display values
-                ["brightness", "contrast", "saturation"].forEach(id => {
-                    const input = document.getElementById(id);
-                    input.addEventListener("input", (e) => {
-                        document.getElementById(id + "-value").textContent = e.target.value;
-                    });
-                });
             }
 
             startStream() {
@@ -993,65 +941,6 @@
                 if (this.statsInterval === null) return;
                 clearInterval(this.statsInterval);
                 this.statsInterval = null;
-            }
-
-            async loadSettings() {
-                try {
-                    const response = await fetch("/api/settings");
-                    if (!response.ok) throw new Error("Failed to load settings");
-
-                    const settings = await response.json();
-                    if (settings.brightness !== undefined) {
-                        document.getElementById("brightness").value = settings.brightness;
-                        document.getElementById("brightness-value").textContent = settings.brightness;
-                    }
-                    if (settings.contrast !== undefined) {
-                        document.getElementById("contrast").value = settings.contrast;
-                        document.getElementById("contrast-value").textContent = settings.contrast;
-                    }
-                    if (settings.saturation !== undefined) {
-                        document.getElementById("saturation").value = settings.saturation;
-                        document.getElementById("saturation-value").textContent = settings.saturation;
-                    }
-                } catch (error) {
-                    console.log("No saved settings found");
-                }
-            }
-
-            async saveSettings() {
-                const settings = {
-                    brightness: parseInt(document.getElementById("brightness").value),
-                    contrast: parseInt(document.getElementById("contrast").value),
-                    saturation: parseInt(document.getElementById("saturation").value)
-                };
-
-                try {
-                    const response = await fetch("/api/settings", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(settings)
-                    });
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Server error: ${response.status}. ${errorText}`);
-                    }
-
-                    this.showMessage("✅ Settings saved successfully!", "success");
-                } catch (error) {
-                    console.error("Save settings error:", error);
-                    this.showMessage(`⚠️ Failed to save settings: ${error.message}`, "error");
-                }
-            }
-
-            resetSettings() {
-                document.getElementById("brightness").value = 100;
-                document.getElementById("brightness-value").textContent = "100";
-                document.getElementById("contrast").value = 100;
-                document.getElementById("contrast-value").textContent = "100";
-                document.getElementById("saturation").value = 100;
-                document.getElementById("saturation-value").textContent = "100";
-                this.showMessage("✅ Settings reset to defaults", "success");
             }
 
             async loadStats() {
