@@ -1,6 +1,29 @@
 # Motion In Ocean - Go Edition 🌊
 
+[![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-blue)](https://golang.org)
+[![Tests](https://img.shields.io/badge/tests-51%2B-green)](./docs/)
+[![Docker](https://img.shields.io/badge/Docker-multi--arch-blue)](./Dockerfile)
+[![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](./LICENSE)
+
 A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-performance, production-ready implementation of the Motion In Ocean project, focusing on the **client camera streaming mode**.
+
+## Table of Contents
+
+- [Features](#features)
+- [Getting Started](#getting-started)
+- [CLI Usage](#cli-usage)
+- [API Endpoints](#api-endpoints)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Development](#development)
+- [Performance](#performance)
+- [Troubleshooting](#troubleshooting)
+- [Integration Examples](#integration-examples)
+- [Contributing](#contributing)
+- [Security](#security)
+- [Community](#community)
+- [License](#license)
+- [Roadmap](#roadmap)
 
 ## Features
 
@@ -25,7 +48,7 @@ A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-p
 - Advanced settings persistence  
 - Performance profiling for different Pi models
 
-## Quick Start
+## Getting Started
 
 ### Development (Mock Camera - No Hardware)
 
@@ -86,6 +109,99 @@ docker-compose logs gogomio | grep camera-check
 # - Snapshot: http://YOUR_PI_IP:8000/snapshot.jpg
 # - Status: http://YOUR_PI_IP:8000/api/config
 ```
+
+## CLI Usage
+
+GoGoMio supports a **two-mode binary**: serve HTTP or execute CLI commands.
+
+### Server Mode (Default)
+```bash
+./gogomio                    # Start HTTP server
+./gogomio server             # Explicit server mode
+MOCK_CAMERA=true ./gogomio   # Development mode
+```
+
+### CLI Mode
+Query a running server with CLI commands:
+
+```bash
+# Status and diagnostics
+./gogomio status                           # Show streaming status
+./gogomio diagnostics                      # System info
+./gogomio health check                     # Quick health check
+./gogomio version                          # Version info
+
+# Configuration
+./gogomio config                           # Show all config
+./gogomio config get fps                   # Get specific value
+./gogomio config get resolution
+
+# Stream management
+./gogomio stream info                      # Metrics
+./gogomio stream stop                      # Stop streams
+
+# Snapshots
+./gogomio snapshot save /tmp/frame.jpg     # Capture and save
+./gogomio snapshot capture                 # Output to stdout
+```
+
+### Docker Compose CLI Usage
+```bash
+docker-compose up -d                       # Start server
+docker-compose exec gogomio gogomio status # Run CLI command
+docker-compose exec gogomio gogomio config get fps
+docker-compose exec gogomio gogomio health check
+```
+
+For complete CLI documentation, see [CLI Guide](docs/CLI_GUIDE.md).
+
+## API Endpoints
+
+### Streaming
+
+- **GET `/stream.mjpg`** - Live MJPEG video stream
+  - `Content-Type: multipart/x-mixed-replace`
+  - Respects max connection limit (returns 429 if exceeded)
+  - Example: `vlc http://localhost:8000/stream.mjpg`
+
+- **GET `/snapshot.jpg`** - Current JPEG frame
+  - `Content-Type: image/jpeg`
+  - Returns 503 if camera not ready
+
+### API
+
+- **GET `/api/config`** - Server configuration and stats
+
+  ```json
+  {
+    "resolution": [640, 480],
+    "fps": 24,
+    "target_fps": 24,
+    "jpeg_quality": 90,
+    "max_stream_connections": 10,
+    "current_stream_connections": 2,
+    "frames_captured": 12345,
+    "current_fps": 23.8,
+    "last_frame_age_seconds": 0.042
+  }
+  ```
+
+- **GET `/api/status`** - Server health and uptime
+
+  ```json
+  {
+    "status": "ok",
+    "camera_ready": true,
+    "uptime_seconds": 3600,
+    "stream_connections": 2,
+    "fps": 23.8
+  }
+  ```
+
+### Health Checks
+
+- **GET `/health`** - Liveness probe (always 200 OK if running)
+- **GET `/ready`** - Readiness probe (200 if camera ready, 503 if initializing)
 
 ## Architecture
 
@@ -176,54 +292,6 @@ export MIO_RESOLUTION=640x360
 export MIO_FPS=15
 export MIO_JPEG_QUALITY=45
 ```
-
-## API Endpoints
-
-### Streaming
-
-- **GET `/stream.mjpg`** - Live MJPEG video stream
-  - `Content-Type: multipart/x-mixed-replace`
-  - Respects max connection limit (returns 429 if exceeded)
-  - Example: `vlc http://localhost:8000/stream.mjpg`
-
-- **GET `/snapshot.jpg`** - Current JPEG frame
-  - `Content-Type: image/jpeg`
-  - Returns 503 if camera not ready
-
-### API
-
-- **GET `/api/config`** - Server configuration and stats
-
-  ```json
-  {
-    "resolution": [640, 480],
-    "fps": 24,
-    "target_fps": 24,
-    "jpeg_quality": 90,
-    "max_stream_connections": 10,
-    "current_stream_connections": 2,
-    "frames_captured": 12345,
-    "current_fps": 23.8,
-    "last_frame_age_seconds": 0.042
-  }
-  ```
-
-- **GET `/api/status`** - Server health and uptime
-
-  ```json
-  {
-    "status": "ok",
-    "camera_ready": true,
-    "uptime_seconds": 3600,
-    "stream_connections": 2,
-    "fps": 23.8
-  }
-  ```
-
-### Health Checks
-
-- **GET `/health`** - Liveness probe (always 200 OK if running)
-- **GET `/ready`** - Readiness probe (200 if camera ready, 503 if initializing)
 
 ## Development
 
@@ -382,10 +450,41 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 ## Contributing
 
-Contributions welcome! See issues and project roadmap.
+Contributions are welcome! We follow a standard pull request workflow:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Write tests for your changes
+4. Ensure all tests pass (`go test ./... -v -race`)
+5. Commit and push your changes
+6. Open a pull request
+
+Please ensure code includes:
+- Unit tests with race condition detection
+- Updated documentation
+- Descriptive commit messages
+
+For larger changes, open an issue first to discuss your approach.
+
+## Security
+
+If you discover a security vulnerability, please email [security@cyanautomation.com](mailto:security@cyanautomation.com) instead of using the public issue tracker. We take security seriously and will respond promptly.
+
+## Community
+
+Join us in building better camera streaming for Raspberry Pi!
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/CyanAutomation/gogomio/issues)
+- **GitHub Discussions**: [Ask questions or share ideas](https://github.com/CyanAutomation/gogomio/discussions)
+- **Main Repository**: [CyanAutomation/gogomio](https://github.com/CyanAutomation/gogomio)
+
+Contributions and feedback are appreciated!
+
+## License
+
+This project is licensed under the [BSD 3-Clause License](./LICENSE). See the LICENSE file for details.
 
 ---
 
-**Motion In Ocean Go** - Built with 🐹 Go, 🎥 for Raspberry Pi.
+**Motion In Ocean Go** - Built with 🐹 Go, 🎥 for Raspberry Pi  
 Made by [CyanAutomation](https://github.com/CyanAutomation)
-Simple Raspberry PI Camera code streaming video for Docker, written in Go
