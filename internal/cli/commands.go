@@ -62,7 +62,7 @@ var configGetCmd = &cobra.Command{
 	Long:  `Get a specific configuration value or all config if no key specified`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := ClientFromEnv()
-		
+
 		config, err := client.GetConfig()
 		if err != nil {
 			return err
@@ -230,7 +230,7 @@ var settingsGetCmd = &cobra.Command{
 	Short: "Get a setting value",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := ClientFromEnv()
-		
+
 		if len(args) == 0 {
 			settings, err := client.GetSettings("")
 			if err != nil {

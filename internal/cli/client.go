@@ -108,13 +108,13 @@ func (c *Client) postJSON(path string, body interface{}, result interface{}) err
 
 // StatusResponse represents the /api/status endpoint response
 type StatusResponse struct {
-	Status     string `json:"status"`
-	Streaming  string `json:"streaming"`
-	FPS        float64 `json:"fps"`
-	TargetFPS  int `json:"target_fps"`
-	Uptime     string `json:"uptime"`
-	Resolution string `json:"resolution"`
-	JPEGQuality int `json:"jpeg_quality"`
+	Status      string  `json:"status"`
+	Streaming   string  `json:"streaming"`
+	FPS         float64 `json:"fps"`
+	TargetFPS   int     `json:"target_fps"`
+	Uptime      string  `json:"uptime"`
+	Resolution  string  `json:"resolution"`
+	JPEGQuality int     `json:"jpeg_quality"`
 }
 
 // GetStatus returns current streaming status
@@ -126,7 +126,7 @@ func (c *Client) GetStatus() (*StatusResponse, error) {
 
 // HealthResponse represents the /health endpoint response
 type HealthResponse struct {
-	Status string `json:"status"`
+	Status    string `json:"status"`
 	Timestamp string `json:"timestamp"`
 }
 
@@ -139,12 +139,12 @@ func (c *Client) GetHealth() (*HealthResponse, error) {
 
 // HealthDetailedResponse represents the /health/detailed endpoint response
 type HealthDetailedResponse struct {
-	Overall    string `json:"overall"`
-	Memory     string `json:"memory"`
-	Camera     string `json:"camera"`
+	Overall     string `json:"overall"`
+	Memory      string `json:"memory"`
+	Camera      string `json:"camera"`
 	FrameBuffer string `json:"frame_buffer"`
-	LastFrame  string `json:"last_frame"`
-	Timestamp  string `json:"timestamp"`
+	LastFrame   string `json:"last_frame"`
+	Timestamp   string `json:"timestamp"`
 }
 
 // GetHealthDetailed returns detailed health information
@@ -171,14 +171,14 @@ func (c *Client) GetSnapshot() ([]byte, error) {
 
 // DiagnosticsResponse represents the /api/diagnostics endpoint response
 type DiagnosticsResponse struct {
-	Version   string      `json:"version"`
-	BuildTime string      `json:"build_time"`
-	Camera    string      `json:"camera"`
-	Backend   string      `json:"backend"`
-	Uptime    string      `json:"uptime"`
-	Goroutines int        `json:"goroutines"`
-	MemoryMB  float64     `json:"memory_mb"`
-	Config    map[string]interface{} `json:"config"`
+	Version    string                 `json:"version"`
+	BuildTime  string                 `json:"build_time"`
+	Camera     string                 `json:"camera"`
+	Backend    string                 `json:"backend"`
+	Uptime     string                 `json:"uptime"`
+	Goroutines int                    `json:"goroutines"`
+	MemoryMB   float64                `json:"memory_mb"`
+	Config     map[string]interface{} `json:"config"`
 }
 
 // GetDiagnostics returns diagnostic information
@@ -190,13 +190,13 @@ func (c *Client) GetDiagnostics() (*DiagnosticsResponse, error) {
 
 // MetricsResponse represents the /metrics/live endpoint response
 type MetricsResponse struct {
-	FPS              float64 `json:"fps"`
-	FrameCount       int64   `json:"frame_count"`
+	FPS               float64 `json:"fps"`
+	FrameCount        int64   `json:"frame_count"`
 	ActiveConnections int     `json:"active_connections"`
-	MaxConnections   int     `json:"max_connections"`
-	AverageFrameTime string  `json:"average_frame_time"`
-	LastFrameTime    string  `json:"last_frame_time"`
-	Timestamp        string  `json:"timestamp"`
+	MaxConnections    int     `json:"max_connections"`
+	AverageFrameTime  string  `json:"average_frame_time"`
+	LastFrameTime     string  `json:"last_frame_time"`
+	Timestamp         string  `json:"timestamp"`
 }
 
 // GetMetrics returns real-time performance metrics

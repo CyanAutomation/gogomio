@@ -126,10 +126,10 @@ func TestFormatHealthDetailed(t *testing.T) {
 
 func TestFormatConfig(t *testing.T) {
 	config := ConfigResponse{
-		"fps":                  24,
-		"resolution":           "[640 480]",
-		"jpeg_quality":         90,
-		"_deprecated":          "use v1 API", // Should be skipped
+		"fps":          24,
+		"resolution":   "[640 480]",
+		"jpeg_quality": 90,
+		"_deprecated":  "use v1 API", // Should be skipped
 	}
 
 	output := FormatConfig(config)
@@ -147,13 +147,13 @@ func TestFormatConfig(t *testing.T) {
 
 func TestFormatMetrics(t *testing.T) {
 	metrics := &MetricsResponse{
-		FPS:                 24.5,
-		FrameCount:          43200,
-		ActiveConnections:   1,
-		MaxConnections:      2,
-		AverageFrameTime:    "41.7ms",
-		LastFrameTime:       "41.8ms",
-		Timestamp:           "2026-04-19T16:00:00Z",
+		FPS:               24.5,
+		FrameCount:        43200,
+		ActiveConnections: 1,
+		MaxConnections:    2,
+		AverageFrameTime:  "41.7ms",
+		LastFrameTime:     "41.8ms",
+		Timestamp:         "2026-04-19T16:00:00Z",
 	}
 
 	output := FormatMetrics(metrics)
@@ -215,8 +215,8 @@ func TestFormatTable(t *testing.T) {
 
 func TestFormatJSON(t *testing.T) {
 	data := map[string]interface{}{
-		"fps":      24,
-		"status":   "ok",
+		"fps":    24,
+		"status": "ok",
 	}
 
 	output := FormatJSON(data)
@@ -225,4 +225,3 @@ func TestFormatJSON(t *testing.T) {
 		t.Errorf("expected 'fps' in JSON output, got: %s", output)
 	}
 }
-
