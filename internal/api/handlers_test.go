@@ -818,7 +818,9 @@ func TestScheduleStopCaptureFallbackWhenCleanupQueueSaturated(t *testing.T) {
 		}
 	}
 
-	atomic.StoreInt64(&fm.clientCount, 0)
+	if count := atomic.LoadInt64(&fm.clientCount); count != 0 {
+		t.Fatalf("client count before scheduling stop = %d, want 0", count)
+	}
 	fm.scheduleStopCapture()
 
 	waitForCaptureState(t, fm, false)
