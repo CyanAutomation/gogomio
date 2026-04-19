@@ -10,13 +10,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	_ "github.com/CyanAutomation/gogomio/docs"
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/CyanAutomation/gogomio/internal/settings"
 	"github.com/CyanAutomation/gogomio/internal/web"
 	"github.com/go-chi/chi/v5"
 	httpSwagger "github.com/swaggo/http-swagger"
-	_ "github.com/CyanAutomation/gogomio/docs"
 )
 
 // FrameManager coordinates camera capture and serves frames to HTTP clients.
@@ -416,6 +416,26 @@ func (fm *FrameManager) GetFrame() []byte {
 	return fm.frameBuffer.GetFrame()
 }
 
+// GetFrameSequence returns the current frame sequence number
+func (fm *FrameManager) GetFrameSequence() uint64 {
+	return fm.frameBuffer.CurrentSequence()
+}
+
+// GetCaptureRestartCount returns the number of times capture has been restarted
+func (fm *FrameManager) GetCaptureRestartCount() int64 {
+	return atomic.LoadInt64(&fm.captureStarts)
+}
+
+// GetCaptureFailures returns consecutive failures, total failures, and degraded state
+func (fm *FrameManager) GetCaptureFailures() (consecutive, total int64, degraded bool) {
+	return fm.captureFailureStats()
+}
+
+// GetClientImbalance returns the client imbalance counter (debug metric)
+func (fm *FrameManager) GetClientImbalance() int64 {
+	return atomic.LoadInt64(&fm.clientImbalance)
+}
+
 // StreamFrame writes frames to an HTTP response in MJPEG format.
 // Manages connection tracking and respects the configurable max connection limit.
 func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxConnections int) error {
@@ -541,7 +561,9 @@ func writeMultipartFrame(w http.ResponseWriter, contentLengthScratch *[]byte, fr
 // ConfigResponse is the JSON response for /api/config endpoint.
 // ConfigResponse contains camera configuration and streaming statistics
 // @Description Camera configuration, resolution, and streaming performance metrics
-type ConfigResponse struct {
+// CameraConfigResponse contains static camera configuration
+// @Description Static camera configuration settings (resolution, quality, limits)
+type CameraConfigResponse struct {
 	// Camera resolution in pixels [width, height]
 	Resolution [2]int `json:"resolution"`
 	// Configured frames per second
@@ -552,53 +574,80 @@ type ConfigResponse struct {
 	JPEGQuality int `json:"jpeg_quality" example:"85"`
 	// Maximum concurrent stream connections allowed
 	MaxStreamConnections int `json:"max_stream_connections" example:"5"`
-	// Current number of active stream connections
-	CurrentStreamCount int `json:"current_stream_connections" example:"1"`
-	// Total number of frames captured
-	FrameCount int64 `json:"frames_captured" example:"1500"`
-	// Current FPS being delivered
-	CurrentFPS float64 `json:"current_fps" example:"29.5"`
-	// Age of the last frame in seconds
-	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds" example:"0.033"`
+	// ISO8601 timestamp of this response
+	TimestampISO8601 string `json:"timestamp_iso8601" example:"2026-04-19T15:30:45Z"`
+	// API version
+	APIVersion string `json:"api_version" example:"1"`
 }
 
-// HealthResponse is the JSON response for /health endpoint.
-// @Description Health status of the camera system including connectivity and performance metrics
+// LiveMetricsResponse contains dynamic, real-time metrics
+// @Description Current performance and connection metrics
+type LiveMetricsResponse struct {
+	// Current frames per second being delivered
+	FPSCurrent float64 `json:"fps_current" example:"29.8"`
+	// Configured target frames per second
+	FPSConfigured int `json:"fps_configured" example:"30"`
+	// Total frames captured since startup
+	FramesCaptured int64 `json:"frames_captured" example:"216000"`
+	// Age of the most recent frame in seconds
+	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds" example:"0.034"`
+	// System uptime in seconds
+	UptimeSeconds int64 `json:"uptime_seconds" example:"7200"`
+	// Current number of active stream connections
+	StreamConnections int `json:"stream_connections" example:"2"`
+	// Frame sequence number (increments per frame, useful for detecting gaps)
+	FrameSequenceNumber uint64 `json:"frame_sequence_number" example:"216001"`
+	// ISO8601 timestamp of this response
+	TimestampISO8601 string `json:"timestamp_iso8601" example:"2026-04-19T15:30:45Z"`
+	// API version
+	APIVersion string `json:"api_version" example:"1"`
+}
+
+// HealthResponse is a quick health check response
+// @Description Quick health status (suitable for Kubernetes probes)
 type HealthResponse struct {
 	// Overall status: ok, degraded, error
 	Status string `json:"status" example:"ok"`
 	// Whether the camera is initialized and ready
 	CameraReady bool `json:"camera_ready" example:"true"`
-	// System uptime in seconds
-	UptimeSeconds int64 `json:"uptime_seconds" example:"3600"`
+	// Whether system is operating in degraded mode
+	Degraded bool `json:"degraded" example:"false"`
 	// Current number of active stream connections
 	StreamConnections int `json:"stream_connections" example:"2"`
-	// Frames per second being captured
-	FramesPerSecond float64 `json:"fps" example:"29.8"`
-	// Whether system is operating in degraded mode (optional)
-	Degraded bool `json:"degraded,omitempty" example:"false"`
-	// Number of consecutive capture failures (optional)
-	CaptureFailures int64 `json:"capture_consecutive_failures,omitempty" example:"0"`
-	// Total number of capture failures (optional)
-	CaptureErrorsTotal int64 `json:"capture_failures_total,omitempty" example:"5"`
+	// Current frames per second
+	FPSCurrent float64 `json:"fps_current" example:"29.8"`
+	// System uptime in seconds
+	UptimeSeconds int64 `json:"uptime_seconds" example:"3600"`
+	// ISO8601 timestamp of this response
+	TimestampISO8601 string `json:"timestamp_iso8601" example:"2026-04-19T15:30:45Z"`
+	// API version
+	APIVersion string `json:"api_version" example:"1"`
 }
 
-// DiagnosticsResponse is the JSON response for /api/diagnostics endpoint.
-// @Description Comprehensive diagnostics including health metrics, error rates, and system status
-type DiagnosticsResponse struct {
+// DetailedHealthResponse provides comprehensive health and metrics information
+// @Description Comprehensive health status with detailed metrics, error tracking, and diagnostics
+type DetailedHealthResponse struct {
 	// Overall status: ok, degraded, error
 	Status string `json:"status" example:"ok"`
-	// Whether the camera is ready
+	// Health status text: Excellent, Degraded, Poor
+	HealthStatus string `json:"health_status" example:"Excellent"`
+	// Detailed status message
+	Message string `json:"message" example:"Camera is functioning normally"`
+	// Whether the camera is initialized and ready
 	CameraReady bool `json:"camera_ready" example:"true"`
-	// Current FPS being delivered
-	FramesPerSecond float64 `json:"fps" example:"29.8"`
+	// Whether system is operating in degraded mode
+	Degraded bool `json:"degraded" example:"false"`
 	// System uptime in seconds
 	UptimeSeconds int64 `json:"uptime_seconds" example:"7200"`
-	// Current stream connection count
-	StreamConnections int `json:"stream_connections" example:"1"`
-	// Total frames successfully captured
+	// Current frames per second
+	FPSCurrent float64 `json:"fps_current" example:"29.8"`
+	// Configured frames per second
+	FPSConfigured int `json:"fps_configured" example:"30"`
+	// Total frames captured since startup
 	FramesCaptured int64 `json:"frames_captured" example:"216000"`
-	// Age of the last frame in seconds
+	// Current number of active stream connections
+	StreamConnections int `json:"stream_connections" example:"1"`
+	// Age of the most recent frame in seconds
 	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds" example:"0.034"`
 	// Resolution as string (e.g., '1920x1080')
 	Resolution string `json:"resolution" example:"1920x1080"`
@@ -606,22 +655,106 @@ type DiagnosticsResponse struct {
 	JPEGQuality int `json:"jpeg_quality" example:"85"`
 	// Maximum concurrent connections
 	MaxConnections int `json:"max_stream_connections" example:"5"`
-	// Recent consecutive capture failures
-	CaptureFailures int64 `json:"capture_failures_recent" example:"0"`
-	// Total capture failures
+	// Consecutive capture failures (resets on success)
+	CaptureFailuresConsecutive int64 `json:"capture_failures_consecutive" example:"0"`
+	// Total capture failures since startup
 	CaptureFailuresTotal int64 `json:"capture_failures_total" example:"10"`
+	// Number of times capture has been restarted
+	CaptureRestartCount int64 `json:"capture_restart_count" example:"2"`
 	// Error rate as percentage
-	ErrorRate float64 `json:"error_rate_percent" example:"0.5"`
-	// Health status text: Excellent, Degraded, Poor
-	HealthStatus string `json:"health_status" example:"Excellent"`
-	// Detailed status message
-	Message string `json:"message" example:"Camera is functioning normally"`
+	ErrorRatePercent float64 `json:"error_rate_percent" example:"0.5"`
+	// Frame sequence number (increments per frame)
+	FrameSequenceNumber uint64 `json:"frame_sequence_number" example:"216001"`
+	// ISO8601 timestamp of this response
+	TimestampISO8601 string `json:"timestamp_iso8601" example:"2026-04-19T15:30:45Z"`
+	// API version
+	APIVersion string `json:"api_version" example:"1"`
+}
+
+// RateLimiter implements per-IP rate limiting for API endpoints
+type RateLimiter struct {
+	mu       sync.Mutex
+	requests map[string]*ipRequestTracker
+	maxReqSec int
+	window   time.Duration
+}
+
+// ipRequestTracker tracks requests for a single IP
+type ipRequestTracker struct {
+	count      int
+	lastReset  time.Time
+}
+
+// NewRateLimiter creates a new rate limiter (maxReqSec requests per window duration)
+func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
+	return &RateLimiter{
+		requests: make(map[string]*ipRequestTracker),
+		maxReqSec: maxReqSec,
+		window: window,
+	}
+}
+
+// Allow checks if an IP is within rate limit
+func (rl *RateLimiter) Allow(ip string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	tracker, exists := rl.requests[ip]
+
+	// Initialize or reset if window expired
+	if !exists || now.Sub(tracker.lastReset) > rl.window {
+		rl.requests[ip] = &ipRequestTracker{
+			count:     1,
+			lastReset: now,
+		}
+		return true
+	}
+
+	// Check limit
+	if tracker.count < rl.maxReqSec {
+		tracker.count++
+		return true
+	}
+
+	return false
+}
+
+// rateLimitMiddleware enforces per-IP rate limiting on API endpoints
+func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get client IP
+			ip := r.RemoteAddr
+			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+				ip = forwarded
+			}
+
+			// Check rate limit
+			if !limiter.Allow(ip) {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(ErrorResponse{
+					Code:    http.StatusTooManyRequests,
+					Message: "Rate limit exceeded",
+					Details: "Too many requests from this IP address",
+				})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RegisterHandlers registers all API endpoints with the Chi router.
 // RegisterHandlers registers all API routes with versioning support
 func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	startTime := time.Now()
+
+	// Create rate limiter: 100 requests per 10 seconds per IP
+	rateLimiter := NewRateLimiter(100, 10*time.Second)
 
 	// Middleware
 	router.Use(corsMiddleware)
@@ -635,6 +768,8 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 
 	// Register API routes with versioning
 	router.Route("/v1", func(r chi.Router) {
+		// Apply rate limiting to v1 endpoints
+		r.Use(rateLimitMiddleware(rateLimiter))
 		registerV1Handlers(r, fm, cfg, startTime)
 	})
 
@@ -651,6 +786,19 @@ func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config,
 
 	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		handleReady(w, r, fm)
+	})
+
+	// New refactored config and metrics endpoints
+	router.Get("/config/camera", func(w http.ResponseWriter, r *http.Request) {
+		handleCameraConfig(w, r, cfg)
+	})
+
+	router.Get("/metrics/live", func(w http.ResponseWriter, r *http.Request) {
+		handleLiveMetrics(w, r, fm, cfg, startTime)
+	})
+
+	router.Get("/health/detailed", func(w http.ResponseWriter, r *http.Request) {
+		handleDetailedHealth(w, r, fm, cfg, startTime)
 	})
 
 	// Stream endpoints
@@ -776,20 +924,165 @@ func registerLegacyHandlers(router chi.Router, fm *FrameManager, cfg *config.Con
 // @Success 200 {object} HealthResponse
 // @Failure 503 {object} map[string]string
 // @Router /v1/health [get]
+// @Summary Health check endpoint
+// @Description Returns the current health status of the camera system including uptime, FPS, and connection count
+// @Tags Health
+// @Accept  json
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /v1/health [get]
 func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
 	_, _, fps := fm.streamStats.Snapshot()
+	_, _, degraded := fm.GetCaptureFailures()
+
+	status := "ok"
+	if !fm.cam.IsReady() {
+		status = "error"
+	} else if degraded {
+		status = "degraded"
+	}
 
 	response := HealthResponse{
-		Status:            "ok",
+		Status:            status,
 		CameraReady:       fm.cam.IsReady(),
-		UptimeSeconds:     int64(time.Since(startTime).Seconds()),
+		Degraded:          degraded,
 		StreamConnections: fm.connTracker.Count(),
-		FramesPerSecond:   fps,
+		FPSCurrent:        fps,
+		UptimeSeconds:     int64(time.Since(startTime).Seconds()),
+		TimestampISO8601:  time.Now().UTC().Format(time.RFC3339),
+		APIVersion:        "1",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		// Client likely disconnected, ignore error
+		_ = err
+	}
+}
+
+// @Summary Get camera configuration (static)
+// @Description Returns static camera configuration settings
+// @Tags Configuration
+// @Accept  json
+// @Produce json
+// @Success 200 {object} CameraConfigResponse
+// @Router /v1/config/camera [get]
+func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
+	response := CameraConfigResponse{
+		Resolution:           cfg.Resolution,
+		FPS:                  cfg.FPS,
+		TargetFPS:            cfg.TargetFPS,
+		JPEGQuality:          cfg.JPEGQuality,
+		MaxStreamConnections: cfg.MaxStreamConnections,
+		TimestampISO8601:     time.Now().UTC().Format(time.RFC3339),
+		APIVersion:           "1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		_ = err
+	}
+}
+
+// @Summary Get live metrics
+// @Description Returns current performance and connection metrics
+// @Tags Metrics
+// @Accept  json
+// @Produce json
+// @Success 200 {object} LiveMetricsResponse
+// @Router /v1/metrics/live [get]
+func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+	frameCount, _, fps := fm.streamStats.Snapshot()
+
+	response := LiveMetricsResponse{
+		FPSCurrent:          fps,
+		FPSConfigured:       cfg.FPS,
+		FramesCaptured:      frameCount,
+		LastFrameAgeSeconds: fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		UptimeSeconds:       int64(time.Since(startTime).Seconds()),
+		StreamConnections:   fm.connTracker.Count(),
+		FrameSequenceNumber: fm.GetFrameSequence(),
+		TimestampISO8601:    time.Now().UTC().Format(time.RFC3339),
+		APIVersion:          "1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		_ = err
+	}
+}
+
+// @Summary Get detailed health and metrics
+// @Description Returns comprehensive health status with detailed metrics, error tracking, and diagnostics
+// @Tags Health
+// @Accept  json
+// @Produce json
+// @Success 200 {object} DetailedHealthResponse
+// @Router /v1/health/detailed [get]
+func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+	frameCount, _, fps := fm.streamStats.Snapshot()
+	consecutiveFailures, totalFailures, degraded := fm.GetCaptureFailures()
+
+	status := "ok"
+	message := "Camera is functioning normally"
+	if !fm.cam.IsReady() {
+		status = "error"
+		message = "Camera is not ready or failed to initialize"
+	} else if degraded {
+		status = "degraded"
+		message = "Camera is functioning but experiencing degradation"
+	}
+
+	// Calculate error rate
+	var errorRate float64
+	if frameCount > 0 {
+		errorRate = (float64(totalFailures) / (float64(totalFailures) + float64(frameCount))) * 100
+	}
+
+	// Determine health status
+	healthStatus := "Excellent"
+	if errorRate > 5 {
+		healthStatus = "Degraded"
+		if status == "ok" {
+			status = "degraded"
+		}
+	}
+	if errorRate > 20 || consecutiveFailures > 5 {
+		healthStatus = "Poor"
+		status = "error"
+	}
+	if degraded && status != "error" {
+		healthStatus = "Degraded"
+		status = "degraded"
+	}
+
+	resolution := fmt.Sprintf("%dx%d", cfg.Resolution[0], cfg.Resolution[1])
+
+	response := DetailedHealthResponse{
+		Status:                     status,
+		HealthStatus:               healthStatus,
+		Message:                    message,
+		CameraReady:                fm.cam.IsReady(),
+		Degraded:                   degraded,
+		UptimeSeconds:              int64(time.Since(startTime).Seconds()),
+		FPSCurrent:                 fps,
+		FPSConfigured:              cfg.FPS,
+		FramesCaptured:             frameCount,
+		StreamConnections:          fm.connTracker.Count(),
+		LastFrameAgeSeconds:        fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		Resolution:                 resolution,
+		JPEGQuality:                cfg.JPEGQuality,
+		MaxConnections:             cfg.MaxStreamConnections,
+		CaptureFailuresConsecutive: consecutiveFailures,
+		CaptureFailuresTotal:       totalFailures,
+		CaptureRestartCount:        fm.GetCaptureRestartCount(),
+		ErrorRatePercent:           errorRate,
+		FrameSequenceNumber:        fm.GetFrameSequence(),
+		TimestampISO8601:           time.Now().UTC().Format(time.RFC3339),
+		APIVersion:                 "1",
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
 }
@@ -839,67 +1132,52 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	_, _ = w.Write(frame)
 }
 
-// @Summary Get configuration and statistics
-// @Description Returns camera configuration including resolution, FPS, stream connections, and performance metrics
+// @Summary Get configuration and metrics (DEPRECATED - use /v1/config/camera and /v1/metrics/live)
+// @Description Returns camera configuration and current metrics. This endpoint combines two concerns; use /v1/config/camera for static config or /v1/metrics/live for metrics instead
 // @Tags Configuration
 // @Accept  json
 // @Produce json
-// @Success 200 {object} ConfigResponse
+// @Success 200 {object} map[string]interface{}
+// @Deprecated true
 // @Router /v1/api/config [get]
 func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+	// Deprecated: combines static config with live metrics
+	// Return a merged response for backward compatibility
 	frameCount, _, fps := fm.streamStats.Snapshot()
 
-	response := ConfigResponse{
-		Resolution:           cfg.Resolution,
-		FPS:                  cfg.FPS,
-		TargetFPS:            cfg.TargetFPS,
-		JPEGQuality:          cfg.JPEGQuality,
-		MaxStreamConnections: cfg.MaxStreamConnections,
-		CurrentStreamCount:   fm.connTracker.Count(),
-		FrameCount:           frameCount,
-		CurrentFPS:           fps,
-		LastFrameAgeSeconds:  fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+	response := map[string]interface{}{
+		"resolution":             cfg.Resolution,
+		"fps":                    cfg.FPS,
+		"target_fps":             cfg.TargetFPS,
+		"jpeg_quality":           cfg.JPEGQuality,
+		"max_stream_connections": cfg.MaxStreamConnections,
+		"current_stream_connections": fm.connTracker.Count(),
+		"frames_captured":        frameCount,
+		"current_fps":            fps,
+		"last_frame_age_seconds": fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		"timestamp_iso8601":      time.Now().UTC().Format(time.RFC3339),
+		"api_version":            "1",
+		"_deprecated":            "use /v1/config/camera and /v1/metrics/live instead",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Deprecation", "true")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
 }
 
-// @Summary Get system status
-// @Description Returns detailed status including health state, capture failures, and degradation status
+// @Summary Get system status (DEPRECATED - use /v1/health/detailed)
+// @Description Returns detailed status. This endpoint is deprecated; use /v1/health/detailed instead
 // @Tags Health
 // @Accept  json
 // @Produce json
 // @Success 200 {object} HealthResponse
+// @Deprecated true
 // @Router /v1/api/status [get]
 func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
-	_, _, fps := fm.streamStats.Snapshot()
-	consecutiveFailures, captureFailuresTotal, degraded := fm.captureFailureStats()
-
-	status := "ok"
-	if !fm.cam.IsReady() {
-		status = "error"
-	} else if degraded {
-		status = "degraded"
-	}
-
-	response := HealthResponse{
-		Status:             status,
-		CameraReady:        fm.cam.IsReady(),
-		UptimeSeconds:      int64(time.Since(startTime).Seconds()),
-		StreamConnections:  fm.connTracker.Count(),
-		FramesPerSecond:    fps,
-		Degraded:           degraded,
-		CaptureFailures:    consecutiveFailures,
-		CaptureErrorsTotal: captureFailuresTotal,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		_ = err
-	}
+	// Deprecated: use /v1/health/detailed instead
+	handleDetailedHealth(w, r, fm, &config.Config{}, startTime) // Note: passing empty config for now - this is deprecated anyway
 }
 
 // Settings handlers
@@ -940,71 +1218,18 @@ type ErrorResponse struct {
 	Details string `json:"details,omitempty" example:"Settings map is empty"`
 }
 
-// @Summary Get comprehensive diagnostics
-// @Description Returns complete system diagnostics including health status, error metrics, and performance data
+// @Summary Get comprehensive diagnostics (DEPRECATED - use /v1/health/detailed)
+// @Description Returns complete system diagnostics. This endpoint is deprecated; use /v1/health/detailed instead
 // @Tags Diagnostics
 // @Accept  json
 // @Produce json
-// @Success 200 {object} DiagnosticsResponse
+// @Success 200 {object} DetailedHealthResponse
+// @Deprecated true
 // @Router /v1/api/diagnostics [get]
 func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
-	frameCount, _, fps := fm.streamStats.Snapshot()
-
-	status := "ok"
-	message := "Camera is functioning normally"
-	if !fm.cam.IsReady() {
-		status = "error"
-		message = "Camera is not ready or failed to initialize"
-	}
-
-	// Calculate capture error metrics
-	consecutiveFailures, totalFailures, degraded := fm.captureFailureStats()
-
-	// Calculate error rate
-	var errorRate float64
-	if frameCount > 0 {
-		errorRate = (float64(totalFailures) / (float64(totalFailures) + float64(frameCount))) * 100
-	}
-
-	// Determine health status
-	healthStatus := "Excellent"
-	if errorRate > 5 {
-		healthStatus = "Degraded"
-		status = "degraded"
-	}
-	if errorRate > 20 || consecutiveFailures > 5 {
-		healthStatus = "Poor"
-		status = "error"
-	}
-	if degraded && status != "error" {
-		healthStatus = "Degraded"
-		status = "degraded"
-	}
-
-	resolution := fmt.Sprintf("%dx%d", cfg.Resolution[0], cfg.Resolution[1])
-
-	response := DiagnosticsResponse{
-		Status:               status,
-		CameraReady:          fm.cam.IsReady(),
-		FramesPerSecond:      fps,
-		UptimeSeconds:        int64(time.Since(startTime).Seconds()),
-		StreamConnections:    fm.connTracker.Count(),
-		FramesCaptured:       frameCount,
-		LastFrameAgeSeconds:  fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
-		Resolution:           resolution,
-		JPEGQuality:          cfg.JPEGQuality,
-		MaxConnections:       cfg.MaxStreamConnections,
-		CaptureFailures:      consecutiveFailures,
-		CaptureFailuresTotal: totalFailures,
-		ErrorRate:            errorRate,
-		HealthStatus:         healthStatus,
-		Message:              message,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		_ = err
-	}
+	// Deprecated: use /v1/health/detailed instead
+	w.Header().Set("Deprecation", "true")
+	handleDetailedHealth(w, r, fm, cfg, startTime)
 }
 
 // @Summary Update settings

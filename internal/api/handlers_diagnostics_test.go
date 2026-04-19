@@ -147,23 +147,23 @@ func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 
 // TestDiagnosticsResponseStructure tests that diagnostics response contains all fields
 func TestDiagnosticsResponseStructure(t *testing.T) {
-	// Create a sample DiagnosticsResponse
-	response := DiagnosticsResponse{
-		Status:               "ok",
-		CameraReady:          true,
-		FramesPerSecond:      24.5,
-		UptimeSeconds:        3600,
-		StreamConnections:    1,
-		FramesCaptured:       86400,
-		LastFrameAgeSeconds:  0.1,
-		Resolution:           "1920x1080",
-		JPEGQuality:          85,
-		MaxConnections:       2,
-		CaptureFailures:      0,
-		CaptureFailuresTotal: 10,
-		ErrorRate:            0.01,
-		HealthStatus:         "Excellent",
-		Message:              "Camera is functioning normally",
+	// Create a sample DetailedHealthResponse
+	response := DetailedHealthResponse{
+		Status:                     "ok",
+		CameraReady:                true,
+		FPSCurrent:                 24.5,
+		UptimeSeconds:              3600,
+		StreamConnections:          1,
+		FramesCaptured:             86400,
+		LastFrameAgeSeconds:        0.1,
+		Resolution:                 "1920x1080",
+		JPEGQuality:                85,
+		MaxConnections:             2,
+		CaptureFailuresConsecutive: 0,
+		CaptureFailuresTotal:       10,
+		ErrorRatePercent:           0.01,
+		HealthStatus:               "Excellent",
+		Message:                    "Camera is functioning normally",
 	}
 
 	// Marshal to JSON
@@ -182,7 +182,7 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 	requiredFields := []string{
 		"status",
 		"camera_ready",
-		"fps",
+		"fps_current",
 		"uptime_seconds",
 		"stream_connections",
 		"frames_captured",
@@ -190,7 +190,7 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 		"resolution",
 		"jpeg_quality",
 		"max_stream_connections",
-		"capture_failures_recent",
+		"capture_failures_consecutive",
 		"capture_failures_total",
 		"error_rate_percent",
 		"health_status",
@@ -206,22 +206,22 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 
 // TestDiagnosticsResponseJSONEncoding tests that response encodes correctly
 func TestDiagnosticsResponseJSONEncoding(t *testing.T) {
-	response := DiagnosticsResponse{
-		Status:               "ok",
-		CameraReady:          true,
-		FramesPerSecond:      30.0,
-		UptimeSeconds:        1000,
-		StreamConnections:    1,
-		FramesCaptured:       30000,
-		LastFrameAgeSeconds:  0.05,
-		Resolution:           "1024x768",
-		JPEGQuality:          80,
-		MaxConnections:       2,
-		CaptureFailures:      0,
-		CaptureFailuresTotal: 5,
-		ErrorRate:            0.016,
-		HealthStatus:         "Excellent",
-		Message:              "Test message",
+	response := DetailedHealthResponse{
+		Status:                     "ok",
+		CameraReady:                true,
+		FPSCurrent:                 30.0,
+		UptimeSeconds:              1000,
+		StreamConnections:          1,
+		FramesCaptured:             30000,
+		LastFrameAgeSeconds:        0.05,
+		Resolution:                 "1024x768",
+		JPEGQuality:                80,
+		MaxConnections:             2,
+		CaptureFailuresConsecutive: 0,
+		CaptureFailuresTotal:       5,
+		ErrorRatePercent:           0.016,
+		HealthStatus:               "Excellent",
+		Message:                    "Test message",
 	}
 
 	// Test encoding
@@ -231,7 +231,7 @@ func TestDiagnosticsResponseJSONEncoding(t *testing.T) {
 	}
 
 	// Test decoding
-	var decoded DiagnosticsResponse
+	var decoded DetailedHealthResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
@@ -240,14 +240,14 @@ func TestDiagnosticsResponseJSONEncoding(t *testing.T) {
 	if decoded.Status != response.Status {
 		t.Errorf("Status mismatch: %s vs %s", decoded.Status, response.Status)
 	}
-	if decoded.ErrorRate != response.ErrorRate {
-		t.Errorf("ErrorRate mismatch: %f vs %f", decoded.ErrorRate, response.ErrorRate)
+	if decoded.ErrorRatePercent != response.ErrorRatePercent {
+		t.Errorf("ErrorRatePercent mismatch: %f vs %f", decoded.ErrorRatePercent, response.ErrorRatePercent)
 	}
 	if decoded.HealthStatus != response.HealthStatus {
 		t.Errorf("HealthStatus mismatch: %s vs %s", decoded.HealthStatus, response.HealthStatus)
 	}
-	if decoded.CaptureFailures != response.CaptureFailures {
-		t.Errorf("CaptureFailures mismatch: %d vs %d", decoded.CaptureFailures, response.CaptureFailures)
+	if decoded.CaptureFailuresConsecutive != response.CaptureFailuresConsecutive {
+		t.Errorf("CaptureFailuresConsecutive mismatch: %d vs %d", decoded.CaptureFailuresConsecutive, response.CaptureFailuresConsecutive)
 	}
 	if decoded.CaptureFailuresTotal != response.CaptureFailuresTotal {
 		t.Errorf("CaptureFailuresTotal mismatch: %d vs %d", decoded.CaptureFailuresTotal, response.CaptureFailuresTotal)
@@ -384,22 +384,22 @@ func BenchmarkDiagnosticsHealthStatus(b *testing.B) {
 
 // BenchmarkDiagnosticsResponseEncoding benchmarks JSON encoding of response
 func BenchmarkDiagnosticsResponseEncoding(b *testing.B) {
-	response := DiagnosticsResponse{
-		Status:               "ok",
-		CameraReady:          true,
-		FramesPerSecond:      24.5,
-		UptimeSeconds:        3600,
-		StreamConnections:    1,
-		FramesCaptured:       86400,
-		LastFrameAgeSeconds:  0.1,
-		Resolution:           "1920x1080",
-		JPEGQuality:          85,
-		MaxConnections:       2,
-		CaptureFailures:      0,
-		CaptureFailuresTotal: 10,
-		ErrorRate:            0.01,
-		HealthStatus:         "Excellent",
-		Message:              "Camera is functioning normally",
+	response := DetailedHealthResponse{
+		Status:                     "ok",
+		CameraReady:                true,
+		FPSCurrent:                 24.5,
+		UptimeSeconds:              3600,
+		StreamConnections:          1,
+		FramesCaptured:             86400,
+		LastFrameAgeSeconds:        0.1,
+		Resolution:                 "1920x1080",
+		JPEGQuality:                85,
+		MaxConnections:             2,
+		CaptureFailuresConsecutive: 0,
+		CaptureFailuresTotal:       10,
+		ErrorRatePercent:           0.01,
+		HealthStatus:               "Excellent",
+		Message:                    "Camera is functioning normally",
 	}
 
 	b.ResetTimer()

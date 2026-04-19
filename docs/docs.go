@@ -22,7 +22,7 @@ const docTemplate = `{
     "paths": {
         "/v1/api/config": {
             "get": {
-                "description": "Returns camera configuration including resolution, FPS, stream connections, and performance metrics",
+                "description": "Returns camera configuration and current metrics. This endpoint combines two concerns; use /v1/config/camera for static config or /v1/metrics/live for metrics instead",
                 "consumes": [
                     "application/json"
                 ],
@@ -32,12 +32,14 @@ const docTemplate = `{
                 "tags": [
                     "Configuration"
                 ],
-                "summary": "Get configuration and statistics",
+                "summary": "Get configuration and metrics (DEPRECATED - use /v1/config/camera and /v1/metrics/live)",
+                "deprecated": true,
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.ConfigResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -45,7 +47,7 @@ const docTemplate = `{
         },
         "/v1/api/diagnostics": {
             "get": {
-                "description": "Returns complete system diagnostics including health status, error metrics, and performance data",
+                "description": "Returns complete system diagnostics. This endpoint is deprecated; use /v1/health/detailed instead",
                 "consumes": [
                     "application/json"
                 ],
@@ -55,12 +57,13 @@ const docTemplate = `{
                 "tags": [
                     "Diagnostics"
                 ],
-                "summary": "Get comprehensive diagnostics",
+                "summary": "Get comprehensive diagnostics (DEPRECATED - use /v1/health/detailed)",
+                "deprecated": true,
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.DiagnosticsResponse"
+                            "$ref": "#/definitions/api.DetailedHealthResponse"
                         }
                     }
                 }
@@ -198,7 +201,7 @@ const docTemplate = `{
         },
         "/v1/api/status": {
             "get": {
-                "description": "Returns detailed status including health state, capture failures, and degradation status",
+                "description": "Returns detailed status. This endpoint is deprecated; use /v1/health/detailed instead",
                 "consumes": [
                     "application/json"
                 ],
@@ -208,7 +211,8 @@ const docTemplate = `{
                 "tags": [
                     "Health"
                 ],
-                "summary": "Get system status",
+                "summary": "Get system status (DEPRECATED - use /v1/health/detailed)",
+                "deprecated": true,
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -245,9 +249,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/health": {
+        "/v1/config/camera": {
             "get": {
-                "description": "Returns the current health status of the camera system including uptime, FPS, and connection count",
+                "description": "Returns static camera configuration settings",
                 "consumes": [
                     "application/json"
                 ],
@@ -255,6 +259,32 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
+                    "Configuration"
+                ],
+                "summary": "Get camera configuration (static)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.CameraConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/health": {
+            "get": {
+                "description": "Returns the current health status of the camera system including uptime, FPS, and connection count\nReturns the current health status of the camera system including uptime, FPS, and connection count",
+                "consumes": [
+                    "application/json",
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json",
+                    "application/json"
+                ],
+                "tags": [
+                    "Health",
                     "Health"
                 ],
                 "summary": "Health check endpoint",
@@ -272,6 +302,52 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/health/detailed": {
+            "get": {
+                "description": "Returns comprehensive health status with detailed metrics, error tracking, and diagnostics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Get detailed health and metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DetailedHealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/metrics/live": {
+            "get": {
+                "description": "Returns current performance and connection metrics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Metrics"
+                ],
+                "summary": "Get live metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.LiveMetricsResponse"
                         }
                     }
                 }
@@ -343,39 +419,24 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "api.ConfigResponse": {
+        "api.CameraConfigResponse": {
             "description": "Camera configuration, resolution, and streaming performance metrics",
             "type": "object",
             "properties": {
-                "current_fps": {
-                    "description": "Current FPS being delivered",
-                    "type": "number",
-                    "example": 29.5
-                },
-                "current_stream_connections": {
-                    "description": "Current number of active stream connections",
-                    "type": "integer",
-                    "example": 1
+                "api_version": {
+                    "description": "API version",
+                    "type": "string",
+                    "example": "1"
                 },
                 "fps": {
                     "description": "Configured frames per second",
                     "type": "integer",
                     "example": 30
                 },
-                "frames_captured": {
-                    "description": "Total number of frames captured",
-                    "type": "integer",
-                    "example": 1500
-                },
                 "jpeg_quality": {
                     "description": "JPEG compression quality (0-100)",
                     "type": "integer",
                     "example": 85
-                },
-                "last_frame_age_seconds": {
-                    "description": "Age of the last frame in seconds",
-                    "type": "number",
-                    "example": 0.033
                 },
                 "max_stream_connections": {
                     "description": "Maximum concurrent stream connections allowed",
@@ -393,40 +454,70 @@ const docTemplate = `{
                     "description": "Target FPS for frame buffer",
                     "type": "integer",
                     "example": 30
+                },
+                "timestamp_iso8601": {
+                    "description": "ISO8601 timestamp of this response",
+                    "type": "string",
+                    "example": "2026-04-19T15:30:45Z"
                 }
             }
         },
-        "api.DiagnosticsResponse": {
-            "description": "Comprehensive diagnostics including health metrics, error rates, and system status",
+        "api.DetailedHealthResponse": {
+            "description": "Comprehensive health status with detailed metrics, error tracking, and diagnostics",
             "type": "object",
             "properties": {
+                "api_version": {
+                    "description": "API version",
+                    "type": "string",
+                    "example": "1"
+                },
                 "camera_ready": {
-                    "description": "Whether the camera is ready",
+                    "description": "Whether the camera is initialized and ready",
                     "type": "boolean",
                     "example": true
                 },
-                "capture_failures_recent": {
-                    "description": "Recent consecutive capture failures",
+                "capture_failures_consecutive": {
+                    "description": "Consecutive capture failures (resets on success)",
                     "type": "integer",
                     "example": 0
                 },
                 "capture_failures_total": {
-                    "description": "Total capture failures",
+                    "description": "Total capture failures since startup",
                     "type": "integer",
                     "example": 10
+                },
+                "capture_restart_count": {
+                    "description": "Number of times capture has been restarted",
+                    "type": "integer",
+                    "example": 2
+                },
+                "degraded": {
+                    "description": "Whether system is operating in degraded mode",
+                    "type": "boolean",
+                    "example": false
                 },
                 "error_rate_percent": {
                     "description": "Error rate as percentage",
                     "type": "number",
                     "example": 0.5
                 },
-                "fps": {
-                    "description": "Current FPS being delivered",
+                "fps_configured": {
+                    "description": "Configured frames per second",
+                    "type": "integer",
+                    "example": 30
+                },
+                "fps_current": {
+                    "description": "Current frames per second",
                     "type": "number",
                     "example": 29.8
                 },
+                "frame_sequence_number": {
+                    "description": "Frame sequence number (increments per frame)",
+                    "type": "integer",
+                    "example": 216001
+                },
                 "frames_captured": {
-                    "description": "Total frames successfully captured",
+                    "description": "Total frames captured since startup",
                     "type": "integer",
                     "example": 216000
                 },
@@ -441,7 +532,7 @@ const docTemplate = `{
                     "example": 85
                 },
                 "last_frame_age_seconds": {
-                    "description": "Age of the last frame in seconds",
+                    "description": "Age of the most recent frame in seconds",
                     "type": "number",
                     "example": 0.034
                 },
@@ -466,9 +557,14 @@ const docTemplate = `{
                     "example": "ok"
                 },
                 "stream_connections": {
-                    "description": "Current stream connection count",
+                    "description": "Current number of active stream connections",
                     "type": "integer",
                     "example": 1
+                },
+                "timestamp_iso8601": {
+                    "description": "ISO8601 timestamp of this response",
+                    "type": "string",
+                    "example": "2026-04-19T15:30:45Z"
                 },
                 "uptime_seconds": {
                     "description": "System uptime in seconds",
@@ -478,31 +574,26 @@ const docTemplate = `{
             }
         },
         "api.HealthResponse": {
-            "description": "Health status of the camera system including connectivity and performance metrics",
+            "description": "Quick health status (suitable for Kubernetes probes)",
             "type": "object",
             "properties": {
+                "api_version": {
+                    "description": "API version",
+                    "type": "string",
+                    "example": "1"
+                },
                 "camera_ready": {
                     "description": "Whether the camera is initialized and ready",
                     "type": "boolean",
                     "example": true
                 },
-                "capture_consecutive_failures": {
-                    "description": "Number of consecutive capture failures (optional)",
-                    "type": "integer",
-                    "example": 0
-                },
-                "capture_failures_total": {
-                    "description": "Total number of capture failures (optional)",
-                    "type": "integer",
-                    "example": 5
-                },
                 "degraded": {
-                    "description": "Whether system is operating in degraded mode (optional)",
+                    "description": "Whether system is operating in degraded mode",
                     "type": "boolean",
                     "example": false
                 },
-                "fps": {
-                    "description": "Frames per second being captured",
+                "fps_current": {
+                    "description": "Current frames per second",
                     "type": "number",
                     "example": 29.8
                 },
@@ -516,10 +607,66 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 2
                 },
+                "timestamp_iso8601": {
+                    "description": "ISO8601 timestamp of this response",
+                    "type": "string",
+                    "example": "2026-04-19T15:30:45Z"
+                },
                 "uptime_seconds": {
                     "description": "System uptime in seconds",
                     "type": "integer",
                     "example": 3600
+                }
+            }
+        },
+        "api.LiveMetricsResponse": {
+            "description": "Current performance and connection metrics",
+            "type": "object",
+            "properties": {
+                "api_version": {
+                    "description": "API version",
+                    "type": "string",
+                    "example": "1"
+                },
+                "fps_configured": {
+                    "description": "Configured target frames per second",
+                    "type": "integer",
+                    "example": 30
+                },
+                "fps_current": {
+                    "description": "Current frames per second being delivered",
+                    "type": "number",
+                    "example": 29.8
+                },
+                "frame_sequence_number": {
+                    "description": "Frame sequence number (increments per frame, useful for detecting gaps)",
+                    "type": "integer",
+                    "example": 216001
+                },
+                "frames_captured": {
+                    "description": "Total frames captured since startup",
+                    "type": "integer",
+                    "example": 216000
+                },
+                "last_frame_age_seconds": {
+                    "description": "Age of the most recent frame in seconds",
+                    "type": "number",
+                    "example": 0.034
+                },
+                "stream_connections": {
+                    "description": "Current number of active stream connections",
+                    "type": "integer",
+                    "example": 2
+                },
+                "timestamp_iso8601": {
+                    "description": "ISO8601 timestamp of this response",
+                    "type": "string",
+                    "example": "2026-04-19T15:30:45Z"
+                },
+                "uptime_seconds": {
+                    "description": "System uptime in seconds",
+                    "type": "integer",
+                    "example": 7200
                 }
             }
         },
