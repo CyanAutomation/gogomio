@@ -623,7 +623,7 @@
 <body>
     <header>
         <div class="container" style="display: flex; align-items: center; justify-content: center; gap: 14px; padding-top: var(--spacing-sm); padding-bottom: var(--spacing-sm);">
-            <img src="/static/mio/mio_avatar.png" alt="MIO mascot" class="mio-header-avatar">
+            <img src="/static/mio/mio_pose_idle.png" alt="MIO mascot" class="mio-header-avatar">
             <div>
                 <h1>Motion In Ocean</h1>
                 <p class="subtitle">Live Streaming Camera — Go Edition</p>
@@ -642,10 +642,10 @@
                         <div style="text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                             <div style="margin-bottom: var(--spacing-lg);">
                                 <div id="stream-spinner" style="display: none;">
-                                    <img src="/static/mio/mio_curious.png" alt="MIO is connecting" class="mio-state-image mio-pulse">
+                                    <img id="stream-spinner-image" src="/static/mio/mio_pose_concerned.png" alt="MIO is thinking" class="mio-state-image mio-pulse">
                                 </div>
                                 <div id="stream-idle">
-                                    <img src="/static/mio/mio_sleeping.png" alt="MIO is resting" class="mio-state-image mio-float">
+                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png" alt="MIO is resting" class="mio-state-image mio-float">
                                 </div>
                             </div>
                             <p id="stream-placeholder-text" style="margin: 0; color: #aac8d8; font-size: var(--font-size-lg); font-weight: 500;">Stream is stopped</p>
@@ -741,7 +741,7 @@
 
     <footer>
         <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-            <img src="/static/mio/mio_avatar.png" alt="" aria-hidden="true" style="width: 18px; height: 18px; object-fit: contain; opacity: 0.55;">
+            <img src="/static/mio/mio_pose_idle.png" alt="" aria-hidden="true" style="width: 18px; height: 18px; object-fit: contain; opacity: 0.55;">
             <p>Motion In Ocean v0.1.0-dev | Raspberry Pi Camera Streaming</p>
         </div>
     </footer>
@@ -769,6 +769,8 @@
                 this.placeholderDesc = document.getElementById("stream-placeholder-desc");
                 this.spinnerElement = document.getElementById("stream-spinner");
                 this.idleElement = document.getElementById("stream-idle");
+                this.spinnerImage = document.getElementById("stream-spinner-image");
+                this.idleImage = document.getElementById("stream-idle-image");
                 this.statusIndicator = document.getElementById("status-indicator");
                 this.statusText = document.getElementById("status-text");
                 this.messageBox = document.getElementById("message");
@@ -779,11 +781,61 @@
                 this.streamAbortController = null;
                 this.streamRetryCount = 0;
                 this.maxStreamRetries = 3;
+                this.poseByState = {
+                    idle: {
+                        src: "/static/mio/mio_pose_sleeping.png",
+                        alt: "MIO is resting",
+                        animationClass: "mio-float",
+                    },
+                    loading: {
+                        src: "/static/mio/mio_pose_concerned.png",
+                        alt: "MIO is thinking",
+                        animationClass: "mio-pulse",
+                    },
+                    success: {
+                        src: "/static/mio/mio_pose_happy.png",
+                        alt: "MIO is happy",
+                        animationClass: "mio-float",
+                    },
+                    warning: {
+                        src: "/static/mio/mio_pose_concerned.png",
+                        alt: "MIO is concerned",
+                        animationClass: "mio-pulse",
+                    },
+                    running: {
+                        src: "/static/mio/mio_pose_worried.png",
+                        alt: "MIO is focused",
+                        animationClass: "mio-pulse",
+                    },
+                };
 
                 this.initializeStream();
                 this.attachEventListeners();
                 this.loadStats();
                 this.loadSettings();
+            }
+
+            getPoseForState(state) {
+                return this.poseByState[state] || this.poseByState.idle;
+            }
+
+            applyPoseToImage(imageElement, state) {
+                const pose = this.getPoseForState(state);
+                imageElement.src = pose.src;
+                imageElement.alt = pose.alt;
+                imageElement.className = `mio-state-image ${pose.animationClass}`;
+            }
+
+            setLoadingPose(state = "loading") {
+                this.applyPoseToImage(this.spinnerImage, state);
+                this.spinnerElement.style.display = "inline-block";
+                this.idleElement.style.display = "none";
+            }
+
+            setIdlePose(state = "idle") {
+                this.applyPoseToImage(this.idleImage, state);
+                this.spinnerElement.style.display = "none";
+                this.idleElement.style.display = "block";
             }
 
             initializeStream() {
@@ -795,6 +847,7 @@
                     this.spinnerElement.style.display = "none";
                     this.idleElement.style.display = "none";
                     this.imageElement.style.display = "block";
+                    this.setIdlePose("success");
                     this.updateStreamControls();
                     this.updateStatus("Streaming", true);
                     this.startStatsPolling();
@@ -804,15 +857,15 @@
                     this.isStreaming = false;
                     this.imageElement.removeAttribute("src");
                     this.loadingElement.style.display = "block";
-                    this.spinnerElement.style.display = "none";
                     this.imageElement.style.display = "none";
-                    this.idleElement.style.display = "block";
+                    this.setIdlePose("warning");
                     
                     if (this.streamRetryCount < this.maxStreamRetries) {
                         this.streamRetryCount++;
                         this.placeholderText.textContent = `⚠️ Connection lost`;
                         this.placeholderDesc.textContent = `Retrying (${this.streamRetryCount}/${this.maxStreamRetries})...`;
                         this.showMessage(`🔄 Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, 'warning');
+                        this.setLoadingPose("running");
                         setTimeout(() => {
                             if (!this.isStreaming && this.streamRetryCount < this.maxStreamRetries) {
                                 this.imageElement.src = "/stream.mjpg?t=" + Date.now();
@@ -858,8 +911,7 @@
                 this.placeholderText.textContent = "📡 Connecting to stream...";
                 this.placeholderDesc.textContent = "Establishing connection...";
                 this.loadingElement.style.display = "block";
-                this.spinnerElement.style.display = "inline-block";
-                this.idleElement.style.display = "none";
+                this.setLoadingPose("loading");
                 this.imageElement.style.display = "none";
                 this.updateStatus("Starting...", false);
                 this.streamRetryCount = 0;
@@ -893,8 +945,7 @@
                 this.streamRetryCount = 0;
                 this.imageElement.style.display = "none";
                 this.loadingElement.style.display = "block";
-                this.spinnerElement.style.display = "none";
-                this.idleElement.style.display = "block";
+                this.setIdlePose("idle");
                 this.placeholderText.textContent = "⏹️ Stream stopped";
                 this.placeholderDesc.textContent = "Click Start to begin streaming";
                 this.updateStreamControls();
@@ -1002,6 +1053,14 @@
                 msg.textContent = text;
                 msg.className = `message show ${type || 'info'}`;
                 msg.style.display = 'block';
+
+                if (!this.isStreaming) {
+                    if (type === "success") {
+                        this.setIdlePose("success");
+                    } else if (type === "warning" || type === "error") {
+                        this.setIdlePose("warning");
+                    }
+                }
                 
                 // Ensure message is visible and animate in
                 setTimeout(() => {
