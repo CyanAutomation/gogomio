@@ -8,197 +8,19 @@
       "priority": 1,
       "description": "Detects motion using frame differencing.",
       "value": "Essential for security and automation use cases.",
-      "complexity": "low"
-    },
-    {
-      "id": "motion-advanced",
-      "name": "Motion Detection (Advanced)",
-      "category": "core",
-      "type": "event-detector",
-      "priority": 1,
-      "description": "Background subtraction and noise filtering for more accurate motion detection.",
-      "value": "Reduces false positives.",
-      "complexity": "medium"
-    },
-    {
-      "id": "motion-zones",
-      "name": "Motion Zones",
-      "category": "core",
-      "type": "event-detector",
-      "priority": 2,
-      "description": "Allows defining specific areas of the frame for motion detection.",
-      "value": "Improves control and reduces noise.",
-      "complexity": "medium"
-    },
-    {
-      "id": "detect-person",
-      "name": "Person Detection",
-      "category": "core",
-      "type": "event-detector",
-      "priority": 1,
-      "description": "Detects human presence using lightweight AI models.",
-      "value": "Adds intelligence beyond basic motion detection.",
-      "complexity": "medium"
-    },
-    {
-      "id": "detect-animals",
-      "name": "Animal Detection",
-      "category": "core",
-      "type": "event-detector",
-      "priority": 2,
-      "description": "Detects animals (pets/wildlife) in the frame.",
-      "value": "Useful for outdoor and hobby use cases.",
-      "complexity": "medium"
-    },
-    {
-      "id": "record-continuous",
-      "name": "Continuous Recording",
-      "category": "core",
-      "type": "output",
-      "priority": 1,
-      "description": "Records the stream continuously.",
-      "value": "Baseline recording functionality.",
-      "complexity": "low"
-    },
-    {
-      "id": "record-on-event",
-      "name": "Event-Based Recording",
-      "category": "core",
-      "type": "output",
-      "priority": 1,
-      "description": "Records clips when motion or events are detected.",
-      "value": "Storage-efficient and practical.",
-      "complexity": "medium"
-    },
-    {
-      "id": "clip-buffer",
-      "name": "Clip Buffer",
-      "category": "core",
-      "type": "output",
-      "priority": 2,
-      "description": "Maintains a rolling buffer to capture moments before an event.",
-      "value": "Captures context before motion triggers.",
-      "complexity": "medium"
-    },
-    {
-      "id": "notify-telegram",
-      "name": "Telegram Notifications",
-      "category": "core",
-      "type": "integration",
-      "priority": 1,
-      "description": "Sends alerts via Telegram.",
-      "value": "Fast, popular notification channel.",
-      "complexity": "low"
-    },
-    {
-      "id": "notify-webhook",
-      "name": "Webhook Notifications",
-      "category": "core",
-      "type": "integration",
-      "priority": 1,
-      "description": "Sends event data to external systems via webhooks.",
-      "value": "Enables automation and integrations.",
-      "complexity": "low"
-    },
-    {
-      "id": "metrics-dashboard",
-      "name": "Metrics Dashboard",
-      "category": "power-user",
-      "type": "ui-panel",
-      "priority": 2,
-      "description": "Displays FPS, latency, CPU usage, and stream diagnostics.",
-      "value": "Improves observability and debugging.",
-      "complexity": "medium"
-    },
-    {
-      "id": "filter-night",
-      "name": "Night Mode Filter",
-      "category": "power-user",
-      "type": "video-processor",
-      "priority": 2,
-      "description": "Enhances low-light video conditions.",
-      "value": "Improves usability in dark environments.",
-      "complexity": "medium"
-    },
-    {
-      "id": "filter-edge",
-      "name": "Edge Detection Filter",
-      "category": "power-user",
-      "type": "video-processor",
-      "priority": 3,
-      "description": "Applies edge detection to the video stream.",
-      "value": "Useful for debugging and creative use cases.",
-      "complexity": "low"
-    },
-    {
-      "id": "stream-hls",
-      "name": "HLS Streaming",
-      "category": "power-user",
-      "type": "output",
-      "priority": 2,
-      "description": "Outputs the stream in HLS format.",
-      "value": "Web-friendly streaming format.",
-      "complexity": "medium"
-    },
-    {
-      "id": "stream-webrtc",
-      "name": "WebRTC Streaming",
-      "category": "power-user",
-      "type": "output",
-      "priority": 2,
-      "description": "Low-latency real-time streaming using WebRTC.",
-      "value": "Best for live viewing.",
-      "complexity": "high"
-    },
-    {
-      "id": "auth-basic",
-      "name": "Basic Authentication",
-      "category": "power-user",
-      "type": "integration",
-      "priority": 2,
-      "description": "Protects streams with username/password.",
-      "value": "Essential for privacy.",
-      "complexity": "low"
-    },
-    {
-      "id": "upload-r2",
-      "name": "Cloudflare R2 Upload",
-      "category": "ecosystem",
-      "type": "integration",
-      "priority": 2,
-      "description": "Uploads recordings to Cloudflare R2 storage.",
-      "value": "Cheap, scalable storage.",
-      "complexity": "medium"
-    },
-    {
-      "id": "rules-engine",
-      "name": "Rules Engine",
-      "category": "ecosystem",
-      "type": "event-processor",
-      "priority": 1,
-      "description": "Allows combining conditions and actions (e.g. motion + person → notify).",
-      "value": "Core automation capability.",
-      "complexity": "high"
-    },
-    {
-      "id": "scheduler",
-      "name": "Scheduler",
-      "category": "ecosystem",
-      "type": "event-processor",
-      "priority": 2,
-      "description": "Schedules when plugins or features are active.",
-      "value": "Reduces noise and improves control.",
-      "complexity": "medium"
-    },
-    {
-      "id": "gpio-trigger",
-      "name": "GPIO Trigger",
-      "category": "ecosystem",
-      "type": "integration",
-      "priority": 2,
-      "description": "Triggers events based on GPIO input (e.g. PIR sensor).",
-      "value": "Extends to physical hardware.",
-      "complexity": "medium"
+      "complexity": "low",
+      "score": 92,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 5,
+        "first_run_clarity": 4,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "must-have plugin",
+      "comments": "Excellent first-party plugin candidate. Strong fit for hobbyist monitoring, local-first use, and single-container Raspberry Pi deployment. Although marked as core, this is a very good plugin-shaped capability."
     },
     {
       "id": "timelapse",
@@ -208,7 +30,129 @@
       "priority": 3,
       "description": "Creates timelapse videos from captured frames.",
       "value": "Great for hobby and creative use.",
-      "complexity": "low"
+      "complexity": "low",
+      "score": 91,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 5,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "top-tier plugin",
+      "comments": "One of the best first-party plugin ideas in the whole set. Great fit for makers, 3D printing, workshop monitoring, and creative hobby usage."
+    },
+    {
+      "id": "record-on-event",
+      "name": "Event-Based Recording",
+      "category": "core",
+      "type": "output",
+      "priority": 1,
+      "description": "Records clips when motion or events are detected.",
+      "value": "Storage-efficient and practical.",
+      "complexity": "medium",
+      "score": 90,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "top-tier plugin",
+      "comments": "Excellent fit for your audience and product shape. Highly practical, resource-aware, and aligned with local-first monitoring use cases."
+    },
+    {
+      "id": "metrics-dashboard",
+      "name": "Metrics Dashboard",
+      "category": "power-user",
+      "type": "ui-panel",
+      "priority": 2,
+      "description": "Displays FPS, latency, CPU usage, and stream diagnostics.",
+      "value": "Improves observability and debugging.",
+      "complexity": "medium",
+      "score": 88,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "top-tier plugin",
+      "comments": "Excellent fit for tinkerers, makers, and developers. Strong observability value with very good plugin boundaries and low trust risk."
+    },
+    {
+      "id": "gpio-trigger",
+      "name": "GPIO Trigger",
+      "category": "ecosystem",
+      "type": "integration",
+      "priority": 2,
+      "description": "Triggers events based on GPIO input (e.g. PIR sensor).",
+      "value": "Extends to physical hardware.",
+      "complexity": "medium",
+      "score": 87,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 3,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "excellent plugin",
+      "comments": "Excellent match for Raspberry Pi tinkerers and makers. Strong differentiation point and very aligned with the physical-computing audience."
+    },
+    {
+      "id": "notify-webhook",
+      "name": "Webhook Notifications",
+      "category": "core",
+      "type": "integration",
+      "priority": 1,
+      "description": "Sends event data to external systems via webhooks.",
+      "value": "Enables automation and integrations.",
+      "complexity": "low",
+      "score": 86,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 4,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 5,
+        "first_run_clarity": 4,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 3
+      },
+      "verdict": "excellent plugin",
+      "comments": "One of the strongest integration plugins in the list. Very extensible and works well for local automations, LAN tooling, and advanced hobbyist setups."
+    },
+    {
+      "id": "motion-advanced",
+      "name": "Motion Detection (Advanced)",
+      "category": "core",
+      "type": "event-detector",
+      "priority": 1,
+      "description": "Background subtraction and noise filtering for more accurate motion detection.",
+      "value": "Reduces false positives.",
+      "complexity": "medium",
+      "score": 84,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "strong plugin",
+      "comments": "Good second-step plugin after basic motion detection. Clear user value and good local-first fit, but slightly more algorithmic complexity and tuning burden."
     },
     {
       "id": "gif-maker",
@@ -218,7 +162,217 @@
       "priority": 3,
       "description": "Generates GIFs from clips or events.",
       "value": "Fun and shareable output.",
-      "complexity": "low"
+      "complexity": "low",
+      "score": 83,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 5,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "strong plugin",
+      "comments": "A fun but still practical output plugin. Good optional feature that is easy to understand and fits well inside a clean plugin boundary."
+    },
+    {
+      "id": "motion-zones",
+      "name": "Motion Zones",
+      "category": "core",
+      "type": "event-detector",
+      "priority": 2,
+      "description": "Allows defining specific areas of the frame for motion detection.",
+      "value": "Improves control and reduces noise.",
+      "complexity": "medium",
+      "score": 82,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "excellent plugin",
+      "comments": "Very good practical plugin for workshops, printers, benches, and doorways. Strong control benefit with limited trust or deployment concerns."
+    },
+    {
+      "id": "clip-buffer",
+      "name": "Clip Buffer",
+      "category": "core",
+      "type": "output",
+      "priority": 2,
+      "description": "Maintains a rolling buffer to capture moments before an event.",
+      "value": "Captures context before motion triggers.",
+      "complexity": "medium",
+      "score": 81,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "strong plugin",
+      "comments": "Very practical for real monitoring scenarios. Slightly more operational complexity than basic event recording, but strong value and still a good plugin fit."
+    },
+    {
+      "id": "scheduler",
+      "name": "Scheduler",
+      "category": "ecosystem",
+      "type": "event-processor",
+      "priority": 2,
+      "description": "Schedules when plugins or features are active.",
+      "value": "Reduces noise and improves control.",
+      "complexity": "medium",
+      "score": 79,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "strong plugin",
+      "comments": "Very practical and easy to justify for workshops, pet monitoring, and time-bound monitoring scenarios. Good balance of usefulness and manageable complexity."
+    },
+    {
+      "id": "record-continuous",
+      "name": "Continuous Recording",
+      "category": "core",
+      "type": "output",
+      "priority": 1,
+      "description": "Records the stream continuously.",
+      "value": "Baseline recording functionality.",
+      "complexity": "low",
+      "score": 78,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 3,
+        "first_run_clarity": 5,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "good plugin",
+      "comments": "Clear and useful, but can be storage- and resource-heavy for Pi users. Good plugin candidate rather than a mandatory built-in feature."
+    },
+    {
+      "id": "filter-edge",
+      "name": "Edge Detection Filter",
+      "category": "power-user",
+      "type": "video-processor",
+      "priority": 3,
+      "description": "Applies edge detection to the video stream.",
+      "value": "Useful for debugging and creative use cases.",
+      "complexity": "low",
+      "score": 76,
+      "scoring": {
+        "practical_user_value": 3,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "solid plugin",
+      "comments": "Not essential, but a very clean plugin idea for debugging, experimentation, and creative hobby use. Low risk and easy to keep optional."
+    },
+    {
+      "id": "stream-hls",
+      "name": "HLS Streaming",
+      "category": "power-user",
+      "type": "output",
+      "priority": 2,
+      "description": "Outputs the stream in HLS format.",
+      "value": "Web-friendly streaming format.",
+      "complexity": "medium",
+      "score": 74,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 4,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 3,
+        "first_run_clarity": 4,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "good plugin",
+      "comments": "Practical and web-friendly, though less aligned with the simplest local preview story. A good extension, but not one of the very strongest early plugins."
+    },
+    {
+      "id": "filter-night",
+      "name": "Night Mode Filter",
+      "category": "power-user",
+      "type": "video-processor",
+      "priority": 2,
+      "description": "Enhances low-light video conditions.",
+      "value": "Improves usability in dark environments.",
+      "complexity": "medium",
+      "score": 72,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 4,
+        "reliability_on_pi4_single_container": 3,
+        "first_run_clarity": 4,
+        "maintenance_burden": 2,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "good plugin",
+      "comments": "Useful for garages, workshops, and pet monitoring, but video enhancement can become hardware-sensitive. Still a solid plugin candidate."
+    },
+    {
+      "id": "auth-basic",
+      "name": "Basic Authentication",
+      "category": "power-user",
+      "type": "integration",
+      "priority": 2,
+      "description": "Protects streams with username/password.",
+      "value": "Essential for privacy.",
+      "complexity": "low",
+      "score": 70,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 5,
+        "plugin_separability": 3,
+        "reliability_on_pi4_single_container": 5,
+        "first_run_clarity": 4,
+        "maintenance_burden": 4,
+        "safety_trustworthiness": 4
+      },
+      "verdict": "borderline core-vs-plugin",
+      "comments": "Important from a trust perspective. It works as a plugin technically, but there is also a strong case for including some basic protection in core."
+    },
+    {
+      "id": "upload-r2",
+      "name": "Cloudflare R2 Upload",
+      "category": "ecosystem",
+      "type": "integration",
+      "priority": 2,
+      "description": "Uploads recordings to Cloudflare R2 storage.",
+      "value": "Cheap, scalable storage.",
+      "complexity": "medium",
+      "score": 68,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 2,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 3,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 2
+      },
+      "verdict": "medium plugin",
+      "comments": "Useful for users who want off-device storage, but it is less aligned with local-first reliability and introduces credential and upload-trust concerns."
     },
     {
       "id": "mio-reactive-ui",
@@ -228,7 +382,129 @@
       "priority": 3,
       "description": "Animates the mascot based on system state (idle, motion, alert).",
       "value": "Unique brand identity and engagement.",
-      "complexity": "medium"
+      "complexity": "medium",
+      "score": 66,
+      "scoring": {
+        "practical_user_value": 2,
+        "local_first_fit": 5,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 4,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "optional branding plugin",
+      "comments": "A nice brand and delight feature, but not especially strong on practical value. Good optional plugin rather than something to prioritise early."
+    },
+    {
+      "id": "rules-engine",
+      "name": "Rules Engine",
+      "category": "ecosystem",
+      "type": "event-processor",
+      "priority": 1,
+      "description": "Allows combining conditions and actions (e.g. motion + person → notify).",
+      "value": "Core automation capability.",
+      "complexity": "high",
+      "score": 65,
+      "scoring": {
+        "practical_user_value": 5,
+        "local_first_fit": 5,
+        "plugin_separability": 3,
+        "reliability_on_pi4_single_container": 3,
+        "first_run_clarity": 2,
+        "maintenance_burden": 1,
+        "safety_trustworthiness": 4
+      },
+      "verdict": "important but risky",
+      "comments": "Potentially platform-defining, but easy to overcomplicate. High value, yet needs very disciplined UX and scope control to avoid becoming a maintenance trap."
+    },
+    {
+      "id": "detect-person",
+      "name": "Person Detection",
+      "category": "core",
+      "type": "event-detector",
+      "priority": 1,
+      "description": "Detects human presence using lightweight AI models.",
+      "value": "Adds intelligence beyond basic motion detection.",
+      "complexity": "medium",
+      "score": 63,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 4,
+        "plugin_separability": 3,
+        "reliability_on_pi4_single_container": 2,
+        "first_run_clarity": 3,
+        "maintenance_burden": 2,
+        "safety_trustworthiness": 4
+      },
+      "verdict": "borderline - defer or simplify",
+      "comments": "Interesting and valuable, but AI inference on Pi 4 raises reliability and maintenance concerns. Worth considering later, especially if model scope is tightly constrained."
+    },
+    {
+      "id": "notify-telegram",
+      "name": "Telegram Notifications",
+      "category": "core",
+      "type": "integration",
+      "priority": 1,
+      "description": "Sends alerts via Telegram.",
+      "value": "Fast, popular notification channel.",
+      "complexity": "low",
+      "score": 61,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 2,
+        "plugin_separability": 5,
+        "reliability_on_pi4_single_container": 4,
+        "first_run_clarity": 3,
+        "maintenance_burden": 3,
+        "safety_trustworthiness": 2
+      },
+      "verdict": "medium-priority plugin",
+      "comments": "Useful and easy to explain, but weaker fit for a local-first system because it depends on an external service and raises privacy and trust expectations."
+    },
+    {
+      "id": "detect-animals",
+      "name": "Animal Detection",
+      "category": "core",
+      "type": "event-detector",
+      "priority": 2,
+      "description": "Detects animals (pets/wildlife) in the frame.",
+      "value": "Useful for outdoor and hobby use cases.",
+      "complexity": "medium",
+      "score": 58,
+      "scoring": {
+        "practical_user_value": 3,
+        "local_first_fit": 4,
+        "plugin_separability": 3,
+        "reliability_on_pi4_single_container": 2,
+        "first_run_clarity": 3,
+        "maintenance_burden": 2,
+        "safety_trustworthiness": 4
+      },
+      "verdict": "defer",
+      "comments": "Useful for a narrower audience, but lower return than person detection and similar AI-related complexity risk. Better as a later plugin, not an early first-party investment."
+    },
+    {
+      "id": "stream-webrtc",
+      "name": "WebRTC Streaming",
+      "category": "power-user",
+      "type": "output",
+      "priority": 2,
+      "description": "Low-latency real-time streaming using WebRTC.",
+      "value": "Best for live viewing.",
+      "complexity": "high",
+      "score": 52,
+      "scoring": {
+        "practical_user_value": 4,
+        "local_first_fit": 3,
+        "plugin_separability": 3,
+        "reliability_on_pi4_single_container": 1,
+        "first_run_clarity": 2,
+        "maintenance_burden": 1,
+        "safety_trustworthiness": 4
+      },
+      "verdict": "defer",
+      "comments": "Attractive on paper, but too complex relative to your single-container and easy-first-run goals. High implementation and support burden make this a later-phase idea."
     },
     {
       "id": "scene-description",
@@ -238,7 +514,19 @@
       "priority": 3,
       "description": "Generates natural language descriptions of events in the scene.",
       "value": "AI-powered insights and accessibility.",
-      "complexity": "high"
+      "complexity": "high",
+      "score": 47,
+      "scoring": {
+        "practical_user_value": 3,
+        "local_first_fit": 1,
+        "plugin_separability": 3,
+        "reliability_on_pi4_single_container": 1,
+        "first_run_clarity": 2,
+        "maintenance_burden": 1,
+        "safety_trustworthiness": 2
+      },
+      "verdict": "reject or far-future",
+      "comments": "Interesting idea, but a poor fit for your current local-first, Pi 4, single-container goals. High compute cost and likely internet dependency make it a bad early first-party plugin."
     }
   ]
 }
