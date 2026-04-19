@@ -43,7 +43,6 @@ type FrameManager struct {
 	cleanupStopOnce sync.Once
 	cleanupChOnce   sync.Once // Protects cleanupCh close from double-close panic
 	fallbackWG      sync.WaitGroup
-	stopChancelMu   sync.Mutex // Protects stopChancel access
 
 	idleStopDelay time.Duration
 	captureStarts int64
@@ -442,7 +441,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	// Check connection limit
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = w.Write([]byte(fmt.Sprintf("Max stream connections reached (limit: %d)", maxConnections)))
+		_, _ = fmt.Fprintf(w, "Max stream connections reached (limit: %d)", maxConnections)
 		log.Printf("⚠️  Stream client rejected: connection limit exceeded")
 		return fmt.Errorf("connection limit exceeded")
 	}
