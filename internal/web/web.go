@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 
@@ -10,6 +11,9 @@ import (
 
 //go:embed *.html
 var webFS embed.FS
+
+//go:embed mio
+var mioFS embed.FS
 
 // RegisterStaticFiles registers static file routes with the router.
 func RegisterStaticFiles(r *chi.Mux) {
@@ -33,4 +37,16 @@ func RegisterStaticFiles(r *chi.Mux) {
 			_ = err
 		}
 	})
+
+	// Serve MIO mascot images at /static/mio/
+	mioSubFS, err := fs.Sub(mioFS, "mio")
+	if err != nil {
+		log.Printf("Error creating mio sub-filesystem: %v", err)
+		return
+	}
+	mioHandler := http.FileServer(http.FS(mioSubFS))
+	r.Handle("/static/mio/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		http.StripPrefix("/static/mio/", mioHandler).ServeHTTP(w, req)
+	}))
 }
