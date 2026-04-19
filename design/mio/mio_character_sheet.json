@@ -1,0 +1,101 @@
+{
+  "character": {
+    "name": "MIO",
+    "species": "Stylised Mola mola",
+    "style": "Cute, rounded, chibi-inspired mascot",
+    "proportions": {
+      "head_to_body_ratio": "Head dominates (~70%)",
+      "body_shape": "Oval, slightly flattened horizontally",
+      "fin_scale": "Small and simplified"
+    }
+  },
+
+  "turnaround": {
+    "front_view": "Symmetrical face, both eyes visible, small smile centred",
+    "3_4_view": "Primary/default angle, slight tilt, one eye slightly larger",
+    "side_view": "One eye visible, smooth head curve, minimal depth",
+    "back_view": "Simplified dorsal fin and tail silhouette, no facial features"
+  },
+
+  "core_poses": [
+    {
+      "name": "Idle / Default",
+      "description": "Floating slightly angled (3/4), eyes open, soft smile",
+      "use_case": "Homepage, neutral UI state"
+    },
+    {
+      "name": "Curious",
+      "description": "Leaning forward slightly, eyes widened, tiny mouth",
+      "use_case": "Hover states, discovery moments"
+    },
+    {
+      "name": "Happy",
+      "description": "Open smiling mouth, bright eyes, slight fin lift",
+      "use_case": "Success states, confirmations"
+    },
+    {
+      "name": "Excited",
+      "description": "Bouncing pose, fins raised, wide open eyes",
+      "use_case": "Achievements, milestones"
+    },
+    {
+      "name": "Sleeping",
+      "description": "Eyes closed, relaxed mouth, slightly tilted body",
+      "use_case": "Idle timeout, low activity"
+    },
+    {
+      "name": "Thinking",
+      "description": "Eyes looking slightly up/side, subtle frown curve",
+      "use_case": "Loading, processing states"
+    },
+    {
+      "name": "Waving",
+      "description": "One fin raised, cheerful expression",
+      "use_case": "Onboarding, greetings"
+    },
+    {
+      "name": "Concerned",
+      "description": "Slightly lowered eyelids, small flat mouth",
+      "use_case": "Warnings, gentle errors"
+    },
+    {
+      "name": "Determined",
+      "description": "Eyes focused forward, slight tilt down",
+      "use_case": "Active processes, tasks running"
+    }
+  ],
+
+  "expression_system": {
+    "eyes": {
+      "states": ["wide", "relaxed", "closed", "focused"],
+      "rule": "Primary emotional driver"
+    },
+    "mouth": {
+      "states": ["smile", "open smile", "neutral", "tiny frown"],
+      "rule": "Keep minimal and subtle"
+    },
+    "body_language": {
+      "movement": ["tilt", "bounce", "lean"],
+      "rule": "Small shifts convey emotion without complexity"
+    }
+  },
+
+  "animation_guidance": {
+    "idle_motion": "Slow floating bob (up/down 2–4px)",
+    "blink_rate": "Every 3–6 seconds",
+    "transitions": "Ease-in-out, soft and organic",
+    "avoid": [
+      "sharp or fast movements",
+      "complex limb animation",
+      "realistic physics"
+    ]
+  },
+
+  "consistency_rules": [
+    "Always maintain rounded silhouette",
+    "Eyes must remain large and expressive",
+    "No harsh shadows or realism",
+    "Keep colour palette within defined blues",
+    "Expressions should be readable at small sizes"
+  ]
+}
