@@ -39,6 +39,7 @@ type FrameManager struct {
 	cleanupStop     chan struct{}
 	cleanupDone     chan struct{}
 	cleanupStopOnce sync.Once
+	fallbackWG      sync.WaitGroup
 
 	idleStopDelay time.Duration
 	captureStarts int64
@@ -192,13 +193,15 @@ func (fm *FrameManager) scheduleStopCapture() {
 		// Cleanup queue saturated: fallback to a direct delayed stop check
 		// so that stop intent is never dropped.
 		log.Printf("⚠️  Cleanup channel enqueue timed out; using fallback stop path")
+		fm.fallbackWG.Add(1)
 		go fm.delayedStopFallback(req)
 	}
 }
 
 func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
+	defer fm.fallbackWG.Done()
+
 	timer := time.NewTimer(req.delay)
-	defer timer.Stop()
 
 	select {
 	case <-timer.C:
@@ -206,8 +209,14 @@ func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
 			log.Printf("🛑 Stopping capture via fallback idle-stop path")
 		}
 	case <-req.stopCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
 		log.Printf("📊 Fallback stop cancelled: new client connected")
 	case <-fm.cleanupStop:
+		if !timer.Stop() {
+			<-timer.C
+		}
 	}
 }
 
@@ -377,6 +386,7 @@ func (fm *FrameManager) Stop() {
 
 	// Wait for cleanup loop to exit
 	<-fm.cleanupDone
+	fm.fallbackWG.Wait()
 	log.Printf("✓ Cleanup loop exited cleanly")
 }
 
