@@ -55,6 +55,7 @@ type cleanupRequest struct {
 }
 
 const defaultIdleStopDelay = 3 * time.Second
+const cleanupEnqueueTimeout = 100 * time.Millisecond
 
 const (
 	initialCaptureRetryDelay              = 100 * time.Millisecond
@@ -181,13 +182,47 @@ func (fm *FrameManager) scheduleStopCapture() {
 		done:   done,
 	}
 
+	timer := time.NewTimer(cleanupEnqueueTimeout)
+	defer timer.Stop()
+
 	select {
 	case fm.cleanupCh <- req:
 		// Request queued successfully
-	default:
-		// Cleanup channel full, log and skip (shouldn't happen in normal operation)
-		log.Printf("⚠️  Cleanup channel full, stop request dropped")
+	case <-timer.C:
+		// Cleanup queue saturated: fallback to a direct delayed stop check
+		// so that stop intent is never dropped.
+		log.Printf("⚠️  Cleanup channel enqueue timed out; using fallback stop path")
+		go fm.delayedStopFallback(req)
 	}
+}
+
+func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
+	timer := time.NewTimer(req.delay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		if fm.stopCaptureIfIdle(req.done) {
+			log.Printf("🛑 Stopping capture via fallback idle-stop path")
+		}
+	case <-req.stopCh:
+		log.Printf("📊 Fallback stop cancelled: new client connected")
+	case <-fm.cleanupStop:
+	}
+}
+
+func (fm *FrameManager) stopCaptureIfIdle(expectedDone chan struct{}) bool {
+	fm.captureMu.Lock()
+	if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 || fm.doneChan != expectedDone {
+		fm.captureMu.Unlock()
+		return false
+	}
+	fm.captureStarted = false
+	done := fm.doneChan
+	fm.captureMu.Unlock()
+
+	close(done)
+	return true
 }
 
 // cleanupLoop runs in a background goroutine and handles deferred capture stops
@@ -217,17 +252,11 @@ func (fm *FrameManager) cleanupLoop() {
 			select {
 			case <-timer.C:
 				// Delay expired, proceed with stopping if conditions still met
-				fm.captureMu.Lock()
-				if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 || fm.doneChan != req.done {
-					fm.captureMu.Unlock()
+				if !fm.stopCaptureIfIdle(req.done) {
 					log.Printf("📊 Stop cancelled: capture already restarted or new client connected")
 					continue
 				}
-				// Still no clients, close capture
-				fm.captureStarted = false
-				fm.captureMu.Unlock()
 				log.Printf("🛑 Stopping capture (idle timeout expired)")
-				close(req.done)
 
 			case <-req.stopCh:
 				if !timer.Stop() {
