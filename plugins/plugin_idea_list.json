@@ -8,17 +8,19 @@
       "value": "Often more useful than full video clips for quick inspection.",
       "complexity": "low",
       "score": 96,
+      "cpu_overhead": "<2% per event",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 5,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 5,
+        "strategic_leverage": 5,
         "safety_trustworthiness": 5
       },
       "verdict": "must-have plugin",
-      "comments": "Extremely practical and lightweight. Strong complement to event recording."
+      "comments": "Extremely practical and lightweight. Strong complement to event recording. Minimal CPU cost, fully isolated within container."
     },
     {
       "id": "retention-policy",
@@ -28,17 +30,19 @@
       "value": "Prevents storage from filling up and keeps the system stable over time.",
       "complexity": "low",
       "score": 96,
+      "cpu_overhead": "<1% (periodic cleanup)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 5,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 5,
+        "strategic_leverage": 5,
         "safety_trustworthiness": 5
       },
       "verdict": "must-have plugin",
-      "comments": "Extremely practical and essential for real-world usage. Strong local-first alignment and very easy for users to understand."
+      "comments": "Essential for real-world usage. Storage management is event-driven and deferred, minimal CPU impact. Fully isolated."
     },
     {
       "id": "snapshot-capture",
@@ -48,17 +52,19 @@
       "value": "Simple and versatile capture method for many use cases.",
       "complexity": "low",
       "score": 96,
+      "cpu_overhead": "<3% per capture",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 5,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 5,
+        "strategic_leverage": 5,
         "safety_trustworthiness": 5
       },
       "verdict": "must-have plugin",
-      "comments": "Highly flexible and useful across all scenarios including pets, printers, and workshops."
+      "comments": "Highly flexible and useful across all scenarios. JPEG encoding adds minor CPU; interval-based means predictable overhead."
     },
     {
       "id": "motion-basic",
@@ -68,17 +74,19 @@
       "value": "Essential for security and automation use cases.",
       "complexity": "low",
       "score": 94,
+      "cpu_overhead": "3-5% baseline",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 4,
+        "strategic_leverage": 5,
         "safety_trustworthiness": 5
       },
       "verdict": "must-have plugin",
-      "comments": "Excellent first-party plugin candidate. Strong fit for hobbyist monitoring, local-first use, and single-container Raspberry Pi deployment. Although marked as core, this is a very good plugin-shaped capability."
+      "comments": "Core motion detection. Efficient frame-differencing algorithm with reasonable CPU baseline. Essential ecosystem foundation."
     },
     {
       "id": "disk-space-guard",
@@ -88,17 +96,19 @@
       "value": "Prevents crashes and data loss due to full storage.",
       "complexity": "low",
       "score": 94,
+      "cpu_overhead": "<1% (periodic monitoring)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 4,
+        "strategic_leverage": 5,
         "safety_trustworthiness": 5
       },
       "verdict": "must-have plugin",
-      "comments": "Highly practical safeguard. Complements recording plugins and prevents common real-world failure scenarios."
+      "comments": "Prevents catastrophic failure. Polling-based monitoring is lightweight; responds to storage events gracefully."
     },
     {
       "id": "thermal-watchdog",
@@ -107,18 +117,20 @@
       "description": "Monitors Raspberry Pi temperature and warns about thermal throttling.",
       "value": "Helps maintain system performance and reliability.",
       "complexity": "low",
-      "score": 94,
+      "score": 93,
+      "cpu_overhead": "<1% (polling /sys)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 5,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 4,
+        "strategic_leverage": 5,
         "safety_trustworthiness": 5
       },
       "verdict": "must-have plugin",
-      "comments": "Highly relevant for Raspberry Pi users. Very low risk and strong practical benefit."
+      "comments": "Critical for Pi reliability. Temperature reading via /sys is standard container access, negligible CPU cost."
     },
     {
       "id": "metrics-dashboard",
@@ -127,38 +139,20 @@
       "description": "Displays FPS, latency, CPU usage, and stream diagnostics.",
       "value": "Improves observability and debugging.",
       "complexity": "medium",
-      "score": 91,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Excellent fit for tinkerers, makers, and developers. Strong observability value with very good plugin boundaries and low trust risk."
-    },
-    {
-      "id": "timelapse",
-      "name": "Timelapse Generator",
-      "type": "output",
-      "description": "Creates timelapse videos from captured frames.",
-      "value": "Great for hobby and creative use.",
-      "complexity": "low",
       "score": 89,
+      "cpu_overhead": "<2% (data aggregation)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 5,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 4,
+        "strategic_leverage": 4,
         "safety_trustworthiness": 5
       },
       "verdict": "top-tier plugin",
-      "comments": "One of the best first-party plugin ideas in the whole set. Great fit for makers, 3D printing, workshop monitoring, and creative hobby usage."
+      "comments": "Excellent for makers and developers. Metrics collection is deferred; UI rendering client-side minimizes server CPU."
     },
     {
       "id": "record-on-event",
@@ -167,18 +161,42 @@
       "description": "Records clips when motion or events are detected.",
       "value": "Storage-efficient and practical.",
       "complexity": "medium",
-      "score": 89,
+      "score": 88,
+      "cpu_overhead": "5-10% while recording",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 3,
+        "first_run_clarity": 4,
+        "strategic_leverage": 4,
         "safety_trustworthiness": 5
       },
       "verdict": "top-tier plugin",
-      "comments": "Excellent fit for your audience and product shape. Highly practical, resource-aware, and aligned with local-first monitoring use cases."
+      "comments": "Core use case. Encoding adds 5-10% CPU overhead only when recording. Storage-efficient and resource-aware."
+    },
+    {
+      "id": "timelapse",
+      "name": "Timelapse Generator",
+      "type": "output",
+      "description": "Creates timelapse videos from captured frames.",
+      "value": "Great for hobby and creative use.",
+      "complexity": "low",
+      "score": 87,
+      "cpu_overhead": "5-8% during timelapse creation",
+      "scoring": {
+        "practical_user_value": 5,
+        "plugin_separability": 5,
+        "container_fit": 5,
+        "maintenance_burden": 4,
+        "cpu_efficiency": 3,
+        "first_run_clarity": 5,
+        "strategic_leverage": 4,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "top-tier plugin",
+      "comments": "Excellent for makers and workshops. Encoding is deferred/batch, so baseline CPU is unaffected. Very clean plugin boundary."
     },
     {
       "id": "pir-assist",
@@ -187,18 +205,21 @@
       "description": "Combines GPIO PIR sensor input with motion detection to reduce false positives.",
       "value": "Improves detection accuracy using physical sensors.",
       "complexity": "medium",
-      "score": 89,
+      "score": 86,
+      "cpu_overhead": "<1%",
+      "docker_note": "Requires GPIO device mapping (standard Pi GPIO)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
+        "container_fit": 4,
         "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 3,
+        "strategic_leverage": 4,
         "safety_trustworthiness": 5
       },
       "verdict": "top-tier plugin",
-      "comments": "Excellent maker-focused plugin. Strong real-world accuracy improvements using cheap hardware."
+      "comments": "Excellent for accuracy improvements. GPIO access via standard device mapping; event-driven polling has minimal CPU cost."
     },
     {
       "id": "gpio-trigger",
@@ -207,18 +228,21 @@
       "description": "Triggers events based on GPIO input (e.g. PIR sensor).",
       "value": "Extends to physical hardware.",
       "complexity": "medium",
-      "score": 89,
+      "score": 86,
+      "cpu_overhead": "<1%",
+      "docker_note": "Requires GPIO device mapping (standard Pi GPIO)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
+        "container_fit": 4,
         "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 3,
+        "strategic_leverage": 4,
         "safety_trustworthiness": 5
       },
       "verdict": "top-tier plugin",
-      "comments": "Excellent match for Raspberry Pi tinkerers and makers. Strong differentiation point and very aligned with the physical-computing audience."
+      "comments": "Excellent for maker scenarios. GPIO polling is event-driven; standard Pi device mapping. Minimal CPU impact."
     },
     {
       "id": "mqtt-publisher",
@@ -227,18 +251,20 @@
       "description": "Publishes events to an MQTT broker for home automation systems.",
       "value": "Enables integration with Home Assistant and other automation platforms.",
       "complexity": "medium",
-      "score": 86,
+      "score": 85,
+      "cpu_overhead": "<1% (event-based publish)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 3,
+        "strategic_leverage": 4,
         "safety_trustworthiness": 4
       },
       "verdict": "top-tier plugin",
-      "comments": "One of the strongest ecosystem integrations for your audience. Perfect for tinkerers and home automation setups."
+      "comments": "Strong ecosystem integration. Event publishing is lightweight; standard Docker networking. No device mapping overhead."
     },
     {
       "id": "notify-webhook",
@@ -247,38 +273,20 @@
       "description": "Sends event data to external systems via webhooks.",
       "value": "Enables automation and integrations.",
       "complexity": "low",
-      "score": 86,
+      "score": 84,
+      "cpu_overhead": "<1% (event-based HTTP)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 4,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 4,
+        "strategic_leverage": 3,
         "safety_trustworthiness": 3
       },
       "verdict": "top-tier plugin",
-      "comments": "One of the strongest integration plugins in the list. Very extensible and works well for local automations, LAN tooling, and advanced hobbyist setups."
-    },
-    {
-      "id": "gif-maker",
-      "name": "GIF Creator",
-      "type": "output",
-      "description": "Generates GIFs from clips or events.",
-      "value": "Fun and shareable output.",
-      "complexity": "low",
-      "score": 86,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 5,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "A fun but still practical output plugin. Good optional feature that is easy to understand and fits well inside a clean plugin boundary."
+      "comments": "Highly extensible. Webhook calls are event-driven; standard Docker networking. Low CPU footprint, very clean boundaries."
     },
     {
       "id": "plugin-health",
@@ -287,18 +295,20 @@
       "description": "Displays status and health of all enabled plugins.",
       "value": "Improves visibility and debugging of plugin system.",
       "complexity": "medium",
-      "score": 85,
+      "score": 82,
+      "cpu_overhead": "<2% (status aggregation)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 4,
+        "strategic_leverage": 4,
         "safety_trustworthiness": 5
       },
       "verdict": "excellent plugin",
-      "comments": "Very useful once plugin ecosystem grows. Enhances transparency and trust."
+      "comments": "Very useful for ecosystem maturity. Status polling is deferred; UI rendering client-side. Minimal server CPU overhead."
     },
     {
       "id": "event-timeline",
@@ -307,18 +317,20 @@
       "description": "Displays a chronological timeline of detected events with thumbnails and playback.",
       "value": "Makes reviewing footage intuitive and efficient.",
       "complexity": "medium",
-      "score": 84,
+      "score": 81,
+      "cpu_overhead": "<2% (thumbnail generation)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 4,
+        "strategic_leverage": 3,
         "safety_trustworthiness": 5
       },
       "verdict": "excellent plugin",
-      "comments": "Transforms raw detections into usable insight. Strong UX improvement for all users."
+      "comments": "Strong UX improvement. Thumbnail generation is deferred; UI logic client-side. Low baseline CPU cost."
     },
     {
       "id": "smb-export",
@@ -327,78 +339,20 @@
       "description": "Saves recordings and snapshots to a local network share.",
       "value": "Provides local storage expansion without cloud dependency.",
       "complexity": "medium",
-      "score": 84,
+      "score": 80,
+      "cpu_overhead": "<2% (async network I/O)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
+        "container_fit": 5,
         "maintenance_burden": 4,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 3,
+        "strategic_leverage": 3,
         "safety_trustworthiness": 4
       },
       "verdict": "excellent plugin",
-      "comments": "Strong alternative to cloud storage. Keeps the system aligned with local-first principles."
-    },
-    {
-      "id": "filter-edge",
-      "name": "Edge Detection Filter",
-      "type": "video-processor",
-      "description": "Applies edge detection to the video stream.",
-      "value": "Useful for debugging and creative use cases.",
-      "complexity": "low",
-      "score": 76,
-      "scoring": {
-        "practical_user_value": 3,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "worth considering",
-      "comments": "Not essential, but a very clean plugin idea for debugging, experimentation, and creative hobby use. Low risk and easy to keep optional."
-    },
-    {
-      "id": "auth-basic",
-      "name": "Basic Authentication",
-      "type": "integration",
-      "description": "Protects streams with username/password.",
-      "value": "Essential for privacy.",
-      "complexity": "low",
-      "score": 76,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "worth considering",
-      "comments": "Important from a trust perspective. It works as a plugin technically, but there is also a strong case for including some basic protection in core."
-    },
-    {
-      "id": "motion-advanced",
-      "name": "Motion Detection (Advanced)",
-      "type": "event-detector",
-      "description": "Background subtraction and noise filtering for more accurate motion detection.",
-      "value": "Reduces false positives.",
-      "complexity": "medium",
-      "score": 75,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "worth considering",
-      "comments": "Good second-step plugin after basic motion detection. Clear user value and good local-first fit, but slightly more algorithmic complexity and tuning burden."
+      "comments": "Local-first aligned. Network I/O is asynchronous and deferred; standard Docker networking. Minimal baseline impact."
     },
     {
       "id": "motion-zones",
@@ -408,17 +362,41 @@
       "value": "Improves control and reduces noise.",
       "complexity": "medium",
       "score": 75,
+      "cpu_overhead": "3-5% (mask overlay per frame)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 3,
+        "cpu_efficiency": 3,
+        "first_run_clarity": 4,
+        "strategic_leverage": 3,
         "safety_trustworthiness": 5
       },
       "verdict": "worth considering",
-      "comments": "Very good practical plugin for workshops, printers, benches, and doorways. Strong control benefit with limited trust or deployment concerns."
+      "comments": "Practical control feature. Mask overlay adds per-frame processing cost (~3-5% CPU). Good workshop/doorway use case."
+    },
+    {
+      "id": "gif-maker",
+      "name": "GIF Creator",
+      "type": "output",
+      "description": "Generates GIFs from clips or events.",
+      "value": "Fun and shareable output.",
+      "complexity": "low",
+      "score": 75,
+      "cpu_overhead": "15-25% during GIF creation",
+      "scoring": {
+        "practical_user_value": 4,
+        "plugin_separability": 5,
+        "container_fit": 5,
+        "maintenance_burden": 4,
+        "cpu_efficiency": 2,
+        "first_run_clarity": 5,
+        "strategic_leverage": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "worth considering",
+      "comments": "Fun feature but CPU-intensive. Encoding typically batched/async, so baseline streaming unaffected. Deferred processing."
     },
     {
       "id": "clip-buffer",
@@ -428,17 +406,19 @@
       "value": "Captures context before motion triggers.",
       "complexity": "medium",
       "score": 75,
+      "cpu_overhead": "2-3% (memory management)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 3,
+        "cpu_efficiency": 3,
+        "first_run_clarity": 4,
+        "strategic_leverage": 3,
         "safety_trustworthiness": 5
       },
       "verdict": "worth considering",
-      "comments": "Very practical for real monitoring scenarios. Slightly more operational complexity than basic event recording, but strong value and still a good plugin fit."
+      "comments": "Practical pre-event capture. Rolling buffer adds GC pressure (~2-3% CPU); consider object pooling to optimize."
     },
     {
       "id": "scheduler",
@@ -447,18 +427,42 @@
       "description": "Schedules when plugins or features are active.",
       "value": "Reduces noise and improves control.",
       "complexity": "medium",
-      "score": 75,
+      "score": 74,
+      "cpu_overhead": "<1% (scheduling logic)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 3,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 4,
+        "strategic_leverage": 3,
         "safety_trustworthiness": 5
       },
       "verdict": "worth considering",
-      "comments": "Very practical and easy to justify for workshops, pet monitoring, and time-bound monitoring scenarios. Good balance of usefulness and manageable complexity."
+      "comments": "Very practical. Scheduling logic is lightweight; enables time-based noise reduction for workshops/pet monitoring."
+    },
+    {
+      "id": "motion-advanced",
+      "name": "Motion Detection (Advanced)",
+      "type": "event-detector",
+      "description": "Background subtraction and noise filtering for more accurate motion detection.",
+      "value": "Reduces false positives.",
+      "complexity": "medium",
+      "score": 71,
+      "cpu_overhead": "8-15% per-frame processing",
+      "scoring": {
+        "practical_user_value": 4,
+        "plugin_separability": 4,
+        "container_fit": 5,
+        "maintenance_burden": 3,
+        "cpu_efficiency": 2,
+        "first_run_clarity": 4,
+        "strategic_leverage": 3,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "worth considering",
+      "comments": "Good enhancement but CPU-expensive. Background subtraction adds 8-15% overhead. Good second-phase plugin."
     },
     {
       "id": "record-continuous",
@@ -467,58 +471,64 @@
       "description": "Records the stream continuously.",
       "value": "Baseline recording functionality.",
       "complexity": "low",
-      "score": 74,
+      "score": 70,
+      "cpu_overhead": "8-12% (continuous encoding)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 5,
+        "container_fit": 5,
         "maintenance_burden": 3,
+        "cpu_efficiency": 2,
+        "first_run_clarity": 5,
+        "strategic_leverage": 2,
         "safety_trustworthiness": 5
       },
       "verdict": "worth considering",
-      "comments": "Clear and useful, but can be storage- and resource-heavy for Pi users. Good plugin candidate rather than a mandatory built-in feature."
+      "comments": "Storage/CPU intensive. Continuous encoding uses 8-12% CPU; storage-hungry on Pi. Consider selective recording instead."
     },
     {
-      "id": "notify-telegram",
-      "name": "Telegram Notifications",
+      "id": "auth-basic",
+      "name": "Basic Authentication",
       "type": "integration",
-      "description": "Sends alerts via Telegram.",
-      "value": "Fast, popular notification channel.",
+      "description": "Protects streams with username/password.",
+      "value": "Essential for privacy.",
       "complexity": "low",
       "score": 70,
+      "cpu_overhead": "<1% (per-request check)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 2,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 2
+        "plugin_separability": 3,
+        "container_fit": 5,
+        "maintenance_burden": 4,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 4,
+        "strategic_leverage": 2,
+        "safety_trustworthiness": 4
       },
       "verdict": "worth considering",
-      "comments": "Useful and easy to explain, but weaker fit for a local-first system because it depends on an external service and raises privacy and trust expectations."
+      "comments": "Important for privacy. Authentication checks have negligible CPU cost. Consider whether core or plugin."
     },
     {
-      "id": "stream-hls",
-      "name": "HLS Streaming",
-      "type": "output",
-      "description": "Outputs the stream in HLS format.",
-      "value": "Web-friendly streaming format.",
-      "complexity": "medium",
-      "score": 69,
+      "id": "filter-edge",
+      "name": "Edge Detection Filter",
+      "type": "video-processor",
+      "description": "Applies edge detection to the video stream.",
+      "value": "Useful for debugging and creative use cases.",
+      "complexity": "low",
+      "score": 66,
+      "cpu_overhead": "20-30% per-frame processing",
       "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 4,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 3,
+        "practical_user_value": 3,
+        "plugin_separability": 5,
+        "container_fit": 5,
+        "maintenance_burden": 4,
+        "cpu_efficiency": 1,
         "first_run_clarity": 4,
-        "maintenance_burden": 3,
+        "strategic_leverage": 2,
         "safety_trustworthiness": 5
       },
-      "verdict": "worth considering",
-      "comments": "Practical and web-friendly, though less aligned with the simplest local preview story. A good extension, but not one of the very strongest early plugins."
+      "verdict": "only if strategically important",
+      "comments": "Debug/creative use only. Edge detection is very CPU-expensive (~20-30% overhead). Not recommended for Pi at scale."
     },
     {
       "id": "filter-night",
@@ -527,18 +537,42 @@
       "description": "Enhances low-light video conditions.",
       "value": "Improves usability in dark environments.",
       "complexity": "medium",
-      "score": 69,
+      "score": 65,
+      "cpu_overhead": "15-25% per-frame processing",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 5,
         "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 2,
+        "cpu_efficiency": 1,
+        "first_run_clarity": 4,
+        "strategic_leverage": 2,
         "safety_trustworthiness": 5
       },
-      "verdict": "worth considering",
-      "comments": "Useful for garages, workshops, and pet monitoring, but video enhancement can become hardware-sensitive. Still a solid plugin candidate."
+      "verdict": "only if strategically important",
+      "comments": "Useful for dark environments but CPU-heavy. Enhancement processing adds 15-25% overhead; may be hardware-sensitive."
+    },
+    {
+      "id": "stream-hls",
+      "name": "HLS Streaming",
+      "type": "output",
+      "description": "Outputs the stream in HLS format.",
+      "value": "Web-friendly streaming format.",
+      "complexity": "medium",
+      "score": 65,
+      "cpu_overhead": "8-15% (segmentation + encoding)",
+      "scoring": {
+        "practical_user_value": 4,
+        "plugin_separability": 4,
+        "container_fit": 5,
+        "maintenance_burden": 3,
+        "cpu_efficiency": 2,
+        "first_run_clarity": 4,
+        "strategic_leverage": 2,
+        "safety_trustworthiness": 5
+      },
+      "verdict": "only if strategically important",
+      "comments": "Web-friendly but CPU-intensive. Segmentation/encoding adds 8-15% overhead. Lower priority than direct streaming."
     },
     {
       "id": "upload-r2",
@@ -547,18 +581,42 @@
       "description": "Uploads recordings to Cloudflare R2 storage.",
       "value": "Cheap, scalable storage.",
       "complexity": "medium",
-      "score": 69,
+      "score": 65,
+      "cpu_overhead": "<2% (async upload)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 2,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
+        "container_fit": 5,
         "maintenance_burden": 3,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 3,
+        "strategic_leverage": 1,
         "safety_trustworthiness": 2
       },
-      "verdict": "worth considering",
-      "comments": "Useful for users who want off-device storage, but it is less aligned with local-first reliability and introduces credential and upload-trust concerns."
+      "verdict": "only if strategically important",
+      "comments": "Cloud storage conflicts with local-first philosophy. Credentials/trust concerns. Async uploads minimize CPU, but strategically weaker."
+    },
+    {
+      "id": "notify-telegram",
+      "name": "Telegram Notifications",
+      "type": "integration",
+      "description": "Sends alerts via Telegram.",
+      "value": "Fast, popular notification channel.",
+      "complexity": "low",
+      "score": 64,
+      "cpu_overhead": "<1% (event-based API call)",
+      "scoring": {
+        "practical_user_value": 4,
+        "plugin_separability": 5,
+        "container_fit": 5,
+        "maintenance_burden": 3,
+        "cpu_efficiency": 5,
+        "first_run_clarity": 3,
+        "strategic_leverage": 1,
+        "safety_trustworthiness": 2
+      },
+      "verdict": "only if strategically important",
+      "comments": "Popular but external dependency. Event-based API calls have low CPU. Local-first fit weaker due to external service reliance."
     },
     {
       "id": "mio-reactive-ui",
@@ -567,18 +625,20 @@
       "description": "Animates the mascot based on system state (idle, motion, alert).",
       "value": "Unique brand identity and engagement.",
       "complexity": "medium",
-      "score": 68,
+      "score": 60,
+      "cpu_overhead": "2-3% (animation state updates)",
       "scoring": {
         "practical_user_value": 2,
-        "local_first_fit": 5,
         "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
+        "container_fit": 5,
         "maintenance_burden": 3,
+        "cpu_efficiency": 4,
+        "first_run_clarity": 4,
+        "strategic_leverage": 2,
         "safety_trustworthiness": 5
       },
-      "verdict": "worth considering",
-      "comments": "A nice brand and delight feature, but not especially strong on practical value. Good optional plugin rather than something to prioritise early."
+      "verdict": "only if strategically important",
+      "comments": "Branding/delight feature. Animation state updates are minimal; UI rendering client-side. Low practical value, high engagement potential."
     },
     {
       "id": "rules-engine",
@@ -587,18 +647,20 @@
       "description": "Allows combining conditions and actions (e.g. motion + person → notify).",
       "value": "Core automation capability.",
       "complexity": "high",
-      "score": 63,
+      "score": 57,
+      "cpu_overhead": "3-8% (rule evaluation)",
       "scoring": {
         "practical_user_value": 5,
-        "local_first_fit": 5,
         "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 2,
+        "container_fit": 5,
         "maintenance_burden": 1,
+        "cpu_efficiency": 2,
+        "first_run_clarity": 2,
+        "strategic_leverage": 2,
         "safety_trustworthiness": 4
       },
-      "verdict": "only if strategically important",
-      "comments": "Potentially platform-defining, but easy to overcomplicate. High value, yet needs very disciplined UX and scope control to avoid becoming a maintenance trap."
+      "verdict": "defer",
+      "comments": "Powerful but risky. Complex state machines add CPU overhead and maintenance burden. Requires disciplined UX to avoid scope creep."
     },
     {
       "id": "detect-person",
@@ -607,18 +669,20 @@
       "description": "Detects human presence using lightweight AI models.",
       "value": "Adds intelligence beyond basic motion detection.",
       "complexity": "medium",
-      "score": 59,
+      "score": 48,
+      "cpu_overhead": "30-50% per inference",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 4,
         "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 2,
-        "first_run_clarity": 3,
+        "container_fit": 5,
         "maintenance_burden": 2,
+        "cpu_efficiency": 1,
+        "first_run_clarity": 3,
+        "strategic_leverage": 2,
         "safety_trustworthiness": 4
       },
-      "verdict": "only if strategically important",
-      "comments": "Interesting and valuable, but AI inference on Pi 4 raises reliability and maintenance concerns. Worth considering later, especially if model scope is tightly constrained."
+      "verdict": "defer",
+      "comments": "AI inference is very CPU-expensive. 30-50% overhead per inference on Pi 4. Reliability concerns at scale. Better as later-phase enhancement."
     },
     {
       "id": "stream-webrtc",
@@ -627,18 +691,20 @@
       "description": "Low-latency real-time streaming using WebRTC.",
       "value": "Best for live viewing.",
       "complexity": "high",
-      "score": 46,
+      "score": 41,
+      "cpu_overhead": "20-40% (real-time encoding + network)",
       "scoring": {
         "practical_user_value": 4,
-        "local_first_fit": 3,
         "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 1,
-        "first_run_clarity": 2,
+        "container_fit": 5,
         "maintenance_burden": 1,
+        "cpu_efficiency": 1,
+        "first_run_clarity": 2,
+        "strategic_leverage": 1,
         "safety_trustworthiness": 4
       },
       "verdict": "defer - too complex",
-      "comments": "Attractive on paper, but too complex relative to your single-container and easy-first-run goals. High implementation and support burden make this a later-phase idea."
+      "comments": "Too complex for early phase. Real-time encoding + WebRTC overhead = 20-40% CPU. Very high maintenance burden; multiple failure modes."
     },
     {
       "id": "detect-animals",
@@ -647,18 +713,20 @@
       "description": "Detects animals (pets/wildlife) in the frame.",
       "value": "Useful for outdoor and hobby use cases.",
       "complexity": "medium",
-      "score": 45,
+      "score": 40,
+      "cpu_overhead": "30-50% per inference",
       "scoring": {
         "practical_user_value": 3,
-        "local_first_fit": 4,
         "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 2,
-        "first_run_clarity": 3,
+        "container_fit": 5,
         "maintenance_burden": 2,
+        "cpu_efficiency": 1,
+        "first_run_clarity": 3,
+        "strategic_leverage": 1,
         "safety_trustworthiness": 4
       },
       "verdict": "defer",
-      "comments": "Useful for a narrower audience, but lower return than person detection and similar AI-related complexity risk. Better as a later plugin, not an early first-party investment."
+      "comments": "AI inference is prohibitively expensive. Same CPU concerns as person detection (~30-50% overhead). Narrower use case; defer to later phase."
     },
     {
       "id": "scene-description",
@@ -667,698 +735,20 @@
       "description": "Generates natural language descriptions of events in the scene.",
       "value": "AI-powered insights and accessibility.",
       "complexity": "high",
-      "score": 21,
+      "score": 20,
+      "cpu_overhead": "50-100% per description (likely requires cloud)",
       "scoring": {
         "practical_user_value": 3,
-        "local_first_fit": 1,
         "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 1,
-        "first_run_clarity": 2,
+        "container_fit": 4,
         "maintenance_burden": 1,
+        "cpu_efficiency": 1,
+        "first_run_clarity": 2,
+        "strategic_leverage": 1,
         "safety_trustworthiness": 2
       },
-      "verdict": "reject - not fit for early phase",
-      "comments": "Interesting idea, but a poor fit for your current local-first, Pi 4, single-container goals. High compute cost and likely internet dependency make it a bad early first-party plugin."
-    }
-    {
-      "id": "motion-basic",
-      "name": "Motion Detection (Basic)",
-      "type": "event-detector",
-      "description": "Detects motion using frame differencing.",
-      "value": "Essential for security and automation use cases.",
-      "complexity": "low",
-      "score": 92,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "must-have plugin",
-      "comments": "Excellent first-party plugin candidate. Strong fit for hobbyist monitoring, local-first use, and single-container Raspberry Pi deployment. Although marked as core, this is a very good plugin-shaped capability."
-    },
-    {
-      "id": "snapshot-on-event",
-      "name": "Snapshot on Event",
-      "type": "output",
-      "description": "Captures a high-quality still image whenever an event occurs.",
-      "value": "Often more useful than full video clips for quick inspection.",
-      "complexity": "low",
-      "score": 92,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 5,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "must-have plugin",
-      "comments": "Extremely practical and lightweight. Strong complement to event recording."
-    },
-    {
-      "id": "timelapse",
-      "name": "Timelapse Generator",
-      "type": "output",
-      "description": "Creates timelapse videos from captured frames.",
-      "value": "Great for hobby and creative use.",
-      "complexity": "low",
-      "score": 91,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 5,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "One of the best first-party plugin ideas in the whole set. Great fit for makers, 3D printing, workshop monitoring, and creative hobby usage."
-    },
-    {
-      "id": "retention-policy",
-      "name": "Retention Policy Manager",
-      "type": "storage-manager",
-      "description": "Automatically deletes old clips, snapshots, or timelapses based on age or storage limits.",
-      "value": "Prevents storage from filling up and keeps the system stable over time.",
-      "complexity": "low",
-      "score": 91,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 5,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Extremely practical and essential for real-world usage. Strong local-first alignment and very easy for users to understand."
-    },
-    {
-      "id": "record-on-event",
-      "name": "Event-Based Recording",
-      "type": "output",
-      "description": "Records clips when motion or events are detected.",
-      "value": "Storage-efficient and practical.",
-      "complexity": "medium",
-      "score": 90,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Excellent fit for your audience and product shape. Highly practical, resource-aware, and aligned with local-first monitoring use cases."
-    },
-    {
-      "id": "mqtt-publisher",
-      "name": "MQTT Publisher",
-      "type": "integration",
-      "description": "Publishes events to an MQTT broker for home automation systems.",
-      "value": "Enables integration with Home Assistant and other automation platforms.",
-      "complexity": "medium",
-      "score": 90,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "top-tier plugin",
-      "comments": "One of the strongest ecosystem integrations for your audience. Perfect for tinkerers and home automation setups."
-    },
-    {
-      "id": "snapshot-capture",
-      "name": "Snapshot Capture",
-      "type": "output",
-      "description": "Captures still images on interval, manual trigger, or event.",
-      "value": "Simple and versatile capture method for many use cases.",
-      "complexity": "low",
-      "score": 90,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 5,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Highly flexible and useful across all scenarios including pets, printers, and workshops."
-    },
-    {
-      "id": "disk-space-guard",
-      "name": "Disk Space Guard",
-      "type": "system-monitor",
-      "description": "Monitors disk usage and warns or pauses recording when storage becomes critically low.",
-      "value": "Prevents crashes and data loss due to full storage.",
-      "complexity": "low",
-      "score": 89,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Highly practical safeguard. Complements recording plugins and prevents common real-world failure scenarios."
-    },
-    {
-      "id": "pir-assist",
-      "name": "PIR Assist",
-      "type": "integration",
-      "description": "Combines GPIO PIR sensor input with motion detection to reduce false positives.",
-      "value": "Improves detection accuracy using physical sensors.",
-      "complexity": "medium",
-      "score": 89,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Excellent maker-focused plugin. Strong real-world accuracy improvements using cheap hardware."
-    },
-    {
-      "id": "smb-export",
-      "name": "SMB / NAS Export",
-      "type": "integration",
-      "description": "Saves recordings and snapshots to a local network share.",
-      "value": "Provides local storage expansion without cloud dependency.",
-      "complexity": "medium",
-      "score": 88,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Strong alternative to cloud storage. Keeps the system aligned with local-first principles."
-    },
-    {
-      "id": "metrics-dashboard",
-      "name": "Metrics Dashboard",
-      "type": "ui-panel",
-      "description": "Displays FPS, latency, CPU usage, and stream diagnostics.",
-      "value": "Improves observability and debugging.",
-      "complexity": "medium",
-      "score": 88,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Excellent fit for tinkerers, makers, and developers. Strong observability value with very good plugin boundaries and low trust risk."
-    },
-    {
-      "id": "event-timeline",
-      "name": "Event Timeline",
-      "type": "ui-panel",
-      "description": "Displays a chronological timeline of detected events with thumbnails and playback.",
-      "value": "Makes reviewing footage intuitive and efficient.",
-      "complexity": "medium",
-      "score": 88,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "top-tier plugin",
-      "comments": "Transforms raw detections into usable insight. Strong UX improvement for all users."
-    },
-    {
-      "id": "thermal-watchdog",
-      "name": "Thermal Watchdog",
-      "type": "system-monitor",
-      "description": "Monitors Raspberry Pi temperature and warns about thermal throttling.",
-      "value": "Helps maintain system performance and reliability.",
-      "complexity": "low",
-      "score": 87,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
-        "maintenance_burden": 5,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "excellent plugin",
-      "comments": "Highly relevant for Raspberry Pi users. Very low risk and strong practical benefit."
-    },
-    {
-      "id": "gpio-trigger",
-      "name": "GPIO Trigger",
-      "type": "integration",
-      "description": "Triggers events based on GPIO input (e.g. PIR sensor).",
-      "value": "Extends to physical hardware.",
-      "complexity": "medium",
-      "score": 87,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "excellent plugin",
-      "comments": "Excellent match for Raspberry Pi tinkerers and makers. Strong differentiation point and very aligned with the physical-computing audience."
-    },
-    {
-      "id": "notify-webhook",
-      "name": "Webhook Notifications",
-      "type": "integration",
-      "description": "Sends event data to external systems via webhooks.",
-      "value": "Enables automation and integrations.",
-      "complexity": "low",
-      "score": 86,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 4,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 3
-      },
-      "verdict": "excellent plugin",
-      "comments": "One of the strongest integration plugins in the list. Very extensible and works well for local automations, LAN tooling, and advanced hobbyist setups."
-    },
-    {
-      "id": "plugin-health",
-      "name": "Plugin Health Panel",
-      "type": "ui-panel",
-      "description": "Displays status and health of all enabled plugins.",
-      "value": "Improves visibility and debugging of plugin system.",
-      "complexity": "medium",
-      "score": 85,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "strong plugin",
-      "comments": "Very useful once plugin ecosystem grows. Enhances transparency and trust."
-    },
-    {
-      "id": "motion-advanced",
-      "name": "Motion Detection (Advanced)",
-      "type": "event-detector",
-      "description": "Background subtraction and noise filtering for more accurate motion detection.",
-      "value": "Reduces false positives.",
-      "complexity": "medium",
-      "score": 84,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "strong plugin",
-      "comments": "Good second-step plugin after basic motion detection. Clear user value and good local-first fit, but slightly more algorithmic complexity and tuning burden."
-    },
-    {
-      "id": "gif-maker",
-      "name": "GIF Creator",
-      "type": "output",
-      "description": "Generates GIFs from clips or events.",
-      "value": "Fun and shareable output.",
-      "complexity": "low",
-      "score": 83,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 5,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "strong plugin",
-      "comments": "A fun but still practical output plugin. Good optional feature that is easy to understand and fits well inside a clean plugin boundary."
-    },
-    {
-      "id": "motion-zones",
-      "name": "Motion Zones",
-      "type": "event-detector",
-      "description": "Allows defining specific areas of the frame for motion detection.",
-      "value": "Improves control and reduces noise.",
-      "complexity": "medium",
-      "score": 82,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "excellent plugin",
-      "comments": "Very good practical plugin for workshops, printers, benches, and doorways. Strong control benefit with limited trust or deployment concerns."
-    },
-    {
-      "id": "clip-buffer",
-      "name": "Clip Buffer",
-      "type": "output",
-      "description": "Maintains a rolling buffer to capture moments before an event.",
-      "value": "Captures context before motion triggers.",
-      "complexity": "medium",
-      "score": 81,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "strong plugin",
-      "comments": "Very practical for real monitoring scenarios. Slightly more operational complexity than basic event recording, but strong value and still a good plugin fit."
-    },
-    {
-      "id": "scheduler",
-      "name": "Scheduler",
-      "type": "event-processor",
-      "description": "Schedules when plugins or features are active.",
-      "value": "Reduces noise and improves control.",
-      "complexity": "medium",
-      "score": 79,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "strong plugin",
-      "comments": "Very practical and easy to justify for workshops, pet monitoring, and time-bound monitoring scenarios. Good balance of usefulness and manageable complexity."
-    },
-    {
-      "id": "record-continuous",
-      "name": "Continuous Recording",
-      "type": "output",
-      "description": "Records the stream continuously.",
-      "value": "Baseline recording functionality.",
-      "complexity": "low",
-      "score": 78,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 5,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "good plugin",
-      "comments": "Clear and useful, but can be storage- and resource-heavy for Pi users. Good plugin candidate rather than a mandatory built-in feature."
-    },
-    {
-      "id": "filter-edge",
-      "name": "Edge Detection Filter",
-      "type": "video-processor",
-      "description": "Applies edge detection to the video stream.",
-      "value": "Useful for debugging and creative use cases.",
-      "complexity": "low",
-      "score": 76,
-      "scoring": {
-        "practical_user_value": 3,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "solid plugin",
-      "comments": "Not essential, but a very clean plugin idea for debugging, experimentation, and creative hobby use. Low risk and easy to keep optional."
-    },
-    {
-      "id": "stream-hls",
-      "name": "HLS Streaming",
-      "type": "output",
-      "description": "Outputs the stream in HLS format.",
-      "value": "Web-friendly streaming format.",
-      "complexity": "medium",
-      "score": 74,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 4,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "good plugin",
-      "comments": "Practical and web-friendly, though less aligned with the simplest local preview story. A good extension, but not one of the very strongest early plugins."
-    },
-    {
-      "id": "filter-night",
-      "name": "Night Mode Filter",
-      "type": "video-processor",
-      "description": "Enhances low-light video conditions.",
-      "value": "Improves usability in dark environments.",
-      "complexity": "medium",
-      "score": 72,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 4,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 4,
-        "maintenance_burden": 2,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "good plugin",
-      "comments": "Useful for garages, workshops, and pet monitoring, but video enhancement can become hardware-sensitive. Still a solid plugin candidate."
-    },
-    {
-      "id": "auth-basic",
-      "name": "Basic Authentication",
-      "type": "integration",
-      "description": "Protects streams with username/password.",
-      "value": "Essential for privacy.",
-      "complexity": "low",
-      "score": 70,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 5,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 5,
-        "first_run_clarity": 4,
-        "maintenance_burden": 4,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "borderline core-vs-plugin",
-      "comments": "Important from a trust perspective. It works as a plugin technically, but there is also a strong case for including some basic protection in core."
-    },
-    {
-      "id": "upload-r2",
-      "name": "Cloudflare R2 Upload",
-      "type": "integration",
-      "description": "Uploads recordings to Cloudflare R2 storage.",
-      "value": "Cheap, scalable storage.",
-      "complexity": "medium",
-      "score": 68,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 2,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 2
-      },
-      "verdict": "medium plugin",
-      "comments": "Useful for users who want off-device storage, but it is less aligned with local-first reliability and introduces credential and upload-trust concerns."
-    },
-    {
-      "id": "mio-reactive-ui",
-      "name": "Mio Reactive UI",
-      "type": "ui-panel",
-      "description": "Animates the mascot based on system state (idle, motion, alert).",
-      "value": "Unique brand identity and engagement.",
-      "complexity": "medium",
-      "score": 66,
-      "scoring": {
-        "practical_user_value": 2,
-        "local_first_fit": 5,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 4,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 5
-      },
-      "verdict": "optional branding plugin",
-      "comments": "A nice brand and delight feature, but not especially strong on practical value. Good optional plugin rather than something to prioritise early."
-    },
-    {
-      "id": "rules-engine",
-      "name": "Rules Engine",
-      "type": "event-processor",
-      "description": "Allows combining conditions and actions (e.g. motion + person → notify).",
-      "value": "Core automation capability.",
-      "complexity": "high",
-      "score": 65,
-      "scoring": {
-        "practical_user_value": 5,
-        "local_first_fit": 5,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 3,
-        "first_run_clarity": 2,
-        "maintenance_burden": 1,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "important but risky",
-      "comments": "Potentially platform-defining, but easy to overcomplicate. High value, yet needs very disciplined UX and scope control to avoid becoming a maintenance trap."
-    },
-    {
-      "id": "detect-person",
-      "name": "Person Detection",
-      "type": "event-detector",
-      "description": "Detects human presence using lightweight AI models.",
-      "value": "Adds intelligence beyond basic motion detection.",
-      "complexity": "medium",
-      "score": 63,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 4,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 2,
-        "first_run_clarity": 3,
-        "maintenance_burden": 2,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "borderline - defer or simplify",
-      "comments": "Interesting and valuable, but AI inference on Pi 4 raises reliability and maintenance concerns. Worth considering later, especially if model scope is tightly constrained."
-    },
-    {
-      "id": "notify-telegram",
-      "name": "Telegram Notifications",
-      "type": "integration",
-      "description": "Sends alerts via Telegram.",
-      "value": "Fast, popular notification channel.",
-      "complexity": "low",
-      "score": 61,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 2,
-        "plugin_separability": 5,
-        "reliability_on_pi4_single_container": 4,
-        "first_run_clarity": 3,
-        "maintenance_burden": 3,
-        "safety_trustworthiness": 2
-      },
-      "verdict": "medium-priority plugin",
-      "comments": "Useful and easy to explain, but weaker fit for a local-first system because it depends on an external service and raises privacy and trust expectations."
-    },
-    {
-      "id": "detect-animals",
-      "name": "Animal Detection",
-      "type": "event-detector",
-      "description": "Detects animals (pets/wildlife) in the frame.",
-      "value": "Useful for outdoor and hobby use cases.",
-      "complexity": "medium",
-      "score": 58,
-      "scoring": {
-        "practical_user_value": 3,
-        "local_first_fit": 4,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 2,
-        "first_run_clarity": 3,
-        "maintenance_burden": 2,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "defer",
-      "comments": "Useful for a narrower audience, but lower return than person detection and similar AI-related complexity risk. Better as a later plugin, not an early first-party investment."
-    },
-    {
-      "id": "stream-webrtc",
-      "name": "WebRTC Streaming",
-      "type": "output",
-      "description": "Low-latency real-time streaming using WebRTC.",
-      "value": "Best for live viewing.",
-      "complexity": "high",
-      "score": 52,
-      "scoring": {
-        "practical_user_value": 4,
-        "local_first_fit": 3,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 1,
-        "first_run_clarity": 2,
-        "maintenance_burden": 1,
-        "safety_trustworthiness": 4
-      },
-      "verdict": "defer",
-      "comments": "Attractive on paper, but too complex relative to your single-container and easy-first-run goals. High implementation and support burden make this a later-phase idea."
-    },
-    {
-      "id": "scene-description",
-      "name": "Scene Description",
-      "type": "event-detector",
-      "description": "Generates natural language descriptions of events in the scene.",
-      "value": "AI-powered insights and accessibility.",
-      "complexity": "high",
-      "score": 47,
-      "scoring": {
-        "practical_user_value": 3,
-        "local_first_fit": 1,
-        "plugin_separability": 3,
-        "reliability_on_pi4_single_container": 1,
-        "first_run_clarity": 2,
-        "maintenance_burden": 1,
-        "safety_trustworthiness": 2
-      },
-      "verdict": "reject or far-future",
-      "comments": "Interesting idea, but a poor fit for your current local-first, Pi 4, single-container goals. High compute cost and likely internet dependency make it a bad early first-party plugin."
+      "verdict": "reject - not fit",
+      "comments": "Fundamentally misaligned. LLM inference on Pi is unrealistic (~50-100% overhead, may require cloud). Breaks local-first philosophy."
     }
   ]
 }
