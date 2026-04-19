@@ -409,12 +409,12 @@ func (fm *FrameManager) GetFrame() []byte {
 }
 
 // StreamFrame writes frames to an HTTP response in MJPEG format.
-// Manages connection tracking and respects the max connection limit (max 2 concurrent streams).
+// Manages connection tracking and respects the configurable max connection limit.
 func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxConnections int) error {
 	// Check connection limit
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = w.Write([]byte("Max stream connections reached (limit: 2)"))
+		_, _ = w.Write([]byte(fmt.Sprintf("Max stream connections reached (limit: %d)", maxConnections)))
 		log.Printf("⚠️  Stream client rejected: connection limit exceeded")
 		return fmt.Errorf("connection limit exceeded")
 	}
