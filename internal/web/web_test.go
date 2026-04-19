@@ -37,9 +37,14 @@ func TestWebUIServingRoot(t *testing.T) {
 		"Live Stream",
 		"Settings & Stats",
 		"stream-img",
+		"stream-spinner-image",
+		"stream-idle-image",
 		"brightness",
 		"contrast",
 		"saturation",
+		"/static/mio/mio_pose_idle.png",
+		"/static/mio/mio_pose_concerned.png",
+		"/static/mio/mio_pose_sleeping.png",
 	}
 
 	for _, element := range expectedElements {
@@ -81,6 +86,8 @@ func TestWebUISemanticStructureAndFunctionalReferences(t *testing.T) {
 	// Validate user-facing functionality hooks via IDs and API/stream routes.
 	requiredReferences := []string{
 		`id="stream-img"`,
+		`id="stream-spinner-image"`,
+		`id="stream-idle-image"`,
 		`id="start-stream"`,
 		`id="stop-stream"`,
 		`id="save-settings"`,
@@ -164,6 +171,9 @@ func TestWebUIContainsStyling(t *testing.T) {
 		`id="brightness"`,
 		`id="contrast"`,
 		`id="saturation"`,
+		"/static/mio/mio_pose_idle.png",
+		"/static/mio/mio_pose_concerned.png",
+		"/static/mio/mio_pose_sleeping.png",
 	}
 
 	for _, elem := range requiredUIElements {
@@ -208,5 +218,33 @@ func TestWebUICacheHeaders(t *testing.T) {
 
 	if !strings.Contains(cacheControl, "max-age") {
 		t.Errorf("Cache-Control missing max-age: got %q", cacheControl)
+	}
+}
+
+func TestMioStaticAssetsAreServed(t *testing.T) {
+	router := chi.NewRouter()
+	RegisterStaticFiles(router)
+
+	assets := []string{
+		"mio_pose_idle.png",
+		"mio_pose_sleeping.png",
+		"mio_pose_concerned.png",
+		"mio_pose_happy.png",
+		"mio_pose_worried.png",
+	}
+
+	for _, asset := range assets {
+		req, _ := http.NewRequest("GET", "/static/mio/"+asset, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("asset %q status code: got %d, want 200", asset, w.Code)
+		}
+
+		cacheControl := w.Header().Get("Cache-Control")
+		if !strings.Contains(cacheControl, "max-age=86400") {
+			t.Errorf("asset %q cache-control: got %q, expected max-age=86400", asset, cacheControl)
+		}
 	}
 }
