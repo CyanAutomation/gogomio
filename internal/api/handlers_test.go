@@ -361,19 +361,26 @@ func TestStreamEndpoint(t *testing.T) {
 		router.ServeHTTP(recorder, req)
 	}()
 
-	headerDeadline := time.Now().Add(500 * time.Millisecond)
-	for time.Now().Before(headerDeadline) {
-		if recorder.Header().Get("Content-Type") != "" {
-			break
-		}
-		select {
-		case <-done:
-			t.Fatal("stream ended before headers were written")
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
+	// Wait a bit for the stream to start sending frames
+	time.Sleep(500 * time.Millisecond)
+
+	// Cancel the context to stop the handler
+	cancel()
+
+	// Wait for handler to exit before reading response
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("stream did not stop after context cancellation")
 	}
 
+	// Now that handler is done, it's safe to read the response body without races
+	body := recorder.Body.String()
+	if !strings.Contains(body, "--frame\r\n") {
+		t.Fatal("expected at least one frame boundary in response")
+	}
+
+	// Validate headers
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
@@ -383,31 +390,6 @@ func TestStreamEndpoint(t *testing.T) {
 	}
 	if !strings.Contains(contentType, "boundary=frame") {
 		t.Fatalf("expected stream boundary in content type, got %q", contentType)
-	}
-
-	boundaryDeadline := time.Now().Add(750 * time.Millisecond)
-	for time.Now().Before(boundaryDeadline) {
-		if strings.Contains(recorder.Body.String(), "--frame\r\n") {
-			break
-		}
-		select {
-		case <-done:
-			t.Fatal("stream ended before first frame boundary")
-		default:
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
-
-	if !strings.Contains(recorder.Body.String(), "--frame\r\n") {
-		t.Fatal("expected at least one frame boundary before cancellation")
-	}
-
-	cancel()
-
-	select {
-	case <-done:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("stream did not stop after context cancellation")
 	}
 }
 
@@ -498,20 +480,30 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 	// Wait for mock camera to generate frames with lazy capture
 	time.Sleep(800 * time.Millisecond)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
 	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
-	// Run request in goroutine with timeout
+	// Run request in goroutine - will exit when context times out
 	done := make(chan bool)
 	go func() {
 		router.ServeHTTP(w, req)
 		done <- true
 	}()
 
-	// Let streaming run for a moment to accumulate frames
-	time.Sleep(600 * time.Millisecond)
+	// Wait for handler to finish (context timeout or error)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream handler did not exit")
+	}
 
-	// Verify response headers (safe to check anytime during streaming)
+	// Now that handler is done, it's safe to read response without races
+
+	// Verify response headers
 	if ct := w.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
 		t.Errorf("Content-Type: got %q, want multipart/x-mixed-replace", ct)
 	}
