@@ -1,5 +1,22 @@
 ---
 # GoGoMio Docker Compose Configuration
+#
+# CLI Usage Examples:
+# - Start server: docker-compose up -d
+# - Check status: docker-compose exec gogomio gogomio status
+# - Get config: docker-compose exec gogomio gogomio config
+# - Get specific value: docker-compose exec gogomio gogomio config get fps
+# - Health check: docker-compose exec gogomio gogomio health check
+# - Diagnostics: docker-compose exec gogomio gogomio diagnostics
+# - Snapshot: docker-compose exec gogomio gogomio snapshot save /tmp/frame.jpg
+#
+# Environment Variables:
+# Copy .env.example to .env and configure:
+# - GOGOMIO_PORT: HTTP server port (default: 8000)
+# - MOCK_CAMERA: Use mock camera (true/false)
+# - MIO_FPS: Frames per second (default: 24)
+# - MIO_RESOLUTION: Video resolution (default: 640x480)
+# - MIO_JPEG_QUALITY: JPEG compression (default: 90)
 
 services:
   gogomio:

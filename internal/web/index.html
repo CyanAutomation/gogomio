@@ -103,21 +103,21 @@
         header {
             background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
             color: white;
-            padding: var(--spacing-sm) 0;
+            padding: var(--spacing-xs) 0;
             text-align: center;
-            margin-bottom: var(--spacing-sm);
+            margin-bottom: var(--spacing-xs);
             box-shadow: var(--shadow-md);
         }
 
         h1 {
-            font-size: var(--font-size-3xl);
+            font-size: var(--font-size-xl);
             font-weight: 700;
-            margin-bottom: var(--spacing-md);
+            margin-bottom: 2px;
             letter-spacing: -0.5px;
         }
 
         .subtitle {
-            font-size: var(--font-size-lg);
+            font-size: 13px;
             opacity: 0.95;
             font-weight: 400;
         }
@@ -1027,7 +1027,7 @@
                                 <!-- FPS Metric -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
                                     <span style="color: var(--color-text-secondary); font-weight: 500;">🎥 Frame Rate</span>
-                                    <span style="color: var(--color-primary); font-weight: 700; font-size: var(--font-size-lg);">${data.fps.toFixed(1)} fps</span>
+                                    <span style="color: var(--color-primary); font-weight: 700; font-size: var(--font-size-lg);">${(data.fps_current || 0).toFixed(1)} fps</span>
                                 </div>
                                 
                                 <!-- Resolution Metric -->
@@ -1063,7 +1063,7 @@
                                 <!-- Capture Failures -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
                                     <span style="color: var(--color-text-secondary); font-weight: 500;">🚨 Recent Failures</span>
-                                    <span style="color: ${data.capture_failures_recent > 0 ? 'var(--color-error)' : 'var(--color-text)'}; font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_recent}</span>
+                                    <span style="color: ${(data.capture_failures_consecutive || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}; font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_consecutive || 0}</span>
                                 </div>
 
                                 <!-- Total Capture Failures -->

@@ -121,5 +121,14 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
 # Switch to non-root user
 USER gogomio
 
+# Two-Mode Execution:
+# - Default (server mode): /app/gogomio → Starts HTTP server
+# - CLI mode: /app/gogomio <command> → Executes CLI command
+#
+# Examples:
+#   docker run gogomio:latest              # Starts HTTP server
+#   docker run gogomio:latest gogomio status
+#   docker-compose exec gogomio gogomio config get fps
+#
 # Run the application
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

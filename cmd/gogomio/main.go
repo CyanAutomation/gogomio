@@ -22,6 +22,7 @@ import (
 
 	"github.com/CyanAutomation/gogomio/internal/api"
 	"github.com/CyanAutomation/gogomio/internal/camera"
+	"github.com/CyanAutomation/gogomio/internal/cli"
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/go-chi/chi/v5"
 )
@@ -32,6 +33,18 @@ var (
 )
 
 func main() {
+	// Detect mode: CLI or server
+	if len(os.Args) > 1 && os.Args[1] != "server" {
+		// CLI mode: execute CLI command
+		cli.Execute()
+	} else {
+		// Server mode (default): start the HTTP server
+		startServer()
+	}
+}
+
+// startServer initializes and runs the HTTP server
+func startServer() {
 	// Load configuration from environment variables
 	cfg := config.LoadFromEnv()
 
