@@ -69,7 +69,10 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) (int, error) {
 	if fb.targetFrameIntervalNS > 0 && fb.lastFrameMonotonic > 0 {
 		elapsed := now - fb.lastFrameMonotonic
 		if elapsed < fb.targetFrameIntervalNS {
-			// Too soon, skip this frame.
+			// Too soon, skip this frame but still notify waiters
+			// to prevent them from stalling during FPS limiting
+			close(fb.notifyCh)
+			fb.notifyCh = make(chan struct{})
 			return size, nil
 		}
 	}
