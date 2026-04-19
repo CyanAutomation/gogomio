@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -356,5 +357,56 @@ func TestSettingsSetAfterNullFile(t *testing.T) {
 
 	if got := m.Get("key"); got != "value" {
 		t.Fatalf("Get returned %v, want value", got)
+	}
+}
+
+// TestSettingsSetManyRollbackOnPersistFailure ensures batch updates are all-or-nothing.
+func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "batch_settings.json")
+
+	m := NewManager(settingsPath)
+	if err := m.Set("stable", "value"); err != nil {
+		t.Fatalf("failed to seed initial state: %v", err)
+	}
+
+	beforeData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read baseline settings file: %v", err)
+	}
+	beforeState := m.GetAll()
+
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatalf("failed to remove settings file for failure setup: %v", err)
+	}
+	if err := os.Mkdir(settingsPath, 0755); err != nil {
+		t.Fatalf("failed to create directory at settings path for failure setup: %v", err)
+	}
+
+	err = m.SetMany(map[string]interface{}{
+		"new_a": "A",
+		"new_b": "B",
+	})
+	if err == nil {
+		t.Fatal("expected SetMany to fail when rename destination is a directory")
+	}
+
+	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
+		t.Fatalf("in-memory settings changed after failed SetMany, got=%v want=%v", gotState, beforeState)
+	}
+
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatalf("failed to remove fault directory: %v", err)
+	}
+	if err := os.WriteFile(settingsPath, beforeData, 0644); err != nil {
+		t.Fatalf("failed to restore baseline file: %v", err)
+	}
+
+	afterData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read restored settings file: %v", err)
+	}
+	if string(afterData) != string(beforeData) {
+		t.Fatalf("settings file changed unexpectedly after failed SetMany")
 	}
 }
