@@ -251,7 +251,7 @@ func (rc *RealCamera) firstFrameTimeout() time.Duration {
 	// rpicam-vid and libcamera-vid need extra time to initialize libcamera daemon,
 	// detect camera, configure ISP pipeline, and produce first frame
 	if rc.backendAttempted == "rpicam-vid" || rc.backendAttempted == "libcamera-vid" {
-		minTimeout := 3 * time.Second
+		minTimeout := 4 * time.Second
 		if timeout < minTimeout {
 			timeout = minTimeout
 		}
@@ -262,9 +262,6 @@ func (rc *RealCamera) firstFrameTimeout() time.Duration {
 		}
 	}
 
-	if rc.captureWaitTimeout > 0 && timeout > rc.captureWaitTimeout {
-		timeout = rc.captureWaitTimeout
-	}
 	return timeout
 }
 
