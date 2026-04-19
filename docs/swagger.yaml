@@ -1,32 +1,20 @@
 basePath: /
 definitions:
-  api.ConfigResponse:
+  api.CameraConfigResponse:
     description: Camera configuration, resolution, and streaming performance metrics
     properties:
-      current_fps:
-        description: Current FPS being delivered
-        example: 29.5
-        type: number
-      current_stream_connections:
-        description: Current number of active stream connections
-        example: 1
-        type: integer
+      api_version:
+        description: API version
+        example: "1"
+        type: string
       fps:
         description: Configured frames per second
         example: 30
-        type: integer
-      frames_captured:
-        description: Total number of frames captured
-        example: 1500
         type: integer
       jpeg_quality:
         description: JPEG compression quality (0-100)
         example: 85
         type: integer
-      last_frame_age_seconds:
-        description: Age of the last frame in seconds
-        example: 0.033
-        type: number
       max_stream_connections:
         description: Maximum concurrent stream connections allowed
         example: 5
@@ -40,33 +28,57 @@ definitions:
         description: Target FPS for frame buffer
         example: 30
         type: integer
+      timestamp_iso8601:
+        description: ISO8601 timestamp of this response
+        example: "2026-04-19T15:30:45Z"
+        type: string
     type: object
-  api.DiagnosticsResponse:
-    description: Comprehensive diagnostics including health metrics, error rates,
-      and system status
+  api.DetailedHealthResponse:
+    description: Comprehensive health status with detailed metrics, error tracking,
+      and diagnostics
     properties:
+      api_version:
+        description: API version
+        example: "1"
+        type: string
       camera_ready:
-        description: Whether the camera is ready
+        description: Whether the camera is initialized and ready
         example: true
         type: boolean
-      capture_failures_recent:
-        description: Recent consecutive capture failures
+      capture_failures_consecutive:
+        description: Consecutive capture failures (resets on success)
         example: 0
         type: integer
       capture_failures_total:
-        description: Total capture failures
+        description: Total capture failures since startup
         example: 10
         type: integer
+      capture_restart_count:
+        description: Number of times capture has been restarted
+        example: 2
+        type: integer
+      degraded:
+        description: Whether system is operating in degraded mode
+        example: false
+        type: boolean
       error_rate_percent:
         description: Error rate as percentage
         example: 0.5
         type: number
-      fps:
-        description: Current FPS being delivered
+      fps_configured:
+        description: Configured frames per second
+        example: 30
+        type: integer
+      fps_current:
+        description: Current frames per second
         example: 29.8
         type: number
+      frame_sequence_number:
+        description: Frame sequence number (increments per frame)
+        example: 216001
+        type: integer
       frames_captured:
-        description: Total frames successfully captured
+        description: Total frames captured since startup
         example: 216000
         type: integer
       health_status:
@@ -78,7 +90,7 @@ definitions:
         example: 85
         type: integer
       last_frame_age_seconds:
-        description: Age of the last frame in seconds
+        description: Age of the most recent frame in seconds
         example: 0.034
         type: number
       max_stream_connections:
@@ -98,36 +110,35 @@ definitions:
         example: ok
         type: string
       stream_connections:
-        description: Current stream connection count
+        description: Current number of active stream connections
         example: 1
         type: integer
+      timestamp_iso8601:
+        description: ISO8601 timestamp of this response
+        example: "2026-04-19T15:30:45Z"
+        type: string
       uptime_seconds:
         description: System uptime in seconds
         example: 7200
         type: integer
     type: object
   api.HealthResponse:
-    description: Health status of the camera system including connectivity and performance
-      metrics
+    description: Quick health status (suitable for Kubernetes probes)
     properties:
+      api_version:
+        description: API version
+        example: "1"
+        type: string
       camera_ready:
         description: Whether the camera is initialized and ready
         example: true
         type: boolean
-      capture_consecutive_failures:
-        description: Number of consecutive capture failures (optional)
-        example: 0
-        type: integer
-      capture_failures_total:
-        description: Total number of capture failures (optional)
-        example: 5
-        type: integer
       degraded:
-        description: Whether system is operating in degraded mode (optional)
+        description: Whether system is operating in degraded mode
         example: false
         type: boolean
-      fps:
-        description: Frames per second being captured
+      fps_current:
+        description: Current frames per second
         example: 29.8
         type: number
       status:
@@ -138,9 +149,54 @@ definitions:
         description: Current number of active stream connections
         example: 2
         type: integer
+      timestamp_iso8601:
+        description: ISO8601 timestamp of this response
+        example: "2026-04-19T15:30:45Z"
+        type: string
       uptime_seconds:
         description: System uptime in seconds
         example: 3600
+        type: integer
+    type: object
+  api.LiveMetricsResponse:
+    description: Current performance and connection metrics
+    properties:
+      api_version:
+        description: API version
+        example: "1"
+        type: string
+      fps_configured:
+        description: Configured target frames per second
+        example: 30
+        type: integer
+      fps_current:
+        description: Current frames per second being delivered
+        example: 29.8
+        type: number
+      frame_sequence_number:
+        description: Frame sequence number (increments per frame, useful for detecting
+          gaps)
+        example: 216001
+        type: integer
+      frames_captured:
+        description: Total frames captured since startup
+        example: 216000
+        type: integer
+      last_frame_age_seconds:
+        description: Age of the most recent frame in seconds
+        example: 0.034
+        type: number
+      stream_connections:
+        description: Current number of active stream connections
+        example: 2
+        type: integer
+      timestamp_iso8601:
+        description: ISO8601 timestamp of this response
+        example: "2026-04-19T15:30:45Z"
+        type: string
+      uptime_seconds:
+        description: System uptime in seconds
+        example: 7200
         type: integer
     type: object
   api.SettingsUpdateRequest:
@@ -165,32 +221,37 @@ paths:
     get:
       consumes:
       - application/json
-      description: Returns camera configuration including resolution, FPS, stream
-        connections, and performance metrics
+      deprecated: true
+      description: Returns camera configuration and current metrics. This endpoint
+        combines two concerns; use /v1/config/camera for static config or /v1/metrics/live
+        for metrics instead
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.ConfigResponse'
-      summary: Get configuration and statistics
+            additionalProperties: true
+            type: object
+      summary: Get configuration and metrics (DEPRECATED - use /v1/config/camera and
+        /v1/metrics/live)
       tags:
       - Configuration
   /v1/api/diagnostics:
     get:
       consumes:
       - application/json
-      description: Returns complete system diagnostics including health status, error
-        metrics, and performance data
+      deprecated: true
+      description: Returns complete system diagnostics. This endpoint is deprecated;
+        use /v1/health/detailed instead
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api.DiagnosticsResponse'
-      summary: Get comprehensive diagnostics
+            $ref: '#/definitions/api.DetailedHealthResponse'
+      summary: Get comprehensive diagnostics (DEPRECATED - use /v1/health/detailed)
       tags:
       - Diagnostics
   /v1/api/settings:
@@ -285,8 +346,9 @@ paths:
     get:
       consumes:
       - application/json
-      description: Returns detailed status including health state, capture failures,
-        and degradation status
+      deprecated: true
+      description: Returns detailed status. This endpoint is deprecated; use /v1/health/detailed
+        instead
       produces:
       - application/json
       responses:
@@ -294,7 +356,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.HealthResponse'
-      summary: Get system status
+      summary: Get system status (DEPRECATED - use /v1/health/detailed)
       tags:
       - Health
   /v1/api/stream/stop:
@@ -314,13 +376,31 @@ paths:
       summary: Stop stream capture
       tags:
       - Streaming
+  /v1/config/camera:
+    get:
+      consumes:
+      - application/json
+      description: Returns static camera configuration settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.CameraConfigResponse'
+      summary: Get camera configuration (static)
+      tags:
+      - Configuration
   /v1/health:
     get:
       consumes:
       - application/json
-      description: Returns the current health status of the camera system including
-        uptime, FPS, and connection count
+      - application/json
+      description: |-
+        Returns the current health status of the camera system including uptime, FPS, and connection count
+        Returns the current health status of the camera system including uptime, FPS, and connection count
       produces:
+      - application/json
       - application/json
       responses:
         "200":
@@ -336,6 +416,38 @@ paths:
       summary: Health check endpoint
       tags:
       - Health
+      - Health
+  /v1/health/detailed:
+    get:
+      consumes:
+      - application/json
+      description: Returns comprehensive health status with detailed metrics, error
+        tracking, and diagnostics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DetailedHealthResponse'
+      summary: Get detailed health and metrics
+      tags:
+      - Health
+  /v1/metrics/live:
+    get:
+      consumes:
+      - application/json
+      description: Returns current performance and connection metrics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.LiveMetricsResponse'
+      summary: Get live metrics
+      tags:
+      - Metrics
   /v1/ready:
     get:
       consumes:
