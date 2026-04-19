@@ -10,10 +10,12 @@ const docTemplate = `{
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
         "contact": {
-            "name": "GoGoMio Support"
+            "name": "GoGoMio Support",
+            "url": "https://github.com/CyanAutomation/gogomio"
         },
         "license": {
-            "name": "MIT"
+            "name": "MIT",
+            "url": "https://github.com/CyanAutomation/gogomio/blob/main/LICENSE"
         },
         "version": "{{.Version}}"
     },
@@ -22,7 +24,7 @@ const docTemplate = `{
     "paths": {
         "/v1/api/config": {
             "get": {
-                "description": "Returns camera configuration and current metrics. This endpoint combines two concerns; use /v1/config/camera for static config or /v1/metrics/live for metrics instead",
+                "description": "**DEPRECATED in v0.1.0** - This endpoint mixes two concerns (static config + live metrics). **Migrate to**: Use /v1/config/camera for static settings, and /v1/metrics/live for performance metrics. Legacy endpoint will be removed in v0.3.0. See README for migration guide.",
                 "consumes": [
                     "application/json"
                 ],
@@ -32,14 +34,20 @@ const docTemplate = `{
                 "tags": [
                     "Configuration"
                 ],
-                "summary": "Get configuration and metrics (DEPRECATED - use /v1/config/camera and /v1/metrics/live)",
+                "summary": "Get configuration and metrics (DEPRECATED)",
                 "deprecated": true,
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Contains all config + metrics fields (see examples)",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -47,7 +55,7 @@ const docTemplate = `{
         },
         "/v1/api/diagnostics": {
             "get": {
-                "description": "Returns complete system diagnostics. This endpoint is deprecated; use /v1/health/detailed instead",
+                "description": "**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). Provides complete system diagnostics including health status, metrics, error tracking, and failure statistics. Legacy endpoint will be removed in v0.3.0. See README for migration guide.",
                 "consumes": [
                     "application/json"
                 ],
@@ -57,13 +65,19 @@ const docTemplate = `{
                 "tags": [
                     "Diagnostics"
                 ],
-                "summary": "Get comprehensive diagnostics (DEPRECATED - use /v1/health/detailed)",
+                "summary": "Get comprehensive diagnostics (DEPRECATED)",
                 "deprecated": true,
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Complete health and diagnostics snapshot",
                         "schema": {
                             "$ref": "#/definitions/api.DetailedHealthResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -71,7 +85,7 @@ const docTemplate = `{
         },
         "/v1/api/settings": {
             "get": {
-                "description": "Retrieves all saved application settings",
+                "description": "Retrieves all saved application settings as a JSON object. Settings can include brightness, contrast, saturation, and other camera-specific parameters. Returns empty object if no settings saved yet. Use PUT or POST with /v1/api/settings to update.",
                 "consumes": [
                     "application/json"
                 ],
@@ -84,7 +98,7 @@ const docTemplate = `{
                 "summary": "Get all settings",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Object containing all saved settings (example: {brightness: 100, contrast: 120})",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -93,7 +107,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Updates one or more application settings. Accepts both POST and PUT requests",
+                "description": "Updates one or more application settings (brightness, contrast, saturation, etc). Accepts POST and PUT requests. Only specified settings are updated; omitted settings are preserved. Returns updated settings. Settings persist across restarts.",
                 "consumes": [
                     "application/json"
                 ],
@@ -103,10 +117,10 @@ const docTemplate = `{
                 "tags": [
                     "Settings"
                 ],
-                "summary": "Update settings",
+                "summary": "Update camera settings",
                 "parameters": [
                     {
-                        "description": "Settings to update",
+                        "description": "Settings to update (example: {\\",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -117,7 +131,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Updated settings",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -126,27 +140,27 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid JSON or request format",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Failed to save settings to persistent storage",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
             },
             "post": {
-                "description": "Updates one or more application settings. Accepts both POST and PUT requests",
+                "description": "Updates one or more application settings (brightness, contrast, saturation, etc). Accepts POST and PUT requests. Only specified settings are updated; omitted settings are preserved. Returns updated settings. Settings persist across restarts.",
                 "consumes": [
                     "application/json"
                 ],
@@ -156,10 +170,10 @@ const docTemplate = `{
                 "tags": [
                     "Settings"
                 ],
-                "summary": "Update settings",
+                "summary": "Update camera settings",
                 "parameters": [
                     {
-                        "description": "Settings to update",
+                        "description": "Settings to update (example: {\\",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -170,7 +184,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Updated settings",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -179,21 +193,21 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "Invalid JSON or request format",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
+                        "description": "Failed to save settings to persistent storage",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -201,7 +215,7 @@ const docTemplate = `{
         },
         "/v1/api/status": {
             "get": {
-                "description": "Returns detailed status. This endpoint is deprecated; use /v1/health/detailed instead",
+                "description": "**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). Legacy endpoint will be removed in v0.3.0. See README for migration guide.",
                 "consumes": [
                     "application/json"
                 ],
@@ -211,13 +225,19 @@ const docTemplate = `{
                 "tags": [
                     "Health"
                 ],
-                "summary": "Get system status (DEPRECATED - use /v1/health/detailed)",
+                "summary": "Get system status (DEPRECATED)",
                 "deprecated": true,
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Complete health snapshot",
                         "schema": {
-                            "$ref": "#/definitions/api.HealthResponse"
+                            "$ref": "#/definitions/api.DetailedHealthResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -251,7 +271,7 @@ const docTemplate = `{
         },
         "/v1/config/camera": {
             "get": {
-                "description": "Returns static camera configuration settings",
+                "description": "Returns static camera configuration (resolution, FPS, quality settings, connection limits). Use this for UI configuration displays or to understand camera capabilities. Does not include runtime metrics; use /v1/metrics/live for current performance data.",
                 "consumes": [
                     "application/json"
                 ],
@@ -261,10 +281,10 @@ const docTemplate = `{
                 "tags": [
                     "Configuration"
                 ],
-                "summary": "Get camera configuration (static)",
+                "summary": "Get camera configuration",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Static configuration settings",
                         "schema": {
                             "$ref": "#/definitions/api.CameraConfigResponse"
                         }
@@ -274,34 +294,28 @@ const docTemplate = `{
         },
         "/v1/health": {
             "get": {
-                "description": "Returns the current health status of the camera system including uptime, FPS, and connection count\nReturns the current health status of the camera system including uptime, FPS, and connection count",
+                "description": "Returns quick camera health status suitable for Kubernetes liveness probes. Returns 200 OK if running (regardless of camera state), and includes status, fps, uptime, and connection count. For detailed health with metrics, use /v1/health/detailed instead.",
                 "consumes": [
-                    "application/json",
                     "application/json"
                 ],
                 "produces": [
-                    "application/json",
                     "application/json"
                 ],
                 "tags": [
-                    "Health",
                     "Health"
                 ],
-                "summary": "Health check endpoint",
+                "summary": "Quick health check (Kubernetes probe)",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Camera status ok/degraded/error",
                         "schema": {
                             "$ref": "#/definitions/api.HealthResponse"
                         }
                     },
                     "503": {
-                        "description": "Service Unavailable",
+                        "description": "Service unavailable (should not occur in normal operation)",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -309,7 +323,7 @@ const docTemplate = `{
         },
         "/v1/health/detailed": {
             "get": {
-                "description": "Returns comprehensive health status with detailed metrics, error tracking, and diagnostics",
+                "description": "Returns all available health information, metrics, and diagnostics in a single request: status, uptime, FPS, frames captured, connections, error rates, restart count, frame sequence, and detailed failure tracking. Recommended for dashboards, monitoring systems, and troubleshooting. Note: more data than /v1/health or /v1/metrics/live, use appropriate endpoint for your use case.",
                 "consumes": [
                     "application/json"
                 ],
@@ -319,12 +333,18 @@ const docTemplate = `{
                 "tags": [
                     "Health"
                 ],
-                "summary": "Get detailed health and metrics",
+                "summary": "Get comprehensive health and diagnostics",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Complete health and metrics snapshot",
                         "schema": {
                             "$ref": "#/definitions/api.DetailedHealthResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -332,7 +352,7 @@ const docTemplate = `{
         },
         "/v1/metrics/live": {
             "get": {
-                "description": "Returns current performance and connection metrics",
+                "description": "Returns current runtime performance metrics: frame rate, captured frames, stream connections, and frame sequence number. Lightweight and suitable for frequent polling (combine with rate limiting awareness). Use /v1/config/camera for static configuration values.",
                 "consumes": [
                     "application/json"
                 ],
@@ -342,12 +362,18 @@ const docTemplate = `{
                 "tags": [
                     "Metrics"
                 ],
-                "summary": "Get live metrics",
+                "summary": "Get live performance metrics",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Current performance metrics",
                         "schema": {
                             "$ref": "#/definitions/api.LiveMetricsResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -355,7 +381,7 @@ const docTemplate = `{
         },
         "/v1/ready": {
             "get": {
-                "description": "Returns 200 if camera is ready, 503 if still initializing",
+                "description": "Returns 200 only when camera is fully initialized and ready to stream. Returns 503 during startup. Suitable for Kubernetes readiness probes to control traffic routing. Use /v1/health for liveness checks instead.",
                 "consumes": [
                     "application/json"
                 ],
@@ -365,10 +391,10 @@ const docTemplate = `{
                 "tags": [
                     "Health"
                 ],
-                "summary": "Readiness probe",
+                "summary": "Readiness probe (Kubernetes)",
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "Status: ready",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -377,7 +403,7 @@ const docTemplate = `{
                         }
                     },
                     "503": {
-                        "description": "Service Unavailable",
+                        "description": "Camera still initializing",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -390,7 +416,7 @@ const docTemplate = `{
         },
         "/v1/snapshot.jpg": {
             "get": {
-                "description": "Returns the latest captured frame as a JPEG image",
+                "description": "Returns the latest captured video frame as a JPEG image. Suitable for web UI embedding, thumbnails, or periodic frame capture. Respects JPEG quality setting from /v1/config/camera. Returns 503 if camera not yet initialized.",
                 "consumes": [
                     "application/json"
                 ],
@@ -400,18 +426,24 @@ const docTemplate = `{
                 "tags": [
                     "Streaming"
                 ],
-                "summary": "Get current snapshot",
+                "summary": "Get current snapshot as JPEG",
                 "responses": {
                     "200": {
-                        "description": "JPEG image data",
+                        "description": "JPEG image data (raw binary, Content-Type: image/jpeg)",
                         "schema": {
                             "type": "file"
                         }
                     },
-                    "503": {
-                        "description": "Camera not ready",
+                    "429": {
+                        "description": "Rate limit exceeded (100 req/10sec per IP)",
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Camera not ready or not initialized yet",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -573,6 +605,27 @@ const docTemplate = `{
                 }
             }
         },
+        "api.ErrorResponse": {
+            "description": "Standard error response format for API errors",
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "HTTP status code",
+                    "type": "integer",
+                    "example": 400
+                },
+                "details": {
+                    "description": "Optional detailed error information",
+                    "type": "string",
+                    "example": "Settings map is empty"
+                },
+                "message": {
+                    "description": "Error message",
+                    "type": "string",
+                    "example": "Invalid request"
+                }
+            }
+        },
         "api.HealthResponse": {
             "description": "Quick health status (suitable for Kubernetes probes)",
             "type": "object",
@@ -687,11 +740,11 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "0.1.0",
-	Host:             "localhost:8080",
+	Host:             "localhost:8000",
 	BasePath:         "/",
-	Schemes:          []string{},
+	Schemes:          []string{"http", "https"},
 	Title:            "GoGoMio API",
-	Description:      "IP camera streaming and management API with MJPEG and health monitoring",
+	Description:      "IP camera streaming and management API with MJPEG video streaming, real-time health monitoring, and camera configuration management. Designed for Raspberry Pi CSI cameras and compatible devices.\n\n## Rate Limiting\nAll API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding this limit will receive HTTP 429 (Too Many Requests) responses.\n\n## Authentication & Security\n⚠️ **IMPORTANT**: This API has no built-in authentication. It is designed for private/internal networks only.\n- Do NOT expose this service directly to the internet\n- Deploy behind a firewall, VPN, or reverse proxy with authentication\n- Use HTTPS-terminating reverse proxy (nginx, Caddy, etc.) for HTTPS support\n- See Security section in README.md for deployment guidelines\n\n## API Versioning\n- Current version: v0.1.0 (Preview/MVP)\n- Endpoints follow semantic versioning at /v1/ path\n- Legacy endpoints at / are maintained for backward compatibility but marked as deprecated",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -31,19 +31,21 @@ A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-p
 
 - ✅ MJPEG streaming (`/stream.mjpg`)
 - ✅ Snapshot capture (`/snapshot.jpg`)
-- ✅ REST API endpoints (`/api/config`, `/api/status`, `/health`, `/ready`)
+- ✅ REST API endpoints (v1 versioned + legacy)
+- ✅ Per-IP rate limiting (100 req/10sec)
 - ✅ Mock camera mode for development (no Pi hardware needed)
 - ✅ Configuration via environment variables
 - ✅ Connection limiting (max concurrent streams)
 - ✅ Thread-safe frame buffering with condition variables
-- ✅ Real-time FPS calculation
+- ✅ Real-time FPS calculation and health monitoring
+- ✅ Comprehensive API documentation with Swagger UI
 - ✅ Docker support (multi-arch: arm64/amd64)
 - ✅ 51+ unit and integration tests (TDD)
 
 **Future (v0.2+)**
 
+- Real Pi camera (libcamera)
 - Prometheus metrics endpoint
-- Rate limiting per endpoint
 - Web UI streaming viewer
 - Advanced settings persistence  
 - Performance profiling for different Pi models
@@ -208,6 +210,74 @@ For complete CLI documentation, see [CLI Guide](docs/CLI_GUIDE.md).
 - **GET `/docs/index.html`** - Interactive Swagger UI with all API endpoints, request/response schemas, and try-it-out functionality
 - **GET `/swagger.json`** - Raw OpenAPI 2.0 specification (JSON)
 - **GET `/swagger.yaml`** - Raw OpenAPI 2.0 specification (YAML)
+
+### API Rate Limiting
+
+All API endpoints are subject to **per-IP rate limiting**:
+
+- **Limit**: 100 requests per 10 seconds per IP address
+- **Exceeded**: Returns HTTP 429 (Too Many Requests)
+- **Scope**: Applied to all `/v1/*` endpoints
+- **Use Case**: Prevents abuse and ensures fair resource allocation
+
+**Example Rate Limit Exceeded Response**:
+```json
+{
+  "code": 429,
+  "message": "Rate limit exceeded",
+  "details": "Max 100 requests per 10 seconds per IP"
+}
+```
+
+**Best Practices**:
+1. Implement exponential backoff when you receive 429 responses
+2. Cache responses when possible (especially `/v1/config/camera` which is static)
+3. Use `/v1/health` for quick probes instead of `/v1/health/detailed`
+4. Monitor your request rate to stay within limits
+5. Use conditional requests (polling) rather than continuous streams for metrics
+
+### API Migration Guide
+
+The API includes deprecated endpoints for backward compatibility. Migrate to new endpoints by **v0.3.0** when legacy endpoints will be removed.
+
+**Deprecated Endpoints → Migration Path**:
+
+| Old Endpoint | Status | New Endpoint(s) | Migration Notes |
+|---|---|---|---|
+| `GET /api/config` | ⚠️ Deprecated | `GET /v1/config/camera` + `GET /v1/metrics/live` | Combines static config + live metrics; split into two endpoints for better separation of concerns |
+| `GET /api/status` | ⚠️ Deprecated | `GET /v1/health/detailed` | Identical response format; same data, clearer naming |
+| `GET /api/diagnostics` | ⚠️ Deprecated | `GET /v1/health/detailed` | Identical response format; same data, clearer naming |
+
+**Migration Example**:
+
+**Old (Deprecated)**:
+```bash
+# Get both config and metrics from one endpoint
+curl http://localhost:8000/api/config | jq
+```
+
+**New (Recommended)**:
+```bash
+# Get static config
+curl http://localhost:8000/v1/config/camera | jq '.resolution, .fps, .jpeg_quality'
+
+# Get live metrics (frequently changing data)
+curl http://localhost:8000/v1/metrics/live | jq '.fps_current, .stream_connections, .uptime_seconds'
+
+# Get comprehensive health info when needed
+curl http://localhost:8000/v1/health/detailed | jq
+```
+
+**Benefits of Migration**:
+- **Clear Separation**: Config is static (cacheable), metrics are dynamic (request frequently)
+- **Better Caching**: Cache `/v1/config/camera` responses since they don't change unless restarted
+- **Clearer API**: Each endpoint has a single responsibility
+- **Future Proof**: New v1 endpoints won't be removed, legacy endpoints will be
+
+**Timeline**:
+- **v0.1.0** (now): Deprecated endpoints work with `Deprecation: true` header
+- **v0.2.x**: Will continue supporting but recommend migration
+- **v0.3.0**: Legacy endpoints removed; migration required
 
 ## Architecture
 
@@ -449,10 +519,66 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| **v0.1** | Mock camera, MJPEG stream, API, Docker | ✅ Current |
+| **v0.1** | Mock camera, MJPEG stream, API, Rate limiting, Docker | ✅ Current |
 | **v0.2** | Real Pi camera (libcamera), Prometheus metrics | 🔄 Planned |
-| **v0.3** | Web UI, Settings persistence | 📋 Planned |
-| **v0.4** | Rate limiting, Performance profiles, Advanced config | 📋 Future |
+| **v0.3** | Web UI, Settings persistence, Remove deprecated endpoints | 📋 Planned |
+| **v0.4** | Performance profiles, Advanced config | 📋 Future |
+
+## Security
+
+### ⚠️ Important Security Notice
+
+**This service has NO built-in authentication and is designed for private/trusted networks only.**
+
+**DO NOT expose this service directly to the internet.** Deploy it behind:
+- Firewall with restricted access
+- VPN or private network
+- Reverse proxy with authentication (nginx, Caddy, etc.)
+- HTTPS-terminating proxy
+
+### Deployment Security Checklist
+
+- [ ] Network is private/behind firewall
+- [ ] Firewall restricts access to trusted IPs only
+- [ ] For remote access: Use VPN tunnel (e.g., WireGuard, OpenVPN)
+- [ ] For public access: Use reverse proxy with authentication
+- [ ] HTTPS enabled via reverse proxy (never HTTP publicly)
+- [ ] Rate limiting understood (100 req/10sec per IP)
+- [ ] Camera is on trusted device/network
+
+### Recommended Deployment Patterns
+
+**Local Network Only (Recommended for Raspberry Pi)**:
+```bash
+# Run on local network, firewall restricts access
+docker-compose up -d
+# Access only from trusted devices on same network
+```
+
+**Remote Access with VPN**:
+```bash
+# Expose only to VPN network
+# Users connect via VPN to access the camera
+# Example: WireGuard, OpenVPN
+```
+
+**Reverse Proxy with Auth (Advanced)**:
+```bash
+# Nginx/Caddy in front with authentication
+# Reverse proxy example:
+# - Caddy with basic auth
+# - Nginx with client certificate validation
+# - Traefik with OAuth2 proxy
+```
+
+### Future Security Enhancements
+
+Planned for future versions:
+- [ ] Basic authentication support (v0.2+)
+- [ ] HTTPS/TLS native support (v0.2+)
+- [ ] API key authentication (v0.3+)
+- [ ] OAuth2 integration (v0.4+)
+- [ ] Audit logging (v0.4+)
 
 ## Contributing
 
