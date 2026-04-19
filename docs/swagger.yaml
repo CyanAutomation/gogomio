@@ -1,0 +1,381 @@
+basePath: /
+definitions:
+  api.ConfigResponse:
+    description: Camera configuration, resolution, and streaming performance metrics
+    properties:
+      current_fps:
+        description: Current FPS being delivered
+        example: 29.5
+        type: number
+      current_stream_connections:
+        description: Current number of active stream connections
+        example: 1
+        type: integer
+      fps:
+        description: Configured frames per second
+        example: 30
+        type: integer
+      frames_captured:
+        description: Total number of frames captured
+        example: 1500
+        type: integer
+      jpeg_quality:
+        description: JPEG compression quality (0-100)
+        example: 85
+        type: integer
+      last_frame_age_seconds:
+        description: Age of the last frame in seconds
+        example: 0.033
+        type: number
+      max_stream_connections:
+        description: Maximum concurrent stream connections allowed
+        example: 5
+        type: integer
+      resolution:
+        description: Camera resolution in pixels [width, height]
+        items:
+          type: integer
+        type: array
+      target_fps:
+        description: Target FPS for frame buffer
+        example: 30
+        type: integer
+    type: object
+  api.DiagnosticsResponse:
+    description: Comprehensive diagnostics including health metrics, error rates,
+      and system status
+    properties:
+      camera_ready:
+        description: Whether the camera is ready
+        example: true
+        type: boolean
+      capture_failures_recent:
+        description: Recent consecutive capture failures
+        example: 0
+        type: integer
+      capture_failures_total:
+        description: Total capture failures
+        example: 10
+        type: integer
+      error_rate_percent:
+        description: Error rate as percentage
+        example: 0.5
+        type: number
+      fps:
+        description: Current FPS being delivered
+        example: 29.8
+        type: number
+      frames_captured:
+        description: Total frames successfully captured
+        example: 216000
+        type: integer
+      health_status:
+        description: 'Health status text: Excellent, Degraded, Poor'
+        example: Excellent
+        type: string
+      jpeg_quality:
+        description: JPEG quality setting (0-100)
+        example: 85
+        type: integer
+      last_frame_age_seconds:
+        description: Age of the last frame in seconds
+        example: 0.034
+        type: number
+      max_stream_connections:
+        description: Maximum concurrent connections
+        example: 5
+        type: integer
+      message:
+        description: Detailed status message
+        example: Camera is functioning normally
+        type: string
+      resolution:
+        description: Resolution as string (e.g., '1920x1080')
+        example: 1920x1080
+        type: string
+      status:
+        description: 'Overall status: ok, degraded, error'
+        example: ok
+        type: string
+      stream_connections:
+        description: Current stream connection count
+        example: 1
+        type: integer
+      uptime_seconds:
+        description: System uptime in seconds
+        example: 7200
+        type: integer
+    type: object
+  api.HealthResponse:
+    description: Health status of the camera system including connectivity and performance
+      metrics
+    properties:
+      camera_ready:
+        description: Whether the camera is initialized and ready
+        example: true
+        type: boolean
+      capture_consecutive_failures:
+        description: Number of consecutive capture failures (optional)
+        example: 0
+        type: integer
+      capture_failures_total:
+        description: Total number of capture failures (optional)
+        example: 5
+        type: integer
+      degraded:
+        description: Whether system is operating in degraded mode (optional)
+        example: false
+        type: boolean
+      fps:
+        description: Frames per second being captured
+        example: 29.8
+        type: number
+      status:
+        description: 'Overall status: ok, degraded, error'
+        example: ok
+        type: string
+      stream_connections:
+        description: Current number of active stream connections
+        example: 2
+        type: integer
+      uptime_seconds:
+        description: System uptime in seconds
+        example: 3600
+        type: integer
+    type: object
+  api.SettingsUpdateRequest:
+    description: Request body for updating multiple settings at once
+    properties:
+      settings:
+        additionalProperties: true
+        description: Map of setting keys to values
+        type: object
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: GoGoMio Support
+  description: IP camera streaming and management API with MJPEG and health monitoring
+  license:
+    name: MIT
+  title: GoGoMio API
+  version: 0.1.0
+paths:
+  /v1/api/config:
+    get:
+      consumes:
+      - application/json
+      description: Returns camera configuration including resolution, FPS, stream
+        connections, and performance metrics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ConfigResponse'
+      summary: Get configuration and statistics
+      tags:
+      - Configuration
+  /v1/api/diagnostics:
+    get:
+      consumes:
+      - application/json
+      description: Returns complete system diagnostics including health status, error
+        metrics, and performance data
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DiagnosticsResponse'
+      summary: Get comprehensive diagnostics
+      tags:
+      - Diagnostics
+  /v1/api/settings:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all saved application settings
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get all settings
+      tags:
+      - Settings
+    post:
+      consumes:
+      - application/json
+      description: Updates one or more application settings. Accepts both POST and
+        PUT requests
+      parameters:
+      - description: Settings to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.SettingsUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update settings
+      tags:
+      - Settings
+    put:
+      consumes:
+      - application/json
+      description: Updates one or more application settings. Accepts both POST and
+        PUT requests
+      parameters:
+      - description: Settings to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.SettingsUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update settings
+      tags:
+      - Settings
+  /v1/api/status:
+    get:
+      consumes:
+      - application/json
+      description: Returns detailed status including health state, capture failures,
+        and degradation status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.HealthResponse'
+      summary: Get system status
+      tags:
+      - Health
+  /v1/api/stream/stop:
+    post:
+      consumes:
+      - application/json
+      description: Stops the camera stream capture and disconnects all clients
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stop stream capture
+      tags:
+      - Streaming
+  /v1/health:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current health status of the camera system including
+        uptime, FPS, and connection count
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check endpoint
+      tags:
+      - Health
+  /v1/ready:
+    get:
+      consumes:
+      - application/json
+      description: Returns 200 if camera is ready, 503 if still initializing
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Readiness probe
+      tags:
+      - Health
+  /v1/snapshot.jpg:
+    get:
+      consumes:
+      - application/json
+      description: Returns the latest captured frame as a JPEG image
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: JPEG image data
+          schema:
+            type: file
+        "503":
+          description: Camera not ready
+          schema:
+            type: string
+      summary: Get current snapshot
+      tags:
+      - Streaming
+swagger: "2.0"

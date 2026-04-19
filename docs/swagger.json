@@ -1,0 +1,532 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "IP camera streaming and management API with MJPEG and health monitoring",
+        "title": "GoGoMio API",
+        "contact": {
+            "name": "GoGoMio Support"
+        },
+        "license": {
+            "name": "MIT"
+        },
+        "version": "0.1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/v1/api/config": {
+            "get": {
+                "description": "Returns camera configuration including resolution, FPS, stream connections, and performance metrics",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Configuration"
+                ],
+                "summary": "Get configuration and statistics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/api/diagnostics": {
+            "get": {
+                "description": "Returns complete system diagnostics including health status, error metrics, and performance data",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Diagnostics"
+                ],
+                "summary": "Get comprehensive diagnostics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DiagnosticsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/api/settings": {
+            "get": {
+                "description": "Retrieves all saved application settings",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Get all settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates one or more application settings. Accepts both POST and PUT requests",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Update settings",
+                "parameters": [
+                    {
+                        "description": "Settings to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SettingsUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Updates one or more application settings. Accepts both POST and PUT requests",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Update settings",
+                "parameters": [
+                    {
+                        "description": "Settings to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.SettingsUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/api/status": {
+            "get": {
+                "description": "Returns detailed status including health state, capture failures, and degradation status",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Get system status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/api/stream/stop": {
+            "post": {
+                "description": "Stops the camera stream capture and disconnects all clients",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Streaming"
+                ],
+                "summary": "Stop stream capture",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/health": {
+            "get": {
+                "description": "Returns the current health status of the camera system including uptime, FPS, and connection count",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check endpoint",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.HealthResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ready": {
+            "get": {
+                "description": "Returns 200 if camera is ready, 503 if still initializing",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Readiness probe",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/snapshot.jpg": {
+            "get": {
+                "description": "Returns the latest captured frame as a JPEG image",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "Streaming"
+                ],
+                "summary": "Get current snapshot",
+                "responses": {
+                    "200": {
+                        "description": "JPEG image data",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "503": {
+                        "description": "Camera not ready",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "api.ConfigResponse": {
+            "description": "Camera configuration, resolution, and streaming performance metrics",
+            "type": "object",
+            "properties": {
+                "current_fps": {
+                    "description": "Current FPS being delivered",
+                    "type": "number",
+                    "example": 29.5
+                },
+                "current_stream_connections": {
+                    "description": "Current number of active stream connections",
+                    "type": "integer",
+                    "example": 1
+                },
+                "fps": {
+                    "description": "Configured frames per second",
+                    "type": "integer",
+                    "example": 30
+                },
+                "frames_captured": {
+                    "description": "Total number of frames captured",
+                    "type": "integer",
+                    "example": 1500
+                },
+                "jpeg_quality": {
+                    "description": "JPEG compression quality (0-100)",
+                    "type": "integer",
+                    "example": 85
+                },
+                "last_frame_age_seconds": {
+                    "description": "Age of the last frame in seconds",
+                    "type": "number",
+                    "example": 0.033
+                },
+                "max_stream_connections": {
+                    "description": "Maximum concurrent stream connections allowed",
+                    "type": "integer",
+                    "example": 5
+                },
+                "resolution": {
+                    "description": "Camera resolution in pixels [width, height]",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "target_fps": {
+                    "description": "Target FPS for frame buffer",
+                    "type": "integer",
+                    "example": 30
+                }
+            }
+        },
+        "api.DiagnosticsResponse": {
+            "description": "Comprehensive diagnostics including health metrics, error rates, and system status",
+            "type": "object",
+            "properties": {
+                "camera_ready": {
+                    "description": "Whether the camera is ready",
+                    "type": "boolean",
+                    "example": true
+                },
+                "capture_failures_recent": {
+                    "description": "Recent consecutive capture failures",
+                    "type": "integer",
+                    "example": 0
+                },
+                "capture_failures_total": {
+                    "description": "Total capture failures",
+                    "type": "integer",
+                    "example": 10
+                },
+                "error_rate_percent": {
+                    "description": "Error rate as percentage",
+                    "type": "number",
+                    "example": 0.5
+                },
+                "fps": {
+                    "description": "Current FPS being delivered",
+                    "type": "number",
+                    "example": 29.8
+                },
+                "frames_captured": {
+                    "description": "Total frames successfully captured",
+                    "type": "integer",
+                    "example": 216000
+                },
+                "health_status": {
+                    "description": "Health status text: Excellent, Degraded, Poor",
+                    "type": "string",
+                    "example": "Excellent"
+                },
+                "jpeg_quality": {
+                    "description": "JPEG quality setting (0-100)",
+                    "type": "integer",
+                    "example": 85
+                },
+                "last_frame_age_seconds": {
+                    "description": "Age of the last frame in seconds",
+                    "type": "number",
+                    "example": 0.034
+                },
+                "max_stream_connections": {
+                    "description": "Maximum concurrent connections",
+                    "type": "integer",
+                    "example": 5
+                },
+                "message": {
+                    "description": "Detailed status message",
+                    "type": "string",
+                    "example": "Camera is functioning normally"
+                },
+                "resolution": {
+                    "description": "Resolution as string (e.g., '1920x1080')",
+                    "type": "string",
+                    "example": "1920x1080"
+                },
+                "status": {
+                    "description": "Overall status: ok, degraded, error",
+                    "type": "string",
+                    "example": "ok"
+                },
+                "stream_connections": {
+                    "description": "Current stream connection count",
+                    "type": "integer",
+                    "example": 1
+                },
+                "uptime_seconds": {
+                    "description": "System uptime in seconds",
+                    "type": "integer",
+                    "example": 7200
+                }
+            }
+        },
+        "api.HealthResponse": {
+            "description": "Health status of the camera system including connectivity and performance metrics",
+            "type": "object",
+            "properties": {
+                "camera_ready": {
+                    "description": "Whether the camera is initialized and ready",
+                    "type": "boolean",
+                    "example": true
+                },
+                "capture_consecutive_failures": {
+                    "description": "Number of consecutive capture failures (optional)",
+                    "type": "integer",
+                    "example": 0
+                },
+                "capture_failures_total": {
+                    "description": "Total number of capture failures (optional)",
+                    "type": "integer",
+                    "example": 5
+                },
+                "degraded": {
+                    "description": "Whether system is operating in degraded mode (optional)",
+                    "type": "boolean",
+                    "example": false
+                },
+                "fps": {
+                    "description": "Frames per second being captured",
+                    "type": "number",
+                    "example": 29.8
+                },
+                "status": {
+                    "description": "Overall status: ok, degraded, error",
+                    "type": "string",
+                    "example": "ok"
+                },
+                "stream_connections": {
+                    "description": "Current number of active stream connections",
+                    "type": "integer",
+                    "example": 2
+                },
+                "uptime_seconds": {
+                    "description": "System uptime in seconds",
+                    "type": "integer",
+                    "example": 3600
+                }
+            }
+        },
+        "api.SettingsUpdateRequest": {
+            "description": "Request body for updating multiple settings at once",
+            "type": "object",
+            "properties": {
+                "settings": {
+                    "description": "Map of setting keys to values",
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        }
+    }
+}

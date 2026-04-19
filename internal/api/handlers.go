@@ -15,6 +15,8 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/settings"
 	"github.com/CyanAutomation/gogomio/internal/web"
 	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
+	_ "github.com/CyanAutomation/gogomio/docs"
 )
 
 // FrameManager coordinates camera capture and serves frames to HTTP clients.
@@ -537,50 +539,87 @@ func writeMultipartFrame(w http.ResponseWriter, contentLengthScratch *[]byte, fr
 }
 
 // ConfigResponse is the JSON response for /api/config endpoint.
+// ConfigResponse contains camera configuration and streaming statistics
+// @Description Camera configuration, resolution, and streaming performance metrics
 type ConfigResponse struct {
-	Resolution           [2]int  `json:"resolution"`
-	FPS                  int     `json:"fps"`
-	TargetFPS            int     `json:"target_fps"`
-	JPEGQuality          int     `json:"jpeg_quality"`
-	MaxStreamConnections int     `json:"max_stream_connections"`
-	CurrentStreamCount   int     `json:"current_stream_connections"`
-	FrameCount           int64   `json:"frames_captured"`
-	CurrentFPS           float64 `json:"current_fps"`
-	LastFrameAgeSeconds  float64 `json:"last_frame_age_seconds"`
+	// Camera resolution in pixels [width, height]
+	Resolution [2]int `json:"resolution"`
+	// Configured frames per second
+	FPS int `json:"fps" example:"30"`
+	// Target FPS for frame buffer
+	TargetFPS int `json:"target_fps" example:"30"`
+	// JPEG compression quality (0-100)
+	JPEGQuality int `json:"jpeg_quality" example:"85"`
+	// Maximum concurrent stream connections allowed
+	MaxStreamConnections int `json:"max_stream_connections" example:"5"`
+	// Current number of active stream connections
+	CurrentStreamCount int `json:"current_stream_connections" example:"1"`
+	// Total number of frames captured
+	FrameCount int64 `json:"frames_captured" example:"1500"`
+	// Current FPS being delivered
+	CurrentFPS float64 `json:"current_fps" example:"29.5"`
+	// Age of the last frame in seconds
+	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds" example:"0.033"`
 }
 
 // HealthResponse is the JSON response for /health endpoint.
+// @Description Health status of the camera system including connectivity and performance metrics
 type HealthResponse struct {
-	Status             string  `json:"status"`
-	CameraReady        bool    `json:"camera_ready"`
-	UptimeSeconds      int64   `json:"uptime_seconds"`
-	StreamConnections  int     `json:"stream_connections"`
-	FramesPerSecond    float64 `json:"fps"`
-	Degraded           bool    `json:"degraded,omitempty"`
-	CaptureFailures    int64   `json:"capture_consecutive_failures,omitempty"`
-	CaptureErrorsTotal int64   `json:"capture_failures_total,omitempty"`
+	// Overall status: ok, degraded, error
+	Status string `json:"status" example:"ok"`
+	// Whether the camera is initialized and ready
+	CameraReady bool `json:"camera_ready" example:"true"`
+	// System uptime in seconds
+	UptimeSeconds int64 `json:"uptime_seconds" example:"3600"`
+	// Current number of active stream connections
+	StreamConnections int `json:"stream_connections" example:"2"`
+	// Frames per second being captured
+	FramesPerSecond float64 `json:"fps" example:"29.8"`
+	// Whether system is operating in degraded mode (optional)
+	Degraded bool `json:"degraded,omitempty" example:"false"`
+	// Number of consecutive capture failures (optional)
+	CaptureFailures int64 `json:"capture_consecutive_failures,omitempty" example:"0"`
+	// Total number of capture failures (optional)
+	CaptureErrorsTotal int64 `json:"capture_failures_total,omitempty" example:"5"`
 }
 
 // DiagnosticsResponse is the JSON response for /api/diagnostics endpoint.
+// @Description Comprehensive diagnostics including health metrics, error rates, and system status
 type DiagnosticsResponse struct {
-	Status               string  `json:"status"`
-	CameraReady          bool    `json:"camera_ready"`
-	FramesPerSecond      float64 `json:"fps"`
-	UptimeSeconds        int64   `json:"uptime_seconds"`
-	StreamConnections    int     `json:"stream_connections"`
-	FramesCaptured       int64   `json:"frames_captured"`
-	LastFrameAgeSeconds  float64 `json:"last_frame_age_seconds"`
-	Resolution           string  `json:"resolution"`
-	JPEGQuality          int     `json:"jpeg_quality"`
-	MaxConnections       int     `json:"max_stream_connections"`
-	CaptureFailures      int64   `json:"capture_failures_recent"`
-	CaptureFailuresTotal int64   `json:"capture_failures_total"`
-	ErrorRate            float64 `json:"error_rate_percent"`
-	HealthStatus         string  `json:"health_status"`
-	Message              string  `json:"message"`
+	// Overall status: ok, degraded, error
+	Status string `json:"status" example:"ok"`
+	// Whether the camera is ready
+	CameraReady bool `json:"camera_ready" example:"true"`
+	// Current FPS being delivered
+	FramesPerSecond float64 `json:"fps" example:"29.8"`
+	// System uptime in seconds
+	UptimeSeconds int64 `json:"uptime_seconds" example:"7200"`
+	// Current stream connection count
+	StreamConnections int `json:"stream_connections" example:"1"`
+	// Total frames successfully captured
+	FramesCaptured int64 `json:"frames_captured" example:"216000"`
+	// Age of the last frame in seconds
+	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds" example:"0.034"`
+	// Resolution as string (e.g., '1920x1080')
+	Resolution string `json:"resolution" example:"1920x1080"`
+	// JPEG quality setting (0-100)
+	JPEGQuality int `json:"jpeg_quality" example:"85"`
+	// Maximum concurrent connections
+	MaxConnections int `json:"max_stream_connections" example:"5"`
+	// Recent consecutive capture failures
+	CaptureFailures int64 `json:"capture_failures_recent" example:"0"`
+	// Total capture failures
+	CaptureFailuresTotal int64 `json:"capture_failures_total" example:"10"`
+	// Error rate as percentage
+	ErrorRate float64 `json:"error_rate_percent" example:"0.5"`
+	// Health status text: Excellent, Degraded, Poor
+	HealthStatus string `json:"health_status" example:"Excellent"`
+	// Detailed status message
+	Message string `json:"message" example:"Camera is functioning normally"`
 }
 
 // RegisterHandlers registers all API endpoints with the Chi router.
+// RegisterHandlers registers all API routes with versioning support
 func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	startTime := time.Now()
 
@@ -591,6 +630,20 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	// Register web UI (must be before other handlers for proper routing)
 	web.RegisterStaticFiles(router)
 
+	// Register Swagger UI
+	router.Get("/docs/*", httpSwagger.Handler())
+
+	// Register API routes with versioning
+	router.Route("/v1", func(r chi.Router) {
+		registerV1Handlers(r, fm, cfg, startTime)
+	})
+
+	// Register unversioned legacy endpoints for backward compatibility
+	registerLegacyHandlers(router, fm, cfg, startTime)
+}
+
+// registerV1Handlers registers all v1 API endpoints
+func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Health check endpoints
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, fm, startTime)
@@ -652,8 +705,77 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	})
 }
 
+// registerLegacyHandlers registers unversioned endpoints for backward compatibility
+func registerLegacyHandlers(router chi.Router, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+	// Health check endpoints
+	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		handleHealth(w, r, fm, startTime)
+	})
+
+	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		handleReady(w, r, fm)
+	})
+
+	// Stream endpoints
+	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
+		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
+			_ = err
+		}
+	})
+
+	// OctoPrint-compatible stream endpoint
+	router.Get("/webcam", func(w http.ResponseWriter, r *http.Request) {
+		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
+			_ = err
+		}
+	})
+
+	router.Get("/snapshot.jpg", func(w http.ResponseWriter, r *http.Request) {
+		handleSnapshot(w, r, fm)
+	})
+
+	// API endpoints
+	router.Get("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIConfigure(w, r, fm, cfg, startTime)
+	})
+
+	router.Get("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		handleAPIStatus(w, r, fm, startTime)
+	})
+
+	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
+		handleStopStream(w, r, fm)
+	})
+
+	// Settings management endpoints
+	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsGet(w, r, fm)
+	})
+
+	router.Post("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsUpdate(w, r, fm)
+	})
+
+	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsUpdate(w, r, fm)
+	})
+
+	// Diagnostics endpoint
+	router.Get("/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+		handleDiagnostics(w, r, fm, cfg, startTime)
+	})
+}
+
 // Handler functions
 
+// @Summary Health check endpoint
+// @Description Returns the current health status of the camera system including uptime, FPS, and connection count
+// @Tags Health
+// @Accept  json
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Failure 503 {object} map[string]string
+// @Router /v1/health [get]
 func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
 	_, _, fps := fm.streamStats.Snapshot()
 
@@ -672,6 +794,14 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 	}
 }
 
+// @Summary Readiness probe
+// @Description Returns 200 if camera is ready, 503 if still initializing
+// @Tags Health
+// @Accept  json
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 503 {object} map[string]string
+// @Router /v1/ready [get]
 func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	if !fm.cam.IsReady() {
 		w.Header().Set("Content-Type", "application/json")
@@ -688,6 +818,14 @@ func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	}
 }
 
+// @Summary Get current snapshot
+// @Description Returns the latest captured frame as a JPEG image
+// @Tags Streaming
+// @Accept  json
+// @Produce image/jpeg
+// @Success 200 {file} binary "JPEG image data"
+// @Failure 503 {string} string "Camera not ready"
+// @Router /v1/snapshot.jpg [get]
 func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	frame := fm.GetFrame()
 	if frame == nil {
@@ -701,6 +839,13 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	_, _ = w.Write(frame)
 }
 
+// @Summary Get configuration and statistics
+// @Description Returns camera configuration including resolution, FPS, stream connections, and performance metrics
+// @Tags Configuration
+// @Accept  json
+// @Produce json
+// @Success 200 {object} ConfigResponse
+// @Router /v1/api/config [get]
 func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	frameCount, _, fps := fm.streamStats.Snapshot()
 
@@ -722,6 +867,13 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 	}
 }
 
+// @Summary Get system status
+// @Description Returns detailed status including health state, capture failures, and degradation status
+// @Tags Health
+// @Accept  json
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /v1/api/status [get]
 func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
 	_, _, fps := fm.streamStats.Snapshot()
 	consecutiveFailures, captureFailuresTotal, degraded := fm.captureFailureStats()
@@ -752,6 +904,13 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, s
 
 // Settings handlers
 
+// @Summary Get all settings
+// @Description Retrieves all saved application settings
+// @Tags Settings
+// @Accept  json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/api/settings [get]
 func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	settings := fm.settingsM.GetAll()
 
@@ -764,10 +923,30 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager)
 }
 
 // SettingsUpdateRequest represents a request body for updating settings
+// @Description Request body for updating multiple settings at once
 type SettingsUpdateRequest struct {
+	// Map of setting keys to values
 	Settings map[string]interface{} `json:"settings"`
 }
 
+// ErrorResponse is a standardized error response for all API errors
+// @Description Standard error response format for API errors
+type ErrorResponse struct {
+	// HTTP status code
+	Code int `json:"code" example:"400"`
+	// Error message
+	Message string `json:"message" example:"Invalid request"`
+	// Optional detailed error information
+	Details string `json:"details,omitempty" example:"Settings map is empty"`
+}
+
+// @Summary Get comprehensive diagnostics
+// @Description Returns complete system diagnostics including health status, error metrics, and performance data
+// @Tags Diagnostics
+// @Accept  json
+// @Produce json
+// @Success 200 {object} DiagnosticsResponse
+// @Router /v1/api/diagnostics [get]
 func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	frameCount, _, fps := fm.streamStats.Snapshot()
 
@@ -828,17 +1007,26 @@ func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 	}
 }
 
+// @Summary Update settings
+// @Description Updates one or more application settings. Accepts both POST and PUT requests
+// @Tags Settings
+// @Accept  json
+// @Produce json
+// @Param   request body SettingsUpdateRequest true "Settings to update"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /v1/api/settings [post]
+// @Router /v1/api/settings [put]
 func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	var req SettingsUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON"})
+		writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON", err.Error())
 		return
 	}
 
 	if err := fm.settingsM.SetMany(req.Settings); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save settings batch: " + err.Error()})
+		writeErrorResponse(w, http.StatusInternalServerError, "Failed to save settings", err.Error())
 		return
 	}
 
@@ -849,6 +1037,13 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	})
 }
 
+// @Summary Stop stream capture
+// @Description Stops the camera stream capture and disconnects all clients
+// @Tags Streaming
+// @Accept  json
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router /v1/api/stream/stop [post]
 func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	log.Printf("🛑 API: Stop stream requested by client")
 
@@ -866,6 +1061,20 @@ func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) 
 }
 
 // Middleware
+
+func writeErrorResponse(w http.ResponseWriter, statusCode int, message string, details string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	err := json.NewEncoder(w).Encode(ErrorResponse{
+		Code:    statusCode,
+		Message: message,
+		Details: details,
+	})
+	if err != nil {
+		// Client disconnected, ignore
+		_ = err
+	}
+}
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
