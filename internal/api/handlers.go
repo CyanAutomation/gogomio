@@ -827,13 +827,10 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		return
 	}
 
-	// Save each setting
-	for key, value := range req.Settings {
-		if err := fm.settingsM.Set(key, value); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save setting: " + key})
-			return
-		}
+	if err := fm.settingsM.SetMany(req.Settings); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to save settings batch: " + err.Error()})
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
