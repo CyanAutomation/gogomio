@@ -1,3 +1,11 @@
+// GoGoMio API
+// @title GoGoMio API
+// @version 0.1.0
+// @description IP camera streaming and management API with MJPEG and health monitoring
+// @contact.name GoGoMio Support
+// @license.name MIT
+// @host localhost:8080
+// @basePath /
 package main
 
 import (
