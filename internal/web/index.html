@@ -781,6 +781,7 @@
                 this.streamAbortController = null;
                 this.streamRetryCount = 0;
                 this.maxStreamRetries = 3;
+                this.poseResetTimer = null;
                 this.poseByState = {
                     idle: {
                         src: "/static/mio/mio_pose_sleeping.png",
@@ -838,6 +839,25 @@
                 this.idleElement.style.display = "block";
             }
 
+            clearPoseResetTimer() {
+                if (this.poseResetTimer !== null) {
+                    clearTimeout(this.poseResetTimer);
+                    this.poseResetTimer = null;
+                }
+            }
+
+            schedulePoseResetToIdle(delayMs = 2200) {
+                this.clearPoseResetTimer();
+                this.poseResetTimer = setTimeout(() => {
+                    const diagnosticsModal = document.getElementById("diagnostics-modal");
+                    const diagnosticsOpen = diagnosticsModal && diagnosticsModal.style.display === "flex";
+                    if (!this.isStreaming && !diagnosticsOpen) {
+                        this.setIdlePose("idle");
+                    }
+                    this.poseResetTimer = null;
+                }, delayMs);
+            }
+
             initializeStream() {
                 this.imageElement.onload = () => {
                     if (!this.imageElement.getAttribute("src")) return;
@@ -848,6 +868,7 @@
                     this.idleElement.style.display = "none";
                     this.imageElement.style.display = "block";
                     this.setIdlePose("success");
+                    this.schedulePoseResetToIdle();
                     this.updateStreamControls();
                     this.updateStatus("Streaming", true);
                     this.startStatsPolling();
@@ -912,6 +933,7 @@
                 this.placeholderDesc.textContent = "Establishing connection...";
                 this.loadingElement.style.display = "block";
                 this.setLoadingPose("loading");
+                this.clearPoseResetTimer();
                 this.imageElement.style.display = "none";
                 this.updateStatus("Starting...", false);
                 this.streamRetryCount = 0;
@@ -946,6 +968,7 @@
                 this.imageElement.style.display = "none";
                 this.loadingElement.style.display = "block";
                 this.setIdlePose("idle");
+                this.clearPoseResetTimer();
                 this.placeholderText.textContent = "⏹️ Stream stopped";
                 this.placeholderDesc.textContent = "Click Start to begin streaming";
                 this.updateStreamControls();
@@ -1057,8 +1080,10 @@
                 if (!this.isStreaming) {
                     if (type === "success") {
                         this.setIdlePose("success");
+                        this.schedulePoseResetToIdle(2200);
                     } else if (type === "warning" || type === "error") {
                         this.setIdlePose("warning");
+                        this.schedulePoseResetToIdle(3000);
                     }
                 }
                 
