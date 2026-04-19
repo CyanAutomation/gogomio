@@ -2,12 +2,14 @@
   "name": "MIO",
   "species": "Mola mola (Ocean Sunfish) - stylised mascot",
   "type": "Mascot Character",
+
   "design_style": {
-    "overall": "cute, chibi-inspired, cartoon-realistic",
-    "shape_language": "rounded, soft, friendly",
+    "overall": "cute, chibi-inspired, cartoon-realistic with light anatomical grounding",
+    "shape_language": "rounded, soft, friendly with disk-like silhouette",
     "line_style": "clean, bold outlines with smooth curves",
     "rendering": "digital illustration with soft gradients and subtle highlights"
   },
+
   "personality": {
     "core_traits": ["friendly", "curious", "calm", "playful"],
     "emotional_range": [
@@ -17,24 +19,53 @@
     ],
     "vibe": "approachable, gentle, slightly whimsical"
   },
+
   "appearance": {
-    "body_shape": "rounded, slightly oval body with small fins and a compact tail",
-    "head": "large relative to body, contributing to a cute, chibi proportion",
+    "body_shape": {
+      "base": "near-circular, disk-like silhouette",
+      "proportion": "slightly taller than wide to reflect mola mola anatomy",
+      "note": "less traditional fish shape, more 'floating head' appearance"
+    },
+
+    "head": "large relative to body, integrated into the main body mass (no distinct neck)",
+
     "eyes": {
       "style": "large, glossy, expressive",
       "details": "bright highlights and gradient iris, often blue-toned",
       "expressiveness": "primary driver of emotion"
     },
+
     "mouth": {
       "style": "small, simple, curved line",
       "expressions": ["smile", "neutral", "sleepy"]
     },
+
     "fins": {
-      "top_fin": "short, rounded triangular dorsal fin",
-      "side_fins": "small, paddle-like",
-      "tail": "stylised, simplified sunfish tail"
+      "dorsal_fin": {
+        "shape": "rounded triangular",
+        "size": "prominent (scaled up ~30-40%)",
+        "position": "top centre"
+      },
+      "anal_fin": {
+        "shape": "mirrors dorsal fin",
+        "size": "prominent",
+        "position": "bottom centre",
+        "note": "critical for mola mola authenticity"
+      },
+      "pectoral_fins": {
+        "style": "small, rounded paddles",
+        "position": "mid-body",
+        "visibility": "subtle but clear"
+      },
+      "tail": {
+        "type": "clavus",
+        "description": "flat, rounded rear edge",
+        "style": "soft scalloped shape with 2–3 gentle bumps",
+        "note": "replaces traditional fish tail"
+      }
     }
   },
+
   "colour_palette": {
     "primary_blue": "#5FA8D3",
     "secondary_blue": "#3C7DC4",
@@ -43,17 +74,21 @@
     "belly_white": "#F2F4F7",
     "outline": "#0F1A2B"
   },
+
   "texture_and_lighting": {
     "finish": "smooth, glossy",
     "lighting": "soft top-left highlights with gentle shading",
-    "surface": "clean, plastic-like mascot finish"
+    "surface": "clean, slightly plastic-like mascot finish"
   },
+
   "poses_and_states": {
-    "default": "facing slightly right with open, curious eyes",
-    "sleeping": "eyes closed with relaxed expression",
-    "happy": "wide open eyes with open smiling mouth",
-    "avatar": "simplified face-forward or side profile"
+    "default": "3/4 view, gently floating, open curious eyes",
+    "sleeping": "eyes closed, relaxed posture, slight tilt",
+    "happy": "wide eyes, open smile, subtle fin lift",
+    "avatar": "simplified face-forward or side profile",
+    "note": "body tilt and eye shape drive expression more than limb movement"
   },
+
   "branding_use": {
     "roles": [
       "app mascot",
@@ -67,11 +102,27 @@
       "calm and reliable system"
     ]
   },
+
   "design_principles": [
     "keep shapes simple and readable at small sizes",
     "prioritise eye expressiveness",
     "maintain soft, rounded geometry",
+    "preserve disk-like mola silhouette",
     "use consistent blue palette",
     "avoid harsh shadows or realism"
-  ]
+  ],
+
+  "constraints": {
+    "do_not_change": [
+      "large expressive eyes",
+      "rounded soft shading",
+      "blue gradient palette",
+      "small cute mouth",
+      "overall chibi proportions"
+    ],
+    "balance": {
+      "target": "70% mascot appeal, 30% anatomical accuracy",
+      "priority": "silhouette correctness over strict realism"
+    }
+  }
 }
