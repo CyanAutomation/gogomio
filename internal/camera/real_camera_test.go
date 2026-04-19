@@ -145,7 +145,7 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 		go func() {
 			defer func() { _ = stderrW.Close() }()
 			defer func() { _ = stdoutW.Close() }()
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 		}()
 		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
 	}
@@ -188,6 +188,70 @@ func TestRealCameraStartDetectsEarlyBackendExit(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "before first JPEG frame") {
 		t.Fatalf("expected early exit reason, got %v", err)
+	}
+}
+
+
+func TestFirstFrameTimeoutRpiCamStartupMinimumIgnoresCaptureWaitTimeout(t *testing.T) {
+	rc := NewRealCamera()
+	rc.fps = 24
+	rc.captureWaitTimeout = 75 * time.Millisecond
+	rc.backendAttempted = "rpicam-vid"
+
+	if got, want := rc.firstFrameTimeout(), 4*time.Second; got != want {
+		t.Fatalf("firstFrameTimeout() = %v, want %v", got, want)
+	}
+}
+
+func TestFirstFrameTimeoutFFmpegStillUsesGenericBounds(t *testing.T) {
+	rc := NewRealCamera()
+	rc.captureWaitTimeout = 50 * time.Millisecond
+	rc.backendAttempted = "ffmpeg"
+
+	rc.fps = 120
+	if got, want := rc.firstFrameTimeout(), 500*time.Millisecond; got != want {
+		t.Fatalf("high-fps timeout = %v, want %v", got, want)
+	}
+
+	rc.fps = 1
+	if got, want := rc.firstFrameTimeout(), 3*time.Second; got != want {
+		t.Fatalf("low-fps timeout = %v, want %v", got, want)
+	}
+}
+
+func TestRealCameraStartTimeoutMessageUsesStartupTimeout(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 50 * time.Millisecond
+	rc.fps = 120
+	rc.backendAttempted = "ffmpeg"
+
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		go func() {
+			defer func() { _ = stderrW.Close() }()
+			defer func() { _ = stdoutW.Close() }()
+			time.Sleep(2 * time.Second)
+		}()
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	}
+
+	start := time.Now()
+	err := rc.Start(640, 480, 120, 80)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected Start() timeout error")
+	}
+	if !strings.Contains(err.Error(), "waiting 500ms") {
+		t.Fatalf("expected timeout message to include 500ms startup timeout, got %v", err)
+	}
+	if elapsed < 450*time.Millisecond {
+		t.Fatalf("startup wait elapsed too quickly (%v), captureWaitTimeout likely capped startup timeout", elapsed)
 	}
 }
 
