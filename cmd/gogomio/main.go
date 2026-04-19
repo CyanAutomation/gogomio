@@ -146,8 +146,9 @@ func initializeCamera(
 		log.Println("   - Check: docker exec gogomio which libcamera-vid")
 		log.Println("   - If not found, libcamera-apps package may need to be installed from Raspberry Pi repos")
 		log.Println("")
-		log.Println("   Falling back to FFmpeg V4L2 mode (may have lower performance)...")
-		log.Println("🎬 Initializing camera backend: mock fallback (development mode)")
+		log.Println("   Note: RealCamera may internally try FFmpeg/V4L2 as an alternative backend.")
+		log.Println("   Switching runtime camera backend to mock-fallback mode.")
+		log.Println("🎬 Initializing camera backend: mock-fallback (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 			return nil, "", err
