@@ -104,7 +104,7 @@ var snapshotCaptureCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		os.Stdout.Write(frame)
+		_, _ = os.Stdout.Write(frame)
 		return nil
 	},
 }
