@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"log"
+	"strings"
 	"testing"
 
 	"github.com/CyanAutomation/gogomio/internal/camera"
@@ -109,5 +112,39 @@ func TestInitializeCamera_MockModeStartsMockOnce(t *testing.T) {
 	}
 	if mockCam.startCalls != 1 {
 		t.Fatalf("expected mock camera Start() once, got %d", mockCam.startCalls)
+	}
+}
+
+func TestInitializeCamera_RealFailureLogsMockFallbackRuntimeSwitch(t *testing.T) {
+	cfg := testConfig()
+	realCam := &fakeCamera{startErr: errors.New("device missing")}
+	mockCam := &fakeCamera{}
+
+	var logBuffer bytes.Buffer
+	originalWriter := log.Writer()
+	log.SetOutput(&logBuffer)
+	defer log.SetOutput(originalWriter)
+
+	_, backend, err := initializeCamera(
+		cfg,
+		func() camera.Camera { return realCam },
+		func() camera.Camera { return mockCam },
+	)
+	if err != nil {
+		t.Fatalf("initializeCamera failed: %v", err)
+	}
+	if backend != "mock-fallback" {
+		t.Fatalf("expected backend mock-fallback, got %q", backend)
+	}
+
+	logs := logBuffer.String()
+	if !strings.Contains(logs, "RealCamera may internally try FFmpeg/V4L2 as an alternative backend") {
+		t.Fatalf("expected logs to mention FFmpeg as an alternative backend, got logs: %s", logs)
+	}
+	if !strings.Contains(logs, "Switching runtime camera backend to mock-fallback mode") {
+		t.Fatalf("expected logs to mention runtime switch to mock-fallback, got logs: %s", logs)
+	}
+	if strings.Contains(logs, "Falling back to FFmpeg V4L2 mode") {
+		t.Fatalf("did not expect logs to claim runtime fallback to FFmpeg, got logs: %s", logs)
 	}
 }
