@@ -198,6 +198,41 @@ func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 	}
 }
 
+// TestFrameBufferWriteWithNilStats ensures NewFrameBuffer initializes stats
+// when nil is provided and writes behave normally.
+func TestFrameBufferWriteWithNilStats(t *testing.T) {
+	targetFPS := 0
+	fb := NewFrameBuffer(nil, targetFPS)
+
+	if fb.stats == nil {
+		t.Fatal("stats is nil, want initialized StreamStats")
+	}
+
+	frame1 := []byte{0xAA}
+	frame2 := []byte{0xBB}
+
+	if _, err := fb.Write(frame1); err != nil {
+		t.Fatalf("first Write returned error: %v", err)
+	}
+	if _, err := fb.Write(frame2); err != nil {
+		t.Fatalf("second Write returned error: %v", err)
+	}
+
+	if gotSeq := fb.CurrentSequence(); gotSeq != 2 {
+		t.Fatalf("sequence is %d, want 2", gotSeq)
+	}
+
+	gotFrame := fb.GetFrame()
+	if !bytes.Equal(gotFrame, frame2) {
+		t.Fatalf("latest frame is %v, want %v", gotFrame, frame2)
+	}
+
+	count, _, _ := fb.stats.Snapshot()
+	if count != 2 {
+		t.Fatalf("stats frame count is %d, want 2", count)
+	}
+}
+
 // TestFrameBufferConcurrentWrites exercises concurrent writers and validates
 // state remains consistent when Write is called from many goroutines.
 func TestFrameBufferConcurrentWrites(t *testing.T) {
