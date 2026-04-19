@@ -63,6 +63,7 @@ docker-compose ps
 | `/api/config` | GET | Configuration & stats |
 | `/api/status` | GET | Server status |
 | `/api/settings` | GET/POST/PUT | Manage settings |
+| `/docs/index.html` | GET | **Swagger API documentation** |
 
 ## Example API Calls
 
