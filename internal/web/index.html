@@ -1079,9 +1079,39 @@
 
         // Diagnostics functions
         let diagnosticsRefreshInterval = null;
+
+        function getStreamController() {
+            return window.streamController || null;
+        }
+
+        function setCompanionPoseFromDiagnostics(data) {
+            const controller = getStreamController();
+            if (!controller || controller.isStreaming) return;
+
+            if (!data.camera_ready || (data.error_rate_percent || 0) > 20 || (data.capture_failures_consecutive || 0) > 0) {
+                controller.setIdlePose("warning");
+                return;
+            }
+
+            if ((data.stream_connections || 0) > 0) {
+                controller.setIdlePose("running");
+                return;
+            }
+
+            if ((data.error_rate_percent || 0) > 5) {
+                controller.setIdlePose("warning");
+                return;
+            }
+
+            controller.setIdlePose("success");
+        }
         
         function openDiagnosticsModal() {
             document.getElementById('diagnostics-modal').style.display = 'flex';
+            const controller = getStreamController();
+            if (controller && !controller.isStreaming) {
+                controller.setLoadingPose("running");
+            }
             fetchDiagnostics();
             // Auto-refresh diagnostics every 2 seconds
             if (diagnosticsRefreshInterval) clearInterval(diagnosticsRefreshInterval);
@@ -1094,12 +1124,17 @@
                 clearInterval(diagnosticsRefreshInterval);
                 diagnosticsRefreshInterval = null;
             }
+            const controller = getStreamController();
+            if (controller && !controller.isStreaming) {
+                controller.setIdlePose("idle");
+            }
         }
 
         function fetchDiagnostics() {
             fetch('/api/diagnostics')
                 .then(res => res.json())
                 .then(data => {
+                    setCompanionPoseFromDiagnostics(data);
                     const content = document.getElementById('diagnostics-content');
                     const cameraStatusBg = data.camera_ready ? 'var(--color-success-light)' : 'var(--color-error-light)';
                     const cameraStatusColor = data.camera_ready ? 'var(--color-success-dark)' : 'var(--color-error-dark)';
@@ -1221,6 +1256,10 @@
                     `;
                 })
                 .catch(err => {
+                    const controller = getStreamController();
+                    if (controller && !controller.isStreaming) {
+                        controller.setIdlePose("warning");
+                    }
                     const content = document.getElementById('diagnostics-content');
                     content.innerHTML = '<div style="color: var(--color-error-dark); background: var(--color-error-light); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--color-error); text-align: center;">⚠️ Failed to fetch diagnostics<br/><small style="color: inherit; opacity: 0.8;">' + err + '</small></div>';
                 });
@@ -1245,7 +1284,7 @@
 
         // Initialize when DOM is ready
         document.addEventListener("DOMContentLoaded", () => {
-            new StreamController();
+            window.streamController = new StreamController();
         });
     </script>
 </body>
