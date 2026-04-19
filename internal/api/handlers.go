@@ -35,8 +35,10 @@ type FrameManager struct {
 	stopChancel chan struct{} // Channel to cancel pending stop
 
 	// Cleanup infrastructure for idle timeout
-	cleanupCh   chan cleanupRequest
-	cleanupDone chan struct{}
+	cleanupCh       chan cleanupRequest
+	cleanupStop     chan struct{}
+	cleanupDone     chan struct{}
+	cleanupStopOnce sync.Once
 
 	idleStopDelay time.Duration
 	captureStarts int64
@@ -91,6 +93,7 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		doneChan:      make(chan struct{}),
 		stopChancel:   make(chan struct{}),
 		cleanupCh:     make(chan cleanupRequest, 8),
+		cleanupStop:   make(chan struct{}),
 		cleanupDone:   make(chan struct{}),
 		clientCount:   0,
 		idleStopDelay: idleStopDelay,
@@ -201,14 +204,18 @@ func (fm *FrameManager) cleanupLoop() {
 
 	for { //nolint:staticcheck // for-select is idiomatic for multi-channel listening goroutine
 		select {
+		case <-fm.cleanupStop:
+			return
+
 		case req, ok := <-fm.cleanupCh:
 			if !ok {
 				// Channel closed, exit
 				return
 			}
 
+			timer := time.NewTimer(req.delay)
 			select {
-			case <-time.After(req.delay):
+			case <-timer.C:
 				// Delay expired, proceed with stopping if conditions still met
 				fm.captureMu.Lock()
 				if !fm.captureStarted || atomic.LoadInt64(&fm.clientCount) > 0 || fm.doneChan != req.done {
@@ -223,8 +230,17 @@ func (fm *FrameManager) cleanupLoop() {
 				close(req.done)
 
 			case <-req.stopCh:
+				if !timer.Stop() {
+					<-timer.C
+				}
 				// Stop was cancelled (new client connected)
 				log.Printf("📊 Stop cancelled: new client connected")
+
+			case <-fm.cleanupStop:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
 			}
 		}
 	}
@@ -322,15 +338,17 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 // Stop stops the frame capture loop and cleanup infrastructure.
 func (fm *FrameManager) Stop() {
 	fm.stopCapture()
+
+	fm.cleanupStopOnce.Do(func() {
+		close(fm.cleanupStop)
+	})
+
 	// Close cleanup channel to signal cleanup loop to exit
 	close(fm.cleanupCh)
-	// Wait for cleanup loop to exit with timeout
-	select {
-	case <-fm.cleanupDone:
-		log.Printf("✓ Cleanup loop exited cleanly")
-	case <-time.After(2 * time.Second):
-		log.Printf("⚠️  Timeout waiting for cleanup loop to exit")
-	}
+
+	// Wait for cleanup loop to exit
+	<-fm.cleanupDone
+	log.Printf("✓ Cleanup loop exited cleanly")
 }
 
 // GetFrame returns a copy of the current frame for snapshot endpoints.
