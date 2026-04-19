@@ -203,6 +203,12 @@ For complete CLI documentation, see [CLI Guide](docs/CLI_GUIDE.md).
 - **GET `/health`** - Liveness probe (always 200 OK if running)
 - **GET `/ready`** - Readiness probe (200 if camera ready, 503 if initializing)
 
+### API Documentation
+
+- **GET `/docs/index.html`** - Interactive Swagger UI with all API endpoints, request/response schemas, and try-it-out functionality
+- **GET `/swagger.json`** - Raw OpenAPI 2.0 specification (JSON)
+- **GET `/swagger.yaml`** - Raw OpenAPI 2.0 specification (YAML)
+
 ## Architecture
 
 ```
@@ -465,10 +471,6 @@ Please ensure code includes:
 - Descriptive commit messages
 
 For larger changes, open an issue first to discuss your approach.
-
-## Security
-
-If you discover a security vulnerability, please email [security@cyanautomation.com](mailto:security@cyanautomation.com) instead of using the public issue tracker. We take security seriously and will respond promptly.
 
 ## Community
 
