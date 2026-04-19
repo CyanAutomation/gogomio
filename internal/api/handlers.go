@@ -39,7 +39,9 @@ type FrameManager struct {
 	cleanupStop     chan struct{}
 	cleanupDone     chan struct{}
 	cleanupStopOnce sync.Once
+	cleanupChOnce   sync.Once // Protects cleanupCh close from double-close panic
 	fallbackWG      sync.WaitGroup
+	stopChancelMu   sync.Mutex // Protects stopChancel access
 
 	idleStopDelay time.Duration
 	captureStarts int64
@@ -151,6 +153,8 @@ func (fm *FrameManager) startCapture() {
 	done := make(chan struct{})
 	fm.captureStarted = true
 	fm.doneChan = done
+	// Create a new stopChancel for the new capture cycle
+	fm.stopChancel = make(chan struct{})
 	atomic.AddInt64(&fm.captureStarts, 1)
 	fm.captureMu.Unlock()
 	go fm.captureLoop(done)
@@ -190,7 +194,7 @@ func (fm *FrameManager) scheduleStopCapture() {
 	case fm.cleanupCh <- req:
 		// Request queued successfully
 	case <-timer.C:
-		// Cleanup queue saturated: fallback to a direct delayed stop check
+		// Cleanup queue saturated or cleanupCh closed: fallback to a direct delayed stop check
 		// so that stop intent is never dropped.
 		log.Printf("⚠️  Cleanup channel enqueue timed out; using fallback stop path")
 		fm.fallbackWG.Add(1)
@@ -377,8 +381,10 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 func (fm *FrameManager) Stop() {
 	fm.stopCapture()
 
-	// Close cleanup channel to signal cleanup loop to exit
-	close(fm.cleanupCh)
+	// Close cleanup channel to signal cleanup loop to exit (protect against double-close)
+	fm.cleanupChOnce.Do(func() {
+		close(fm.cleanupCh)
+	})
 
 	fm.cleanupStopOnce.Do(func() {
 		close(fm.cleanupStop)
@@ -442,9 +448,6 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 	frameTimeout := fm.cfg.FrameTimeout()
 	lastSeenSeq := fm.frameBuffer.CurrentSequence()
-	fm.captureMu.Lock()
-	streamDone := fm.doneChan
-	fm.captureMu.Unlock()
 	ctx := r.Context()
 	contentLengthScratch := make([]byte, 0, 20)
 
@@ -453,6 +456,12 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	startTime := time.Now()
 
 	for {
+		// Re-check streamDone on each iteration to detect capture restarts
+		// This prevents stale channel reference when capture cycles
+		fm.captureMu.Lock()
+		streamDone := fm.doneChan
+		fm.captureMu.Unlock()
+
 		select {
 		case <-ctx.Done():
 			duration := time.Since(startTime)
