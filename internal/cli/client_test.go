@@ -20,7 +20,7 @@ func TestGetStatus(t *testing.T) {
 			t.Errorf("expected path /api/status, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"status": "ok",
 			"streaming": "2/2",
 			"fps": 24.5,
@@ -52,7 +52,7 @@ func TestGetConfig(t *testing.T) {
 			t.Errorf("expected path /api/config, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"resolution": [640, 480],
 			"fps": 24,
 			"jpeg_quality": 90,
@@ -78,7 +78,7 @@ func TestGetHealth(t *testing.T) {
 			t.Errorf("expected path /health, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"status": "ok",
 			"timestamp": "2026-04-19T16:00:00Z"
 		}`)
@@ -102,7 +102,7 @@ func TestGetSnapshot(t *testing.T) {
 			t.Errorf("expected path /snapshot.jpg, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0}) // JPEG magic bytes
+		_, _ = w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0}) // JPEG magic bytes
 	}))
 	defer server.Close()
 
@@ -131,7 +131,7 @@ func TestServerUnavailable(t *testing.T) {
 func TestServerError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Internal Server Error")
+		_, _ = fmt.Fprintf(w, "Internal Server Error")
 	}))
 	defer server.Close()
 
@@ -148,7 +148,7 @@ func TestGetDiagnostics(t *testing.T) {
 			t.Errorf("expected path /api/diagnostics, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"version": "0.1.0",
 			"build_time": "2026-04-19T12:00:00Z",
 			"camera": "mock",
@@ -180,7 +180,7 @@ func TestGetMetrics(t *testing.T) {
 			t.Errorf("expected path /metrics/live, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{
+		_, _ = fmt.Fprintf(w, `{
 			"fps": 23.8,
 			"frame_count": 5712,
 			"active_connections": 1,
@@ -215,7 +215,7 @@ func TestSetSetting(t *testing.T) {
 			t.Errorf("expected POST method, got %s", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"success": true}`)
+		_, _ = fmt.Fprintf(w, `{"success": true}`)
 	}))
 	defer server.Close()
 

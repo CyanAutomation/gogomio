@@ -47,7 +47,9 @@ func (c *Client) getJSON(path string, v interface{}) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to server at %s: %w", c.baseURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -68,7 +70,9 @@ func (c *Client) getRaw(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server at %s: %w", c.baseURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -90,7 +94,9 @@ func (c *Client) postJSON(path string, body interface{}, result interface{}) err
 	if err != nil {
 		return fmt.Errorf("failed to connect to server at %s: %w", c.baseURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)

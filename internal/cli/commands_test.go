@@ -1,75 +1,9 @@
 package cli
 
 import (
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
-
-func setupTestServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-
-		switch r.URL.Path {
-		case "/api/status":
-			fmt.Fprintf(w, `{
-				"status": "ok",
-				"streaming": "1/2",
-				"fps": 24.0,
-				"target_fps": 24,
-				"uptime": "30m",
-				"resolution": "640x480",
-				"jpeg_quality": 90
-			}`)
-		case "/api/config":
-			fmt.Fprintf(w, `{
-				"resolution": [640, 480],
-				"fps": 24,
-				"target_fps": 24,
-				"jpeg_quality": 90,
-				"max_stream_connections": 2,
-				"current_stream_connections": 1,
-				"frames_captured": 43200,
-				"current_fps": 24.0,
-				"last_frame_age_seconds": 0.041,
-				"timestamp_iso8601": "2026-04-19T16:00:00Z",
-				"api_version": "1"
-			}`)
-		case "/health":
-			fmt.Fprintf(w, `{
-				"status": "ok",
-				"timestamp": "2026-04-19T16:00:00Z"
-			}`)
-		case "/snapshot.jpg":
-			w.Header().Set("Content-Type", "image/jpeg")
-			w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
-		case "/api/diagnostics":
-			fmt.Fprintf(w, `{
-				"version": "0.1.0",
-				"build_time": "2026-04-19T12:00:00Z",
-				"camera": "mock",
-				"backend": "mock",
-				"uptime": "30m",
-				"goroutines": 15,
-				"memory_mb": 48.5
-			}`)
-		case "/metrics/live":
-			fmt.Fprintf(w, `{
-				"fps": 24.0,
-				"frame_count": 43200,
-				"active_connections": 1,
-				"max_connections": 2,
-				"average_frame_time": "41.7ms",
-				"last_frame_time": "41.8ms",
-				"timestamp": "2026-04-19T16:00:00Z"
-			}`)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-}
 
 func TestFormatStatus(t *testing.T) {
 	status := &StatusResponse{
