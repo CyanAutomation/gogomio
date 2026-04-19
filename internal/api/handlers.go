@@ -339,12 +339,12 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 func (fm *FrameManager) Stop() {
 	fm.stopCapture()
 
+	// Close cleanup channel to signal cleanup loop to exit
+	close(fm.cleanupCh)
+
 	fm.cleanupStopOnce.Do(func() {
 		close(fm.cleanupStop)
 	})
-
-	// Close cleanup channel to signal cleanup loop to exit
-	close(fm.cleanupCh)
 
 	// Wait for cleanup loop to exit
 	<-fm.cleanupDone
