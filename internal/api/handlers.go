@@ -673,24 +673,24 @@ type DetailedHealthResponse struct {
 
 // RateLimiter implements per-IP rate limiting for API endpoints
 type RateLimiter struct {
-	mu       sync.Mutex
-	requests map[string]*ipRequestTracker
+	mu        sync.Mutex
+	requests  map[string]*ipRequestTracker
 	maxReqSec int
-	window   time.Duration
+	window    time.Duration
 }
 
 // ipRequestTracker tracks requests for a single IP
 type ipRequestTracker struct {
-	count      int
-	lastReset  time.Time
+	count     int
+	lastReset time.Time
 }
 
 // NewRateLimiter creates a new rate limiter (maxReqSec requests per window duration)
 func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
 	return &RateLimiter{
-		requests: make(map[string]*ipRequestTracker),
+		requests:  make(map[string]*ipRequestTracker),
 		maxReqSec: maxReqSec,
-		window: window,
+		window:    window,
 	}
 }
 
@@ -1146,18 +1146,18 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 	frameCount, _, fps := fm.streamStats.Snapshot()
 
 	response := map[string]interface{}{
-		"resolution":             cfg.Resolution,
-		"fps":                    cfg.FPS,
-		"target_fps":             cfg.TargetFPS,
-		"jpeg_quality":           cfg.JPEGQuality,
-		"max_stream_connections": cfg.MaxStreamConnections,
+		"resolution":                 cfg.Resolution,
+		"fps":                        cfg.FPS,
+		"target_fps":                 cfg.TargetFPS,
+		"jpeg_quality":               cfg.JPEGQuality,
+		"max_stream_connections":     cfg.MaxStreamConnections,
 		"current_stream_connections": fm.connTracker.Count(),
-		"frames_captured":        frameCount,
-		"current_fps":            fps,
-		"last_frame_age_seconds": fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
-		"timestamp_iso8601":      time.Now().UTC().Format(time.RFC3339),
-		"api_version":            "1",
-		"_deprecated":            "use /v1/config/camera and /v1/metrics/live instead",
+		"frames_captured":            frameCount,
+		"current_fps":                fps,
+		"last_frame_age_seconds":     fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		"timestamp_iso8601":          time.Now().UTC().Format(time.RFC3339),
+		"api_version":                "1",
+		"_deprecated":                "use /v1/config/camera and /v1/metrics/live instead",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
