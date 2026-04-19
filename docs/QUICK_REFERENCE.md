@@ -180,6 +180,7 @@ docker stats
 - **Settings file**: /tmp/gogomio/settings.json (in container)
 - **Logs**: Check `docker-compose logs`
 - **Docker compose**: docker-compose.yml, docker-compose.mock.yml
+- **MIO sprite migration reference**: docs/MIO_SPRITE_MIGRATION.md
 
 ## Repository Information
 

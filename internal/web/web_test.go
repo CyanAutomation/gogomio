@@ -248,3 +248,25 @@ func TestMioStaticAssetsAreServed(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyMioStaticAssetsAreNotServed(t *testing.T) {
+	router := chi.NewRouter()
+	RegisterStaticFiles(router)
+
+	legacyAssets := []string{
+		"mio_avatar.png",
+		"mio_curious.png",
+		"mio_sleeping.png",
+		"mio_happy.png",
+	}
+
+	for _, asset := range legacyAssets {
+		req, _ := http.NewRequest("GET", "/static/mio/"+asset, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Errorf("legacy asset %q status code: got %d, want 404", asset, w.Code)
+		}
+	}
+}
