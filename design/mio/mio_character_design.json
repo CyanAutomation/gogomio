@@ -1,0 +1,77 @@
+{
+  "name": "MIO",
+  "species": "Mola mola (Ocean Sunfish) - stylised mascot",
+  "type": "Mascot Character",
+  "design_style": {
+    "overall": "cute, chibi-inspired, cartoon-realistic",
+    "shape_language": "rounded, soft, friendly",
+    "line_style": "clean, bold outlines with smooth curves",
+    "rendering": "digital illustration with soft gradients and subtle highlights"
+  },
+  "personality": {
+    "core_traits": ["friendly", "curious", "calm", "playful"],
+    "emotional_range": [
+      "happy and energetic",
+      "sleepy and peaceful",
+      "curious and attentive"
+    ],
+    "vibe": "approachable, gentle, slightly whimsical"
+  },
+  "appearance": {
+    "body_shape": "rounded, slightly oval body with small fins and a compact tail",
+    "head": "large relative to body, contributing to a cute, chibi proportion",
+    "eyes": {
+      "style": "large, glossy, expressive",
+      "details": "bright highlights and gradient iris, often blue-toned",
+      "expressiveness": "primary driver of emotion"
+    },
+    "mouth": {
+      "style": "small, simple, curved line",
+      "expressions": ["smile", "neutral", "sleepy"]
+    },
+    "fins": {
+      "top_fin": "short, rounded triangular dorsal fin",
+      "side_fins": "small, paddle-like",
+      "tail": "stylised, simplified sunfish tail"
+    }
+  },
+  "colour_palette": {
+    "primary_blue": "#5FA8D3",
+    "secondary_blue": "#3C7DC4",
+    "dark_blue": "#2A5F8A",
+    "light_blue_highlight": "#A7D3E8",
+    "belly_white": "#F2F4F7",
+    "outline": "#0F1A2B"
+  },
+  "texture_and_lighting": {
+    "finish": "smooth, glossy",
+    "lighting": "soft top-left highlights with gentle shading",
+    "surface": "clean, plastic-like mascot finish"
+  },
+  "poses_and_states": {
+    "default": "facing slightly right with open, curious eyes",
+    "sleeping": "eyes closed with relaxed expression",
+    "happy": "wide open eyes with open smiling mouth",
+    "avatar": "simplified face-forward or side profile"
+  },
+  "branding_use": {
+    "roles": [
+      "app mascot",
+      "UI companion",
+      "loading/empty state character",
+      "brand identity anchor"
+    ],
+    "tone_conveyed": [
+      "friendly technology",
+      "approachable AI",
+      "calm and reliable system"
+    ]
+  },
+  "design_principles": [
+    "keep shapes simple and readable at small sizes",
+    "prioritise eye expressiveness",
+    "maintain soft, rounded geometry",
+    "use consistent blue palette",
+    "avoid harsh shadows or realism"
+  ]
+}
