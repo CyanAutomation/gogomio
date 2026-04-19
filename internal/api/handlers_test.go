@@ -793,6 +793,37 @@ func TestFrameManagerGetFrameBurstyAccessKeepsCaptureWarm(t *testing.T) {
 	waitForCaptureState(t, fm, false)
 }
 
+func TestScheduleStopCaptureFallbackWhenCleanupQueueSaturated(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 20*time.Millisecond)
+	t.Cleanup(fm.Stop)
+
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Keep cleanup loop occupied with one long request, then saturate queue buffer.
+	busyReq := cleanupRequest{
+		delay:  5 * time.Second,
+		stopCh: make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+	fm.cleanupCh <- busyReq
+	time.Sleep(10 * time.Millisecond)
+	for len(fm.cleanupCh) < cap(fm.cleanupCh) {
+		fm.cleanupCh <- cleanupRequest{
+			delay:  5 * time.Second,
+			stopCh: make(chan struct{}),
+			done:   make(chan struct{}),
+		}
+	}
+
+	atomic.StoreInt64(&fm.clientCount, 0)
+	fm.scheduleStopCapture()
+
+	waitForCaptureState(t, fm, false)
+}
+
 func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
 	cam := &captureLoopCountingCamera{}
