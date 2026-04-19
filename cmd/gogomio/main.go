@@ -1,11 +1,29 @@
 // GoGoMio API
 // @title GoGoMio API
 // @version 0.1.0
-// @description IP camera streaming and management API with MJPEG and health monitoring
+// @description IP camera streaming and management API with MJPEG video streaming, real-time health monitoring, and camera configuration management. Designed for Raspberry Pi CSI cameras and compatible devices.
+// @description
+// @description ## Rate Limiting
+// @description All API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding this limit will receive HTTP 429 (Too Many Requests) responses.
+// @description
+// @description ## Authentication & Security
+// @description ⚠️ **IMPORTANT**: This API has no built-in authentication. It is designed for private/internal networks only.
+// @description - Do NOT expose this service directly to the internet
+// @description - Deploy behind a firewall, VPN, or reverse proxy with authentication
+// @description - Use HTTPS-terminating reverse proxy (nginx, Caddy, etc.) for HTTPS support
+// @description - See Security section in README.md for deployment guidelines
+// @description
+// @description ## API Versioning
+// @description - Current version: v0.1.0 (Preview/MVP)
+// @description - Endpoints follow semantic versioning at /v1/ path
+// @description - Legacy endpoints at / are maintained for backward compatibility but marked as deprecated
 // @contact.name GoGoMio Support
+// @contact.url https://github.com/CyanAutomation/gogomio
 // @license.name MIT
-// @host localhost:8080
+// @license.url https://github.com/CyanAutomation/gogomio/blob/main/LICENSE
+// @host localhost:8000
 // @basePath /
+// @schemes http https
 package main
 
 import (
