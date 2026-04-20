@@ -132,8 +132,18 @@ func (m *Manager) Delete(key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.data, key)
-	return m.persist()
+	updated := make(map[string]interface{}, len(m.data))
+	for existingKey, value := range m.data {
+		updated[existingKey] = value
+	}
+	delete(updated, key)
+
+	if err := m.persistData(updated); err != nil {
+		return err
+	}
+
+	m.data = updated
+	return nil
 }
 
 // Clear removes all settings.
@@ -141,8 +151,13 @@ func (m *Manager) Clear() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.data = make(map[string]interface{})
-	return m.persist()
+	updated := make(map[string]interface{})
+	if err := m.persistData(updated); err != nil {
+		return err
+	}
+
+	m.data = updated
+	return nil
 }
 
 // persist writes current settings to disk atomically with backup.
