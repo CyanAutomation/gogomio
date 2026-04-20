@@ -203,3 +203,45 @@ func TestStreamStatsHighFrequency(t *testing.T) {
 		t.Errorf("FPS is %v, want ~%v (target with ±10%% tolerance)", fps, targetFPS)
 	}
 }
+
+// TestFrameCountSinceMixedTimestamps tests counting only timestamps at/after threshold.
+func TestFrameCountSinceMixedTimestamps(t *testing.T) {
+	stats := NewStreamStats()
+
+	baseTime := time.Now().UnixNano()
+	timestamps := []int64{
+		baseTime - 3_000_000,
+		baseTime - 2_000_000,
+		baseTime - 1_000_000,
+		baseTime,
+		baseTime + 1_000_000,
+	}
+	for _, ts := range timestamps {
+		stats.RecordFrame(ts)
+	}
+
+	count := stats.FrameCountSince(baseTime - 1_000_000)
+	if count != 3 {
+		t.Errorf("FrameCountSince returned %d, want 3", count)
+	}
+}
+
+// TestFrameCountSinceBoundaryEquality tests that threshold equality is included.
+func TestFrameCountSinceBoundaryEquality(t *testing.T) {
+	stats := NewStreamStats()
+
+	baseTime := time.Now().UnixNano()
+	timestamps := []int64{
+		baseTime - 2_000_000,
+		baseTime - 1_000_000,
+		baseTime,
+	}
+	for _, ts := range timestamps {
+		stats.RecordFrame(ts)
+	}
+
+	count := stats.FrameCountSince(baseTime - 1_000_000)
+	if count != 2 {
+		t.Errorf("FrameCountSince returned %d, want 2", count)
+	}
+}
