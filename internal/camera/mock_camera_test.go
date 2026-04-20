@@ -2,6 +2,7 @@ package camera
 
 import (
 	"fmt"
+	"hash/fnv"
 	"sync"
 	"testing"
 	"time"
@@ -199,6 +200,107 @@ func TestMockCameraMultipleCapturesConcurrent(t *testing.T) {
 			errs = append(errs, err)
 		}
 		t.Errorf("concurrent capture errors: %v", errs)
+	}
+}
+
+// TestMockCameraCaptureFrameConcurrentSequencing validates that concurrent callers
+// receive unique frame numbers and are paced by FPS timing.
+func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
+	type fakeClock struct {
+		mu    sync.Mutex
+		now   time.Time
+		slept time.Duration
+	}
+
+	clock := &fakeClock{now: time.Unix(0, 0)}
+	nowFn := func() time.Time {
+		clock.mu.Lock()
+		defer clock.mu.Unlock()
+		return clock.now
+	}
+	sleepFn := func(d time.Duration) {
+		clock.mu.Lock()
+		clock.slept += d
+		clock.now = clock.now.Add(d)
+		clock.mu.Unlock()
+	}
+
+	mc := NewMockCameraWithClock(nowFn, sleepFn)
+	const (
+		width      = 64
+		height     = 48
+		fps        = 20
+		quality    = 80
+		callers    = 8
+		perCaller  = 4
+		totalCalls = callers * perCaller
+	)
+
+	if err := mc.Start(width, height, fps, quality); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer func() { _ = mc.Stop() }()
+
+	var wg sync.WaitGroup
+	frames := make(chan []byte, totalCalls)
+	errs := make(chan error, totalCalls)
+
+	for c := 0; c < callers; c++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < perCaller; i++ {
+				frame, err := mc.CaptureFrame()
+				if err != nil {
+					errs <- err
+					continue
+				}
+				frames <- frame
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(frames)
+	close(errs)
+
+	for err := range errs {
+		t.Fatalf("CaptureFrame failed under concurrency: %v", err)
+	}
+
+	seen := make(map[uint64]struct{}, totalCalls)
+	for frame := range frames {
+		h := fnv.New64a()
+		if _, err := h.Write(frame); err != nil {
+			t.Fatalf("failed to hash frame: %v", err)
+		}
+		seen[h.Sum64()] = struct{}{}
+	}
+
+	if len(seen) != totalCalls {
+		t.Fatalf("expected %d unique frames, got %d", totalCalls, len(seen))
+	}
+
+	mc.mu.RLock()
+	finalCounter := mc.frameCounter
+	lastFrameTime := mc.lastFrameTime
+	mc.mu.RUnlock()
+
+	if finalCounter != int64(totalCalls) {
+		t.Fatalf("expected frameCounter=%d, got %d", totalCalls, finalCounter)
+	}
+
+	frameInterval := time.Second / time.Duration(fps)
+	expectedLastFrameTime := time.Unix(0, 0).Add(time.Duration(totalCalls) * frameInterval)
+	if !lastFrameTime.Equal(expectedLastFrameTime) {
+		t.Fatalf("expected lastFrameTime=%v, got %v", expectedLastFrameTime, lastFrameTime)
+	}
+
+	clock.mu.Lock()
+	totalSlept := clock.slept
+	clock.mu.Unlock()
+	if totalSlept < time.Duration(totalCalls)*frameInterval {
+		t.Fatalf("expected total sleep >= %v, got %v", time.Duration(totalCalls)*frameInterval, totalSlept)
 	}
 }
 
