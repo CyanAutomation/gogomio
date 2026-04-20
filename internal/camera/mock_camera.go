@@ -72,9 +72,9 @@ func (mc *MockCamera) Start(width, height, fps, jpegQuality int) error {
 
 // CaptureFrame captures and returns a JPEG frame.
 func (mc *MockCamera) CaptureFrame() ([]byte, error) {
-	mc.mu.RLock()
+	mc.mu.Lock()
 	if !mc.ready {
-		mc.mu.RUnlock()
+		mc.mu.Unlock()
 		return nil, fmt.Errorf("camera not ready")
 	}
 
@@ -82,24 +82,26 @@ func (mc *MockCamera) CaptureFrame() ([]byte, error) {
 	height := mc.height
 	quality := mc.jpegQuality
 	frameNum := mc.frameCounter
-
-	// Throttle to target FPS
-	lastFrameTime := mc.lastFrameTime
-	mc.mu.RUnlock()
-
-	// Rate limit to fps
-	// Rate limit to fps
 	fps := mc.fps
-	frameInterval := time.Duration(float64(time.Second) / float64(fps))
-	if elapsed := mc.now().Sub(lastFrameTime); elapsed < frameInterval {
-		mc.sleep(frameInterval - elapsed)
-	}
+	lastFrameTime := mc.lastFrameTime
 
-	// Update frame counter and time
-	mc.mu.Lock()
+	// Reserve frame number and update timing under one critical section.
 	mc.frameCounter++
-	mc.lastFrameTime = mc.now()
+	frameInterval := time.Duration(float64(time.Second) / float64(fps))
+	now := mc.now()
+	sleepDuration := time.Duration(0)
+	nextFrameTime := now
+	if elapsed := now.Sub(lastFrameTime); elapsed < frameInterval {
+		sleepDuration = frameInterval - elapsed
+		nextFrameTime = lastFrameTime.Add(frameInterval)
+	}
+	mc.lastFrameTime = nextFrameTime
 	mc.mu.Unlock()
+
+	// Sleep and JPEG generation happen outside the lock.
+	if sleepDuration > 0 {
+		mc.sleep(sleepDuration)
+	}
 
 	// Generate a synthetic frame
 	frame := mc.generateTestFrame(width, height, quality, frameNum)
