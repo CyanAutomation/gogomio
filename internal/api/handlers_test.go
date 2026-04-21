@@ -580,6 +580,56 @@ func TestStreamingConnectionLimit(t *testing.T) {
 	}
 }
 
+func TestRateLimitMiddlewareTreatsDifferentPortsAsSameClient(t *testing.T) {
+	limiter := NewRateLimiter(1, 10*time.Second)
+	middleware := rateLimitMiddleware(limiter)
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req1 := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+	req1.RemoteAddr = "198.51.100.10:1234"
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request status: got %d, want %d", w1.Code, http.StatusOK)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+	req2.RemoteAddr = "198.51.100.10:5678"
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusTooManyRequests {
+		t.Fatalf("second request status: got %d, want %d", w2.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestRateLimitMiddlewareUsesFirstForwardedIPInChain(t *testing.T) {
+	limiter := NewRateLimiter(1, 10*time.Second)
+	middleware := rateLimitMiddleware(limiter)
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req1 := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+	req1.RemoteAddr = "10.10.0.1:1111"
+	req1.Header.Set("X-Forwarded-For", " 203.0.113.42 , 172.16.0.10, 172.16.0.11 ")
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request status: got %d, want %d", w1.Code, http.StatusOK)
+	}
+
+	req2 := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+	req2.RemoteAddr = "10.10.0.2:2222"
+	req2.Header.Set("X-Forwarded-For", "203.0.113.42, 172.16.0.20, 172.16.0.30")
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusTooManyRequests {
+		t.Fatalf("second request status: got %d, want %d", w2.Code, http.StatusTooManyRequests)
+	}
+}
+
 func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}

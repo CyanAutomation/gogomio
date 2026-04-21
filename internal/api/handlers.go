@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -723,10 +725,24 @@ func (rl *RateLimiter) Allow(ip string) bool {
 func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Get client IP
-			ip := r.RemoteAddr
+			// Get normalized client IP key
+			ip := ""
 			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-				ip = forwarded
+				for _, token := range strings.Split(forwarded, ",") {
+					candidate := strings.TrimSpace(token)
+					if candidate != "" {
+						ip = candidate
+						break
+					}
+				}
+			}
+			if ip == "" {
+				host, _, err := net.SplitHostPort(r.RemoteAddr)
+				if err == nil && host != "" {
+					ip = host
+				} else {
+					ip = r.RemoteAddr
+				}
 			}
 
 			// Check rate limit
