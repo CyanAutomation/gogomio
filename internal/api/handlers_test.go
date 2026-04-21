@@ -843,6 +843,9 @@ func TestScheduleStopCaptureFallbackWhenCleanupQueueSaturated(t *testing.T) {
 
 	fm.startCapture()
 	waitForCaptureState(t, fm, true)
+	fm.captureMu.Lock()
+	expectedDone := fm.doneChan
+	fm.captureMu.Unlock()
 
 	// Keep cleanup loop occupied with one long request, then saturate queue buffer.
 	busyReq := cleanupRequest{
@@ -866,6 +869,24 @@ func TestScheduleStopCaptureFallbackWhenCleanupQueueSaturated(t *testing.T) {
 	fm.scheduleStopCapture()
 
 	waitForCaptureState(t, fm, false)
+
+	// Re-running the fallback path against the already-stopped capture should not panic.
+	done := make(chan struct{})
+	fm.fallbackWG.Add(1)
+	go func() {
+		defer close(done)
+		fm.delayedStopFallback(cleanupRequest{
+			delay:  0,
+			stopCh: make(chan struct{}),
+			done:   expectedDone,
+		})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("fallback idle stop did not return promptly")
+	}
 }
 
 func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testing.T) {
