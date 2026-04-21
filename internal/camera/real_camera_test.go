@@ -380,6 +380,9 @@ func TestRealCameraBuildFFmpegCommandMapsJPEGQualityToQuantizer(t *testing.T) {
 			if got := findCommandArgValue(cmd.Args, "-q:v"); got != tc.wantQuantizerQV {
 				t.Fatalf("jpegQuality=%d => -q:v %q, want %q (args=%v)", tc.jpegQuality, got, tc.wantQuantizerQV, cmd.Args)
 			}
+			if got := countCommandArgOccurrences(cmd.Args, "-q:v"); got != 1 {
+				t.Fatalf("expected exactly one -q:v argument, got %d (args=%v)", got, cmd.Args)
+			}
 		})
 	}
 }
@@ -490,6 +493,16 @@ func findCommandArgValue(args []string, key string) string {
 		}
 	}
 	return ""
+}
+
+func countCommandArgOccurrences(args []string, key string) int {
+	count := 0
+	for _, arg := range args {
+		if arg == key {
+			count++
+		}
+	}
+	return count
 }
 
 func TestMapFFmpegInputError(t *testing.T) {
