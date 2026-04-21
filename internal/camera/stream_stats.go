@@ -121,7 +121,23 @@ func (s *StreamStats) FrameCountSince(sinceNS int64) int64 {
 		return 0
 	}
 
-	return s.frameCount
+	var count int64
+	s.frameTimestamps.Do(func(v interface{}) {
+		if v == nil {
+			return
+		}
+		ts, ok := v.(int64)
+		if !ok {
+			return
+		}
+		if ts >= sinceNS {
+			count++
+		}
+			count++
+		}
+	})
+
+	return count
 }
 
 // LastFrameAgeSeconds returns the age of the last frame in seconds.
