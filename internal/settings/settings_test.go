@@ -410,3 +410,67 @@ func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 		t.Fatalf("settings file changed unexpectedly after failed SetMany")
 	}
 }
+
+// TestSettingsDeleteRollbackOnPersistFailure ensures delete keeps in-memory state on persist failure.
+func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "delete_settings.json")
+
+	m := NewManager(settingsPath)
+	if err := m.SetMany(map[string]interface{}{
+		"stable": "value",
+		"drop":   "me",
+	}); err != nil {
+		t.Fatalf("failed to seed initial state: %v", err)
+	}
+
+	beforeState := m.GetAll()
+
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatalf("failed to remove settings file for failure setup: %v", err)
+	}
+	if err := os.Mkdir(settingsPath, 0755); err != nil {
+		t.Fatalf("failed to create directory at settings path for failure setup: %v", err)
+	}
+
+	err := m.Delete("drop")
+	if err == nil {
+		t.Fatal("expected Delete to fail when rename destination is a directory")
+	}
+
+	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
+		t.Fatalf("in-memory settings changed after failed Delete, got=%v want=%v", gotState, beforeState)
+	}
+}
+
+// TestSettingsClearRollbackOnPersistFailure ensures clear keeps in-memory state on persist failure.
+func TestSettingsClearRollbackOnPersistFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "clear_settings.json")
+
+	m := NewManager(settingsPath)
+	if err := m.SetMany(map[string]interface{}{
+		"stable": "value",
+		"keep":   "this",
+	}); err != nil {
+		t.Fatalf("failed to seed initial state: %v", err)
+	}
+
+	beforeState := m.GetAll()
+
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatalf("failed to remove settings file for failure setup: %v", err)
+	}
+	if err := os.Mkdir(settingsPath, 0755); err != nil {
+		t.Fatalf("failed to create directory at settings path for failure setup: %v", err)
+	}
+
+	err := m.Clear()
+	if err == nil {
+		t.Fatal("expected Clear to fail when rename destination is a directory")
+	}
+
+	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
+		t.Fatalf("in-memory settings changed after failed Clear, got=%v want=%v", gotState, beforeState)
+	}
+}
