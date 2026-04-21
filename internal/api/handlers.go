@@ -235,18 +235,18 @@ func (fm *FrameManager) stopCaptureIfIdle(expectedDone chan struct{}) bool {
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
+	fm.doneChan = nil
 	fm.captureMu.Unlock()
 
-	close(done)
+	if done != nil {
+		close(done)
+	}
 	return true
 }
 
 // cleanupLoop runs in a background goroutine and handles deferred capture stops
 func (fm *FrameManager) cleanupLoop() {
 	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("❌ PANIC in cleanupLoop: %v", r)
-		}
 		log.Printf("📊 Cleanup loop EXIT")
 		close(fm.cleanupDone)
 	}()
@@ -273,6 +273,7 @@ func (fm *FrameManager) cleanupLoop() {
 					continue
 				}
 				log.Printf("🛑 Stopping capture (idle timeout expired)")
+				continue
 
 			case <-req.stopCh:
 				if !timer.Stop() {
@@ -301,9 +302,12 @@ func (fm *FrameManager) stopCapture() {
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
+	fm.doneChan = nil
 	fm.captureMu.Unlock()
 	log.Printf("📊 stopCapture: closing done channel to signal captureLoop to exit")
-	close(done)
+	if done != nil {
+		close(done)
+	}
 	time.Sleep(50 * time.Millisecond) // Allow goroutine to exit cleanly
 	log.Printf("✓ stopCapture: done channel closed")
 }
