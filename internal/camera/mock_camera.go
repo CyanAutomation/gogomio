@@ -90,10 +90,10 @@ func (mc *MockCamera) CaptureFrame() ([]byte, error) {
 	frameInterval := time.Duration(float64(time.Second) / float64(fps))
 	now := mc.now()
 	sleepDuration := time.Duration(0)
-	nextFrameTime := now
+	sleepDuration := time.Duration(0)
+	nextFrameTime := lastFrameTime.Add(frameInterval)
 	if elapsed := now.Sub(lastFrameTime); elapsed < frameInterval {
 		sleepDuration = frameInterval - elapsed
-		nextFrameTime = lastFrameTime.Add(frameInterval)
 	}
 	mc.lastFrameTime = nextFrameTime
 	mc.mu.Unlock()
