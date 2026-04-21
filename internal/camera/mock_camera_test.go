@@ -281,10 +281,8 @@ func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
 		t.Fatalf("expected %d unique frames, got %d", totalCalls, len(seen))
 	}
 
-	mc.mu.RLock()
-	finalCounter := mc.frameCounter
-	lastFrameTime := mc.lastFrameTime
-	mc.mu.RUnlock()
+	finalCounter := mc.GetFrameCounter()
+	lastFrameTime := mc.GetLastFrameTime()
 
 	if finalCounter != int64(totalCalls) {
 		t.Fatalf("expected frameCounter=%d, got %d", totalCalls, finalCounter)
