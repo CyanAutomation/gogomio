@@ -90,7 +90,6 @@ func (mc *MockCamera) CaptureFrame() ([]byte, error) {
 	frameInterval := time.Duration(float64(time.Second) / float64(fps))
 	now := mc.now()
 	sleepDuration := time.Duration(0)
-	sleepDuration := time.Duration(0)
 	nextFrameTime := lastFrameTime.Add(frameInterval)
 	if elapsed := now.Sub(lastFrameTime); elapsed < frameInterval {
 		sleepDuration = frameInterval - elapsed
@@ -125,6 +124,22 @@ func (mc *MockCamera) IsReady() bool {
 	defer mc.mu.RUnlock()
 
 	return mc.ready
+}
+
+// GetFrameCounter returns the number of frames reserved/captured so far.
+func (mc *MockCamera) GetFrameCounter() int64 {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	return mc.frameCounter
+}
+
+// GetLastFrameTime returns the most recent scheduled frame time.
+func (mc *MockCamera) GetLastFrameTime() time.Time {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	return mc.lastFrameTime
 }
 
 // generateTestFrame creates a synthetic JPEG frame with color gradient and frame counter.
