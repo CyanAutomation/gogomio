@@ -243,7 +243,8 @@ func (fm *FrameManager) enqueueFallbackStop(req cleanupRequest) (ok bool) {
 	default:
 	}
 
-	return true
+	ok = true
+	return
 }
 
 func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
