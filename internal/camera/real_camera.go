@@ -526,6 +526,7 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 		"-framerate", fmt.Sprintf("%d", rc.fps),
 		"-i", rc.devicePath,
 		"-c:v", "mjpeg",
+		// Keep exactly one -q:v pair so the mapped quantizer is unambiguous.
 		"-q:v", fmt.Sprintf("%d", ffmpegQ),
 		"-f", "mjpeg",
 		"pipe:1",
