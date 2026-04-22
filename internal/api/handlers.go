@@ -165,16 +165,16 @@ func (fm *FrameManager) startCapture() {
 }
 
 func (fm *FrameManager) scheduleStopCapture() {
-	if fm.stopped.Load() {
-		log.Printf("📊 Shutdown already started; skipping capture stop enqueue")
-		return
-	}
-
 	select {
 	case <-fm.cleanupStop:
 		log.Printf("📊 Cleanup stop signal observed; skipping capture stop enqueue")
 		return
 	default:
+	}
+
+	if fm.stopped.Load() {
+		log.Printf("📊 Shutdown already started; skipping capture stop enqueue")
+		return
 	}
 
 	fm.captureMu.Lock()
