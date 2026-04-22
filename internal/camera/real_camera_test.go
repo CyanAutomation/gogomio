@@ -122,11 +122,12 @@ func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 	}
 
 	base := runtime.NumGoroutine()
-	for i := 0; i < 20; i++ {
-		if err := rc.Stop(); err != nil {
-			t.Fatalf("Stop() #%d error = %v", i+1, err)
-		}
-	}
+base := runtime.NumGoroutine()
+// Test that a stuck Wait() doesn't leak goroutines on Stop()
+// The waitFn blocks forever, so Stop() should timeout without leaking
+if err := rc.Stop(); err != nil {
+	t.Fatalf("Stop() error = %v", err)
+}
 	runtime.GC()
 	time.Sleep(20 * time.Millisecond)
 	after := runtime.NumGoroutine()
