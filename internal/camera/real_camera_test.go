@@ -122,20 +122,17 @@ func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 	}
 
 	base := runtime.NumGoroutine()
-base := runtime.NumGoroutine()
-// Test that a stuck Wait() doesn't leak goroutines on Stop()
-// The waitFn blocks forever, so Stop() should timeout without leaking
-if err := rc.Stop(); err != nil {
-	t.Fatalf("Stop() error = %v", err)
-}
-runtime.GC()
-time.Sleep(20 * time.Millisecond)
-after := runtime.NumGoroutine()
-// The stuck waitFn goroutine should be cleaned up by the timeout in Stop()
-// Allow +1 for the stuck waiter since it only times out (doesn't exit)
-if after > base+1 {
-	t.Fatalf("unexpected goroutine growth after Stop(): base=%d after=%d", base, after)
-}
+	// Test that a stuck Wait() doesn't leak goroutines on Stop().
+	// The waitFn blocks forever, so Stop() should timeout without leaking.
+	if err := rc.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	after := runtime.NumGoroutine()
+	// Allow +1 for the stuck waiter since it only times out (doesn't exit).
+	if after > base+1 {
+		t.Fatalf("unexpected goroutine growth after Stop(): base=%d after=%d", base, after)
 	}
 }
 
@@ -404,6 +401,9 @@ func TestRealCameraBuildFFmpegCommandIncludesInputNegotiation(t *testing.T) {
 	// Should NOT have restrictive input_format that breaks libcamera devices
 	if strings.Contains(args, "-input_format mjpeg") {
 		t.Fatalf("should not use restrictive input_format for libcamera compatibility, args=%q", args)
+	}
+	if got := countCommandArgOccurrences(cmd.Args, "-q:v"); got != 1 {
+		t.Fatalf("expected exactly one -q:v argument, got %d (args=%v)", got, cmd.Args)
 	}
 }
 
