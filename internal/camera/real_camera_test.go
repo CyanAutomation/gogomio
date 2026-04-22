@@ -128,11 +128,14 @@ base := runtime.NumGoroutine()
 if err := rc.Stop(); err != nil {
 	t.Fatalf("Stop() error = %v", err)
 }
-	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
-	after := runtime.NumGoroutine()
-	if after > base+2 {
-		t.Fatalf("unexpected goroutine growth after repeated Stop(): base=%d after=%d", base, after)
+runtime.GC()
+time.Sleep(20 * time.Millisecond)
+after := runtime.NumGoroutine()
+// The stuck waitFn goroutine should be cleaned up by the timeout in Stop()
+// Allow +1 for the stuck waiter since it only times out (doesn't exit)
+if after > base+1 {
+	t.Fatalf("unexpected goroutine growth after Stop(): base=%d after=%d", base, after)
+}
 	}
 }
 
