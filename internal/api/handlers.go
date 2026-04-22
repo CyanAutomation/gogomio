@@ -42,6 +42,7 @@ type FrameManager struct {
 	cleanupCh       chan cleanupRequest
 	cleanupStop     chan struct{}
 	cleanupDone     chan struct{}
+	stopped         atomic.Bool
 	cleanupStopOnce sync.Once
 	cleanupChOnce   sync.Once // Protects cleanupCh close from double-close panic
 	fallbackWG      sync.WaitGroup
@@ -164,6 +165,18 @@ func (fm *FrameManager) startCapture() {
 }
 
 func (fm *FrameManager) scheduleStopCapture() {
+	if fm.stopped.Load() {
+		log.Printf("📊 Shutdown already started; skipping capture stop enqueue")
+		return
+	}
+
+	select {
+	case <-fm.cleanupStop:
+		log.Printf("📊 Cleanup stop signal observed; skipping capture stop enqueue")
+		return
+	default:
+	}
+
 	fm.captureMu.Lock()
 	if !fm.captureStarted {
 		fm.captureMu.Unlock()
@@ -194,15 +207,44 @@ func (fm *FrameManager) scheduleStopCapture() {
 	defer timer.Stop()
 
 	select {
+	case <-fm.cleanupStop:
+		log.Printf("📊 Cleanup stop signal observed during enqueue; skipping stop request")
 	case fm.cleanupCh <- req:
 		// Request queued successfully
 	case <-timer.C:
-		// Cleanup queue saturated or cleanupCh closed: fallback to a direct delayed stop check
+		if !fm.enqueueFallbackStop(req) {
+			return
+		}
+
+		// Cleanup queue saturated: fallback to a direct delayed stop check
 		// so that stop intent is never dropped.
 		log.Printf("⚠️  Cleanup channel enqueue timed out; using fallback stop path")
 		fm.fallbackWG.Add(1)
 		go fm.delayedStopFallback(req)
 	}
+}
+
+func (fm *FrameManager) enqueueFallbackStop(req cleanupRequest) (ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			if fm.stopped.Load() {
+				log.Printf("📊 Cleanup enqueue raced with shutdown; skipping stop request")
+				ok = false
+				return
+			}
+			panic(r)
+		}
+	}()
+
+	select {
+	case <-fm.cleanupStop:
+		log.Printf("📊 Cleanup stop signal observed after enqueue timeout; skipping fallback")
+		return false
+	default:
+	}
+
+	ok = true
+	return
 }
 
 func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
@@ -386,6 +428,7 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 
 // Stop stops the frame capture loop and cleanup infrastructure.
 func (fm *FrameManager) Stop() {
+	fm.stopped.Store(true)
 	fm.stopCapture()
 
 	// Close cleanup channel to signal cleanup loop to exit (protect against double-close)
