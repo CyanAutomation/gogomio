@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"os/exec"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -86,6 +87,55 @@ func TestRealCameraProcessLifecycle(t *testing.T) {
 
 	if err := startedCmd.Process.Signal(syscall.Signal(0)); err == nil {
 		t.Fatal("expected process to be terminated after Stop")
+	}
+}
+
+func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 200 * time.Millisecond
+	rc.stopWaitTimeout = 10 * time.Millisecond
+	rc.waitFn = func(*exec.Cmd) error {
+		select {}
+	}
+
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		go func() {
+			defer func() { _ = stdoutW.Close() }()
+			jpegData, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
+			_, _ = stdoutW.Write(jpegData)
+		}()
+		go func() {
+			defer func() { _ = stderrW.Close() }()
+		}()
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	}
+
+	if err := rc.Start(640, 480, 24, 80); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	base := runtime.NumGoroutine()
+base := runtime.NumGoroutine()
+// Test that a stuck Wait() doesn't leak goroutines on Stop()
+// The waitFn blocks forever, so Stop() should timeout without leaking
+if err := rc.Stop(); err != nil {
+	t.Fatalf("Stop() error = %v", err)
+}
+runtime.GC()
+time.Sleep(20 * time.Millisecond)
+after := runtime.NumGoroutine()
+// The stuck waitFn goroutine should be cleaned up by the timeout in Stop()
+// Allow +1 for the stuck waiter since it only times out (doesn't exit)
+if after > base+1 {
+	t.Fatalf("unexpected goroutine growth after Stop(): base=%d after=%d", base, after)
+}
 	}
 }
 
@@ -190,7 +240,6 @@ func TestRealCameraStartDetectsEarlyBackendExit(t *testing.T) {
 		t.Fatalf("expected early exit reason, got %v", err)
 	}
 }
-
 
 func TestFirstFrameTimeoutRpiCamStartupMinimumIgnoresCaptureWaitTimeout(t *testing.T) {
 	rc := NewRealCamera()
