@@ -924,6 +924,50 @@ func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testin
 	}
 }
 
+func TestFrameManagerStopRaceWithDisconnectDecrementDoesNotPanic(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 10*time.Millisecond)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("unexpected panic while stopping during disconnect race: %v", r)
+		}
+	}()
+	t.Cleanup(fm.Stop)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
+	writer := httptest.NewRecorder()
+
+	streamErr := make(chan error, 1)
+	go func() {
+		streamErr <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
+	}()
+
+	time.Sleep(25 * time.Millisecond)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		fm.Stop()
+	}()
+	go func() {
+		defer wg.Done()
+		cancel()
+	}()
+	wg.Wait()
+
+	select {
+	case err := <-streamErr:
+		if err != nil && !errors.Is(err, context.Canceled) && err.Error() != "stream stopped" {
+			t.Fatalf("expected context canceled or stream stopped error, got %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("stream did not return after stop/disconnect race")
+	}
+}
+
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
 	t.Helper()
 
