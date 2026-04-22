@@ -725,29 +725,49 @@ type RateLimiter struct {
 	requests  map[string]*ipRequestTracker
 	maxReqSec int
 	window    time.Duration
+	staleTTL  time.Duration
+	lastEvict time.Time
 }
 
 // ipRequestTracker tracks requests for a single IP
 type ipRequestTracker struct {
 	count     int
 	lastReset time.Time
+	lastSeen  time.Time
 }
+
+const (
+	rateLimiterStaleWindowFactor = 3
+	rateLimiterEvictScanLimit    = 64
+)
 
 // NewRateLimiter creates a new rate limiter (maxReqSec requests per window duration)
 func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
+	now := time.Now()
+	staleTTL := time.Duration(rateLimiterStaleWindowFactor) * window
+	if staleTTL <= 0 {
+		staleTTL = window
+	}
+
 	return &RateLimiter{
 		requests:  make(map[string]*ipRequestTracker),
 		maxReqSec: maxReqSec,
 		window:    window,
+		staleTTL:  staleTTL,
+		lastEvict: now,
 	}
 }
 
 // Allow checks if an IP is within rate limit
 func (rl *RateLimiter) Allow(ip string) bool {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
 	now := time.Now()
+
+	rl.mu.Lock()
+	if now.Sub(rl.lastEvict) >= rl.window {
+		rl.evictStaleLocked(now, rateLimiterEvictScanLimit)
+		rl.lastEvict = now
+	}
+
 	tracker, exists := rl.requests[ip]
 
 	// Initialize or reset if window expired
@@ -755,17 +775,42 @@ func (rl *RateLimiter) Allow(ip string) bool {
 		rl.requests[ip] = &ipRequestTracker{
 			count:     1,
 			lastReset: now,
+			lastSeen:  now,
 		}
+		rl.mu.Unlock()
 		return true
 	}
+
+	tracker.lastSeen = now
 
 	// Check limit
 	if tracker.count < rl.maxReqSec {
 		tracker.count++
+		rl.mu.Unlock()
 		return true
 	}
 
+	rl.mu.Unlock()
+
 	return false
+}
+
+func (rl *RateLimiter) evictStaleLocked(now time.Time, scanLimit int) {
+	if scanLimit <= 0 || len(rl.requests) == 0 {
+		return
+	}
+
+	cutoff := now.Add(-rl.staleTTL)
+	scanned := 0
+	for ip, tracker := range rl.requests {
+		if scanned >= scanLimit {
+			return
+		}
+		scanned++
+		if tracker.lastSeen.Before(cutoff) {
+			delete(rl.requests, ip)
+		}
+	}
 }
 
 // rateLimitMiddleware enforces per-IP rate limiting on API endpoints

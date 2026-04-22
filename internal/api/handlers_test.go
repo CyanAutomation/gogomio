@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -627,6 +628,79 @@ func TestRateLimitMiddlewareUsesFirstForwardedIPInChain(t *testing.T) {
 	handler.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusTooManyRequests {
 		t.Fatalf("second request status: got %d, want %d", w2.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestRateLimiterEvictsStaleEntries(t *testing.T) {
+	window := 20 * time.Millisecond
+	limiter := NewRateLimiter(2, window)
+
+	const staleIP = "198.51.100.77"
+	if !limiter.Allow(staleIP) {
+		t.Fatalf("expected first request to be allowed")
+	}
+
+	time.Sleep(4 * window)
+
+	if !limiter.Allow("203.0.113.10") {
+		t.Fatalf("expected trigger request to be allowed")
+	}
+
+	for i := 0; i < 8; i++ {
+		limiter.Allow("203.0.113.11")
+	}
+
+	limiter.mu.Lock()
+	_, exists := limiter.requests[staleIP]
+	limiter.mu.Unlock()
+	if exists {
+		t.Fatalf("expected stale IP entry %q to be evicted", staleIP)
+	}
+}
+
+func TestRateLimiterManyUniqueIPsKeepsBehaviorAndCleansUp(t *testing.T) {
+	window := 25 * time.Millisecond
+	limiter := NewRateLimiter(2, window)
+
+	for i := 0; i < 500; i++ {
+		ip := "198.51.100." + strconv.Itoa(i)
+		if !limiter.Allow(ip) {
+			t.Fatalf("expected first request for %s to be allowed", ip)
+		}
+	}
+
+	if !limiter.Allow("198.51.100.1") {
+		t.Fatalf("expected second request for repeated ip to be allowed")
+	}
+	if limiter.Allow("198.51.100.1") {
+		t.Fatalf("expected third request for repeated ip to be rate limited")
+	}
+
+	limiter.mu.Lock()
+	startSize := len(limiter.requests)
+	limiter.mu.Unlock()
+	if startSize < 500 {
+		t.Fatalf("expected at least 500 entries, got %d", startSize)
+	}
+
+	time.Sleep(4 * window)
+
+	for i := 0; i < 24; i++ {
+		ip := "203.0.113." + strconv.Itoa(i)
+		if !limiter.Allow(ip) {
+			t.Fatalf("expected cleanup trigger request for %s to be allowed", ip)
+		}
+	}
+
+	limiter.mu.Lock()
+	sizeAfterCleanup := len(limiter.requests)
+	limiter.mu.Unlock()
+	if sizeAfterCleanup >= startSize {
+		t.Fatalf("expected stale entries to shrink map size, before=%d after=%d", startSize, sizeAfterCleanup)
+	}
+
+	if !limiter.Allow("198.51.100.1") {
+		t.Fatalf("expected old key to be treated as new after eviction")
 	}
 }
 
