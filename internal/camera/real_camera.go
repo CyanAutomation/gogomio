@@ -20,6 +20,7 @@ import (
 
 const (
 	defaultCaptureWaitTimeout = 2 * time.Second
+	defaultStopWaitTimeout    = 5 * time.Second
 	readChunkSize             = 32 * 1024
 	maxReadBufferSize         = 10 * 1024 * 1024
 	v4l2ProbeTimeout          = 3 * time.Second
@@ -56,9 +57,11 @@ type RealCamera struct {
 	readBuffer         []byte
 	frameUpdateCh      chan struct{}
 	captureWaitTimeout time.Duration
+	stopWaitTimeout    time.Duration
 
-	readerDone chan struct{}
-	stderrDone chan struct{}
+	readerDone   chan struct{}
+	stderrDone   chan struct{}
+	procWaitDone chan error
 
 	backendAttempted string
 
@@ -67,6 +70,7 @@ type RealCamera struct {
 	statFn   func(string) (os.FileInfo, error)
 	launchFn func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 	runCmdFn func(*exec.Cmd) ([]byte, error)
+	waitFn   func(*exec.Cmd) error
 }
 
 // InitializationError describes why real camera startup failed.
@@ -106,12 +110,16 @@ func NewRealCamera() *RealCamera {
 		jpegQuality:        80,
 		devicePath:         "/dev/video0",
 		captureWaitTimeout: defaultCaptureWaitTimeout,
+		stopWaitTimeout:    defaultStopWaitTimeout,
 	}
 	rc.lookPath = exec.LookPath
 	rc.statFn = os.Stat
 	rc.launchFn = rc.launchContinuousProducer
 	rc.runCmdFn = func(cmd *exec.Cmd) ([]byte, error) {
 		return cmd.CombinedOutput()
+	}
+	rc.waitFn = func(cmd *exec.Cmd) error {
+		return cmd.Wait()
 	}
 	return rc
 }
@@ -175,10 +183,15 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.procStderr = stderr
 	rc.readerDone = make(chan struct{})
 	rc.stderrDone = make(chan struct{})
+	rc.procWaitDone = make(chan error, 1)
 
 	rc.isStopping.Store(false)
 	rc.isReady.Store(false)
 	rc.captureMutex.Unlock()
+
+	go func(cmd *exec.Cmd, done chan<- error) {
+		done <- rc.waitFn(cmd)
+	}(cmd, rc.procWaitDone)
 
 	go rc.readMJPEGStream()
 	go rc.drainStderr()
@@ -349,11 +362,13 @@ func (rc *RealCamera) Stop() error {
 	stdin := rc.procStdin
 	readerDone := rc.readerDone
 	stderrDone := rc.stderrDone
+	procWaitDone := rc.procWaitDone
 
 	rc.proc = nil
 	rc.procStdin = nil
 	rc.procStdout = nil
 	rc.procStderr = nil
+	rc.procWaitDone = nil
 	rc.captureMutex.Unlock()
 
 	if stdin != nil {
@@ -365,19 +380,13 @@ func (rc *RealCamera) Stop() error {
 			log.Printf("🛑 Killing process PID: %d", proc.Process.Pid)
 			_ = proc.Process.Kill()
 		}
-		// Use a timeout to prevent indefinite blocking on proc.Wait()
-		waitDone := make(chan error, 1)
-		go func() {
-			waitDone <- proc.Wait()
-		}()
-
-		select {
-		case <-waitDone:
-			// Process exited cleanly
-			log.Printf("✓ Process exited cleanly")
-		case <-time.After(5 * time.Second):
-			// Timeout waiting for process to exit
-			log.Printf("⚠️  Timeout waiting for camera process to exit")
+		if procWaitDone != nil {
+			select {
+			case <-procWaitDone:
+				log.Printf("✓ Process exited cleanly")
+			case <-time.After(rc.stopWaitTimeout):
+				log.Printf("⚠️  Timeout waiting for camera process to exit")
+			}
 		}
 	}
 
@@ -387,7 +396,7 @@ func (rc *RealCamera) Stop() error {
 		case <-readerDone:
 			// Reader exited
 			log.Printf("✓ Frame reader goroutine exited")
-		case <-time.After(5 * time.Second):
+		case <-time.After(rc.stopWaitTimeout):
 			// Timeout waiting for reader
 			log.Printf("⚠️  Timeout waiting for reader goroutine to exit")
 		}
@@ -397,7 +406,7 @@ func (rc *RealCamera) Stop() error {
 		case <-stderrDone:
 			// Stderr drainer exited
 			log.Printf("✓ Stderr drainer goroutine exited")
-		case <-time.After(5 * time.Second):
+		case <-time.After(rc.stopWaitTimeout):
 			// Timeout waiting for stderr drainer
 			log.Printf("⚠️  Timeout waiting for stderr drainer goroutine to exit")
 		}
