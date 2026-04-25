@@ -22,6 +22,8 @@ jobs:
     permissions:
       # Required for `cache-to: type=gha` to upload BuildKit cache to GitHub Actions cache storage.
       actions: write
+      # Required for actions/checkout to clone the repository.
+      contents: read
     
     steps:
       - name: Checkout
