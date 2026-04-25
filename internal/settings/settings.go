@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -190,20 +189,28 @@ func (m *Manager) persistData(settings map[string]interface{}) error {
 	}
 
 	// Cross-process synchronization for write/rename sequence.
-	lockFile, err := os.OpenFile(m.filePath+".lock", os.O_CREATE|os.O_RDWR, 0644)
+	lockPath := m.filePath + ".lock"
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		log.Printf("❌ Settings: failed to open lock file: %v", err)
 		return fmt.Errorf("failed to open lock file: %w", err)
 	}
-	defer func() { _ = lockFile.Close() }()
 
-	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockFileExclusive(lockFile); err != nil {
+		_ = lockFile.Close()
 		log.Printf("❌ Settings: failed to lock settings file: %v", err)
 		return fmt.Errorf("failed to lock settings file: %w", err)
 	}
 	defer func() {
-		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN); err != nil {
+		if err := unlockFileExclusive(lockFile); err != nil {
 			log.Printf("⚠️  Settings: failed to unlock settings file: %v", err)
+		}
+		if err := lockFile.Close(); err != nil {
+			log.Printf("⚠️  Settings: failed to close lock file: %v", err)
+		}
+
+		if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("⚠️  Settings: failed to clean up lock file: %v", err)
 		}
 	}()
 
