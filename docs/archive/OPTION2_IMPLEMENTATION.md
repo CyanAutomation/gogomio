@@ -20,8 +20,8 @@ Successfully implemented **Option 2**: Switched to Raspberry Pi OS-optimized doc
 - Graceful fallback to mock camera with detailed troubleshooting guidance
 
 ### 3. **Documentation**
-- New: [RASPBERRY_PI_BUILD.md](docs/RASPBERRY_PI_BUILD.md) - Complete guide
-- Updated: [README.md](README.md) - References Pi build documentation
+- New: [RASPBERRY_PI_BUILD.md](../guides/RASPBERRY_PI_BUILD.md) - Complete guide
+- Updated: [README.md](../../README.md) - References Pi build documentation
 - Includes: build instructions, troubleshooting, performance notes
 
 ### 4. **Testing**
@@ -75,7 +75,7 @@ docker buildx build --platform linux/arm64 -t cyanautomation/gogomio:pi-latest -
 2. **internal/camera/real_camera.go** - Skip probe for CSI cameras
 3. **internal/camera/real_camera_test.go** - Updated test assertions
 4. **README.md** - Added Pi build documentation link
-5. **docs/RASPBERRY_PI_BUILD.md** - New comprehensive guide
+5. **docs/guides/RASPBERRY_PI_BUILD.md** - New comprehensive guide
 
 ## Architecture Decision: arm64-Only Build
 

@@ -178,7 +178,7 @@ Load primary → [Error] → Load backup → [Success] → Restore & continue
 ### Deliverables
 
 **1. Documentation & Architecture** ✅
-- **File Created**: `docs/PHASE2_IMPLEMENTATION_DETAILS.md` (3,500+ words)
+- **File Created**: `docs/archive/PHASE2_IMPLEMENTATION_DETAILS.md` (3,500+ words)
 - **Coverage**:
   - Panic recovery mechanism rationale and implementation
   - Settings persistence architecture with recovery flows
@@ -215,7 +215,7 @@ Camera: 20+ tests PASS (11.610s)
 ```
 
 **3. Dependency Security Audit** ✅
-- **File Created**: `docs/DEPENDENCY_SECURITY_AUDIT.md` (2,500+ words)
+- **File Created**: `docs/architecture/DEPENDENCY_SECURITY_AUDIT.md` (2,500+ words)
 - **Findings**:
   - Only 1 external dependency: go-chi/chi v5.2.5 (MIT licensed)
   - Go 1.25.4 runtime (module requirement: 1.22+)
@@ -232,7 +232,7 @@ Camera: 20+ tests PASS (11.610s)
 **Recommendations**: Quarterly review of chi releases and Go security updates
 
 **4. Frame Buffer GC Analysis** ✅
-- **File Created**: `docs/FRAME_BUFFER_GC_ANALYSIS.md` (2,500+ words)
+- **File Created**: `docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md` (2,500+ words)
 - **Analysis Scope**:
   - Current implementation review
   - GC pressure identification (3 pressure points)
@@ -373,9 +373,9 @@ User sees real-time health status in modal
 - `internal/camera/health_monitor_test.go` - 8 health monitor tests + 3 benchmarks
 
 ### Documentation - New Files
-- `docs/PHASE2_IMPLEMENTATION_DETAILS.md` - Implementation guide
-- `docs/DEPENDENCY_SECURITY_AUDIT.md` - Security audit
-- `docs/FRAME_BUFFER_GC_ANALYSIS.md` - Performance analysis
+- `docs/archive/PHASE2_IMPLEMENTATION_DETAILS.md` - Implementation guide
+- `docs/architecture/DEPENDENCY_SECURITY_AUDIT.md` - Security audit
+- `docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md` - Performance analysis
 
 ---
 

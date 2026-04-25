@@ -1,11 +1,13 @@
 # Motion In Ocean - Go Edition 🌊
 
 [![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-blue)](https://golang.org)
-[![Tests](https://img.shields.io/badge/tests-51%2B-green)](./docs/)
+[![Tests](https://img.shields.io/badge/tests-51%2B-green)](./docs/README.md)
 [![Docker](https://img.shields.io/badge/Docker-multi--arch-blue)](./Dockerfile)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](./LICENSE)
 
 A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-performance, production-ready implementation of the Motion In Ocean project, focusing on the **client camera streaming mode**.
+
+For the canonical documentation map and archive policy, see [docs/README.md](docs/README.md).
 
 ## Table of Contents
 
@@ -74,7 +76,7 @@ curl http://localhost:8000/api/config | jq
 - CSI camera connected and enabled
 - Docker installed (`curl -sSL https://get.docker.com | sh`)
 
-**Important:** The Dockerfile has been optimized for **Raspberry Pi arm64 deployments** with native libcamera support. See [Raspberry Pi Build Guide](docs/RASPBERRY_PI_BUILD.md) for:
+**Important:** The Dockerfile has been optimized for **Raspberry Pi arm64 deployments** with native libcamera support. See [Raspberry Pi Build Guide](docs/guides/RASPBERRY_PI_BUILD.md) for:
 
 - Build instructions
 - Camera initialization troubleshooting  
@@ -155,7 +157,7 @@ docker-compose exec gogomio gogomio config get fps
 docker-compose exec gogomio gogomio health check
 ```
 
-For complete CLI documentation, see [CLI Guide](docs/CLI_GUIDE.md).
+For complete CLI documentation, see [CLI Guide](docs/guides/CLI_GUIDE.md).
 
 ## API Endpoints
 
