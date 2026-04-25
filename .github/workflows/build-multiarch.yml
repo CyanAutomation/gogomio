@@ -12,9 +12,18 @@ env:
   # Opt into Node.js 24 to proactively support the latest runtime
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Default least-privilege token for all jobs in this workflow.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      # Required for `cache-to: type=gha` to upload BuildKit cache to GitHub Actions cache storage.
+      actions: write
+      # Required for actions/checkout to clone the repository.
+      contents: read
     
     steps:
       - name: Checkout
