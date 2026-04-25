@@ -215,18 +215,25 @@ func (c *Client) GetMetrics() (*MetricsResponse, error) {
 // SettingsResponse represents settings structure
 type SettingsResponse map[string]interface{}
 
+type settingsEnvelope struct {
+	Settings SettingsResponse `json:"settings"`
+}
+
 // GetSettings returns all settings or a specific setting by key
 func (c *Client) GetSettings(key string) (interface{}, error) {
-	if key == "" {
-		var settings SettingsResponse
-		err := c.getJSON("/api/settings", &settings)
-		return settings, err
-	}
-
-	var settings SettingsResponse
-	err := c.getJSON("/api/settings", &settings)
+	var envelope settingsEnvelope
+	err := c.getJSON("/api/settings", &envelope)
 	if err != nil {
 		return nil, err
+	}
+
+	settings := envelope.Settings
+	if settings == nil {
+		settings = SettingsResponse{}
+	}
+
+	if key == "" {
+		return settings, nil
 	}
 
 	value, exists := settings[key]

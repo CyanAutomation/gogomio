@@ -225,3 +225,41 @@ func TestSetSetting(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestGetSettings_AllAndByKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/settings" {
+			t.Errorf("expected path /api/settings, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{
+			"settings": {
+				"brightness": 80,
+				"contrast": 40
+			}
+		}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+
+	allSettings, err := client.GetSettings("")
+	if err != nil {
+		t.Fatalf("unexpected error getting all settings: %v", err)
+	}
+	settingsMap, ok := allSettings.(SettingsResponse)
+	if !ok {
+		t.Fatalf("expected map settings response, got %T", allSettings)
+	}
+	if settingsMap["brightness"] != float64(80) {
+		t.Errorf("expected brightness=80, got %v", settingsMap["brightness"])
+	}
+
+	brightness, err := client.GetSettings("brightness")
+	if err != nil {
+		t.Fatalf("unexpected error getting setting by key: %v", err)
+	}
+	if brightness != float64(80) {
+		t.Errorf("expected brightness=80, got %v", brightness)
+	}
+}

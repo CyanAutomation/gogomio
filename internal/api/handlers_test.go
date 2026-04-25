@@ -1213,6 +1213,45 @@ func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
 	}
 }
 
+func TestHandleSettingsGet_ReturnsSettingsEnvelope(t *testing.T) {
+	fm := NewFrameManager(&readinessCamera{ready: true}, &config.Config{})
+	if err := fm.settingsM.SetMany(map[string]interface{}{
+		"brightness": 80,
+		"contrast":   40,
+	}); err != nil {
+		t.Fatalf("failed to seed settings manager: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	w := httptest.NewRecorder()
+	handleSettingsGet(w, req, fm)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode response JSON: %v", err)
+	}
+
+	settingsRaw, ok := payload["settings"]
+	if !ok {
+		t.Fatalf("expected settings envelope key in response: %v", payload)
+	}
+	settingsMap, ok := settingsRaw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected settings to be object, got %T", settingsRaw)
+	}
+
+	if settingsMap["brightness"] != float64(80) {
+		t.Errorf("expected brightness=80, got %v", settingsMap["brightness"])
+	}
+	if settingsMap["contrast"] != float64(40) {
+		t.Errorf("expected contrast=40, got %v", settingsMap["contrast"])
+	}
+}
+
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
 	t.Helper()
 

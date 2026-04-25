@@ -1,6 +1,11 @@
 package cli
 
 import (
+	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -158,4 +163,62 @@ func TestFormatJSON(t *testing.T) {
 	if !strings.Contains(output, "fps") {
 		t.Errorf("expected 'fps' in JSON output, got: %s", output)
 	}
+}
+
+func TestSettingsGetCmd_PrintsAllKeysAndSpecificValue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/settings" {
+			t.Errorf("expected path /api/settings, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"settings":{"brightness":80,"contrast":40}}`))
+	}))
+	defer server.Close()
+
+	originalURL := os.Getenv("GOGOMIO_URL")
+	t.Cleanup(func() {
+		_ = os.Setenv("GOGOMIO_URL", originalURL)
+	})
+	_ = os.Setenv("GOGOMIO_URL", server.URL)
+
+	allOutput, err := captureStdout(func() error {
+		return settingsGetCmd.RunE(settingsGetCmd, []string{})
+	})
+	if err != nil {
+		t.Fatalf("unexpected error running settings get all: %v", err)
+	}
+	if !strings.Contains(allOutput, "brightness: 80") {
+		t.Errorf("expected all settings output to include brightness key, got: %s", allOutput)
+	}
+	if !strings.Contains(allOutput, "contrast: 40") {
+		t.Errorf("expected all settings output to include contrast key, got: %s", allOutput)
+	}
+
+	brightnessOutput, err := captureStdout(func() error {
+		return settingsGetCmd.RunE(settingsGetCmd, []string{"brightness"})
+	})
+	if err != nil {
+		t.Fatalf("unexpected error running settings get brightness: %v", err)
+	}
+	if strings.TrimSpace(brightnessOutput) != "80" {
+		t.Errorf("expected brightness output '80', got: %q", brightnessOutput)
+	}
+}
+
+func captureStdout(fn func() error) (string, error) {
+	originalStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return "", err
+	}
+
+	os.Stdout = writer
+	runErr := fn()
+	_ = writer.Close()
+	os.Stdout = originalStdout
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, reader)
+	_ = reader.Close()
+	return buf.String(), runErr
 }
