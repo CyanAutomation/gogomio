@@ -236,12 +236,12 @@ var settingsGetCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			if settingsMap, ok := settings.(map[string]interface{}); ok {
-				for k, v := range settingsMap {
-					fmt.Printf("%s: %v\n", k, v)
-				}
-			} else {
-				fmt.Printf("%v\n", settings)
+			settingsMap, ok := settings.(SettingsResponse)
+			if !ok {
+				return fmt.Errorf("unexpected settings response type: %T", settings)
+			}
+			for k, v := range settingsMap {
+				fmt.Printf("%s: %v\n", k, v)
 			}
 			return nil
 		}
