@@ -245,3 +245,34 @@ func TestFrameCountSinceBoundaryEquality(t *testing.T) {
 		t.Errorf("FrameCountSince returned %d, want 2", count)
 	}
 }
+
+// TestFrameCountSinceNoDoubleCounting ensures each timestamp is counted once.
+func TestFrameCountSinceNoDoubleCounting(t *testing.T) {
+	stats := NewStreamStats()
+
+	baseTime := time.Now().UnixNano()
+	timestamps := []int64{
+		baseTime - 2_000_000,
+		baseTime - 1_000_000,
+		baseTime,
+		baseTime + 1_000_000,
+	}
+	for _, ts := range timestamps {
+		stats.RecordFrame(ts)
+	}
+
+	count := stats.FrameCountSince(baseTime - 1_000_000)
+	if count != 3 {
+		t.Errorf("FrameCountSince returned %d, want 3", count)
+	}
+}
+
+// TestFrameCountSinceEmptyRingReturnsZero ensures empty timestamps return zero.
+func TestFrameCountSinceEmptyRingReturnsZero(t *testing.T) {
+	stats := NewStreamStats()
+
+	count := stats.FrameCountSince(time.Now().UnixNano() - 1_000_000)
+	if count != 0 {
+		t.Errorf("FrameCountSince returned %d, want 0", count)
+	}
+}
