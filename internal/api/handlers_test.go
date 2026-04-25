@@ -302,6 +302,60 @@ func TestConfigEndpoint(t *testing.T) {
 	}
 }
 
+func TestDeprecatedAPIStatusEndpointUsesRuntimeConfig(t *testing.T) {
+	router, cam, cfg := setupTestServer(t)
+	defer func() { _ = cam.Stop() }()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to parse JSON response: %v", err)
+	}
+
+	fpsConfiguredRaw, ok := result["fps_configured"]
+	if !ok {
+		t.Fatal("response missing fps_configured field")
+	}
+	fpsConfigured, ok := fpsConfiguredRaw.(float64)
+	if !ok {
+		t.Fatalf("fps_configured has unexpected type %T", fpsConfiguredRaw)
+	}
+	if int(fpsConfigured) != cfg.FPS {
+		t.Errorf("fps_configured mismatch: got %d, want %d", int(fpsConfigured), cfg.FPS)
+	}
+
+	jpegQualityRaw, ok := result["jpeg_quality"]
+	if !ok {
+		t.Fatal("response missing jpeg_quality field")
+	}
+	jpegQuality, ok := jpegQualityRaw.(float64)
+	if !ok {
+		t.Fatalf("jpeg_quality has unexpected type %T", jpegQualityRaw)
+	}
+	if int(jpegQuality) != cfg.JPEGQuality {
+		t.Errorf("jpeg_quality mismatch: got %d, want %d", int(jpegQuality), cfg.JPEGQuality)
+	}
+
+	maxConnRaw, ok := result["max_stream_connections"]
+	if !ok {
+		t.Fatal("response missing max_stream_connections field")
+	}
+	maxConn, ok := maxConnRaw.(float64)
+	if !ok {
+		t.Fatalf("max_stream_connections has unexpected type %T", maxConnRaw)
+	}
+	if int(maxConn) != cfg.MaxStreamConnections {
+		t.Errorf("max_stream_connections mismatch: got %d, want %d", int(maxConn), cfg.MaxStreamConnections)
+	}
+}
+
 // TestSnapshotEndpoint tests the /snapshot.jpg endpoint
 func TestSnapshotEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
@@ -1090,8 +1144,6 @@ func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T)
 }
 
 func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
-	cfg := &config.Config{FPS: 30, TargetFPS: 30}
-	cam := &captureLoopCountingCamera{}
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
 	fm := newFrameManager(cam, cfg, 20*time.Millisecond)

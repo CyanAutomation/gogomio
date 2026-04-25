@@ -970,7 +970,7 @@ func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config,
 	})
 
 	router.Get("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIStatus(w, r, fm, startTime)
+		handleAPIStatus(w, r, fm, cfg, startTime)
 	})
 
 	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
@@ -1031,7 +1031,7 @@ func registerLegacyHandlers(router chi.Router, fm *FrameManager, cfg *config.Con
 	})
 
 	router.Get("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		handleAPIStatus(w, r, fm, startTime)
+		handleAPIStatus(w, r, fm, cfg, startTime)
 	})
 
 	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
@@ -1316,9 +1316,9 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 // @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
 // @Deprecated true
 // @Router /v1/api/status [get]
-func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
+func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Deprecated: use /v1/health/detailed instead
-	handleDetailedHealth(w, r, fm, &config.Config{}, startTime) // Note: passing empty config for now - this is deprecated anyway
+	handleDetailedHealth(w, r, fm, cfg, startTime)
 }
 
 // Settings handlers
