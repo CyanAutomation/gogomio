@@ -1042,6 +1042,53 @@ func TestFrameManagerStopRaceWithDisconnectDecrementDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+
+	for i := 0; i < 200; i++ {
+		cam := &captureLoopCountingCamera{}
+		fm := newFrameManager(cam, cfg, 10*time.Millisecond)
+
+		fm.startCapture()
+		waitForCaptureState(t, fm, true)
+		atomic.StoreInt64(&fm.clientCount, 1)
+
+		var wg sync.WaitGroup
+		panicCh := make(chan any, 2)
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCh <- r
+				}
+			}()
+			fm.DecrementClients()
+		}()
+
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCh <- r
+				}
+			}()
+			fm.Stop()
+		}()
+
+		wg.Wait()
+		select {
+		case p := <-panicCh:
+			t.Fatalf("iteration %d: unexpected panic from Stop/DecrementClients race: %v", i, p)
+		default:
+		}
+
+		// Ensure resources are cleaned up if Stop() happened to lose the race in the goroutine.
+		fm.Stop()
+	}
+}
+
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
 	t.Helper()
 
