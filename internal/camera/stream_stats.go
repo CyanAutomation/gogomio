@@ -133,8 +133,6 @@ func (s *StreamStats) FrameCountSince(sinceNS int64) int64 {
 		if ts >= sinceNS {
 			count++
 		}
-			count++
-		}
 	})
 
 	return count
