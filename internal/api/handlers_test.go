@@ -1089,6 +1089,75 @@ func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T)
 	}
 }
 
+func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 20*time.Millisecond)
+
+	// Keep cleanup loop occupied and saturate cleanup queue so an enqueue sender blocks.
+	busyReq := cleanupRequest{
+		delay:  5 * time.Second,
+		stopCh: make(chan struct{}),
+		done:   make(chan struct{}),
+	}
+	fm.cleanupCh <- busyReq
+	time.Sleep(10 * time.Millisecond)
+	for len(fm.cleanupCh) < cap(fm.cleanupCh) {
+		fm.cleanupCh <- cleanupRequest{
+			delay:  5 * time.Second,
+			stopCh: make(chan struct{}),
+			done:   make(chan struct{}),
+		}
+	}
+
+	resultCh := make(chan cleanupEnqueueResult, 1)
+	go func() {
+		resultCh <- fm.tryEnqueueCleanupRequest(cleanupRequest{
+			delay:  5 * time.Second,
+			stopCh: make(chan struct{}),
+			done:   make(chan struct{}),
+		}, time.After(2*time.Second))
+	}()
+
+	// Wait until sender is registered, proving Stop() must unblock a potentially blocked sender.
+	deadline := time.Now().Add(300 * time.Millisecond)
+	senderRegistered := false
+	for time.Now().Before(deadline) {
+		fm.cleanupSendMu.Lock()
+		senders := fm.cleanupSenders
+		fm.cleanupSendMu.Unlock()
+		if senders > 0 {
+			senderRegistered = true
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !senderRegistered {
+		t.Fatal("cleanup sender never registered as active")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		fm.Stop()
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Stop() did not return while cleanup sender was blocked")
+	}
+
+	select {
+	case result := <-resultCh:
+		if result != cleanupEnqueueSkipped {
+			t.Fatalf("enqueue result = %v, want %v", result, cleanupEnqueueSkipped)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("blocked cleanup sender did not exit after Stop()")
+	}
+}
+
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
 	t.Helper()
 
