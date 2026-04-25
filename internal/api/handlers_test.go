@@ -1092,7 +1092,10 @@ func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T)
 func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
 	fm := newFrameManager(cam, cfg, 20*time.Millisecond)
+	t.Cleanup(fm.Stop)
 
 	// Keep cleanup loop occupied and saturate cleanup queue so an enqueue sender blocks.
 	busyReq := cleanupRequest{
