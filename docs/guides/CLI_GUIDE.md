@@ -251,6 +251,6 @@ docker-compose exec gogomio groups gogomio
 
 ## See Also
 
-- [README.md](../README.md) - Main project documentation
+- [README.md](../../README.md) - Main project documentation
 - [Dockerfile](../Dockerfile) - Docker build configuration
 - [docker-compose.yml](../docker-compose.yml) - Compose configuration with CLI examples
