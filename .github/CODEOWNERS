@@ -1,0 +1,11 @@
+# Default ownership
+* @gogomio-maintainers
+
+# Module ownership
+/cmd/ @gogomio-cli-team @gogomio-maintainers
+/internal/ @gogomio-core-team @gogomio-maintainers
+/docs/ @gogomio-docs-team @gogomio-maintainers
+/scripts/ @gogomio-devx-team @gogomio-maintainers
+
+# GitHub process files
+/.github/ @gogomio-maintainers

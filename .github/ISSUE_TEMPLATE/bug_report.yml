@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible bug in gogomio.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the issue.
+      placeholder: What is broken?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Exact steps needed to reproduce the bug.
+      placeholder: |
+        1. Run `...`
+        2. Open `...`
+        3. Observe `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs actual behavior
+      description: Clearly state what you expected and what happened.
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: affected_modules
+    attributes:
+      label: Affected modules
+      description: Select all that apply.
+      options:
+        - label: cmd/
+        - label: internal/
+        - label: docs/
+        - label: scripts/
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: App version or commit SHA where this was observed.
+      placeholder: v0.0.0 or <commit>
+    validations:
+      required: true
