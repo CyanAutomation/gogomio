@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an improvement to gogomio.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user or developer problem should this solve?
+      placeholder: "As a ..., I need ..., so that ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the intended behavior and scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: List concrete, testable criteria for completion.
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: impacted_modules
+    attributes:
+      label: Impacted modules
+      options:
+        - label: cmd/
+        - label: internal/
+        - label: docs/
+        - label: scripts/
+    validations:
+      required: true
