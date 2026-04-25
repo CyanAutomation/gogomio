@@ -45,6 +45,10 @@ type FrameManager struct {
 	stopped         atomic.Bool
 	cleanupStopOnce sync.Once
 	cleanupChOnce   sync.Once // Protects cleanupCh close from double-close panic
+	cleanupSendMu   sync.Mutex
+	cleanupSendCond *sync.Cond
+	cleanupSenders  int
+	cleanupAccept   bool
 	fallbackWG      sync.WaitGroup
 
 	idleStopDelay time.Duration
@@ -105,7 +109,9 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		cleanupDone:   make(chan struct{}),
 		clientCount:   0,
 		idleStopDelay: idleStopDelay,
+		cleanupAccept: true,
 	}
+	fm.cleanupSendCond = sync.NewCond(&fm.cleanupSendMu)
 
 	// Start background cleanup goroutine
 	go fm.cleanupLoop()
@@ -206,45 +212,67 @@ func (fm *FrameManager) scheduleStopCapture() {
 	timer := time.NewTimer(cleanupEnqueueTimeout)
 	defer timer.Stop()
 
-	select {
-	case <-fm.cleanupStop:
-		log.Printf("📊 Cleanup stop signal observed during enqueue; skipping stop request")
-	case fm.cleanupCh <- req:
-		// Request queued successfully
-	case <-timer.C:
-		if !fm.enqueueFallbackStop(req) {
-			return
-		}
-
+	switch fm.tryEnqueueCleanupRequest(req, timer.C) {
+	case cleanupEnqueueQueued:
+		// Request queued successfully.
+	case cleanupEnqueueTimedOut:
 		// Cleanup queue saturated: fallback to a direct delayed stop check
 		// so that stop intent is never dropped.
 		log.Printf("⚠️  Cleanup channel enqueue timed out; using fallback stop path")
 		fm.fallbackWG.Add(1)
 		go fm.delayedStopFallback(req)
+	case cleanupEnqueueSkipped:
+		// Shutdown in progress.
 	}
 }
 
-func (fm *FrameManager) enqueueFallbackStop(req cleanupRequest) (ok bool) {
+type cleanupEnqueueResult int
+
+const (
+	cleanupEnqueueQueued cleanupEnqueueResult = iota
+	cleanupEnqueueTimedOut
+	cleanupEnqueueSkipped
+)
+
+func (fm *FrameManager) tryEnqueueCleanupRequest(req cleanupRequest, timeout <-chan time.Time) cleanupEnqueueResult {
+	if fm.stopped.Load() {
+		log.Printf("📊 Shutdown already started; skipping capture stop enqueue")
+		return cleanupEnqueueSkipped
+	}
+
+	fm.cleanupSendMu.Lock()
+	if !fm.cleanupAccept {
+		fm.cleanupSendMu.Unlock()
+		log.Printf("📊 Cleanup enqueue closed; skipping stop request")
+		return cleanupEnqueueSkipped
+	}
+	fm.cleanupSenders++
+	fm.cleanupSendMu.Unlock()
+
 	defer func() {
-		if r := recover(); r != nil {
-			if fm.stopped.Load() {
-				log.Printf("📊 Cleanup enqueue raced with shutdown; skipping stop request")
-				ok = false
-				return
-			}
-			panic(r)
+		fm.cleanupSendMu.Lock()
+		fm.cleanupSenders--
+		if fm.cleanupSenders == 0 {
+			fm.cleanupSendCond.Broadcast()
 		}
+		fm.cleanupSendMu.Unlock()
 	}()
 
 	select {
 	case <-fm.cleanupStop:
-		log.Printf("📊 Cleanup stop signal observed after enqueue timeout; skipping fallback")
-		return false
-	default:
+		log.Printf("📊 Cleanup stop signal observed during enqueue; skipping stop request")
+		return cleanupEnqueueSkipped
+	case fm.cleanupCh <- req:
+		return cleanupEnqueueQueued
+	case <-timeout:
+		select {
+		case <-fm.cleanupStop:
+			log.Printf("📊 Cleanup stop signal observed after enqueue timeout; skipping fallback")
+			return cleanupEnqueueSkipped
+		default:
+		}
+		return cleanupEnqueueTimedOut
 	}
-
-	ok = true
-	return
 }
 
 func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
@@ -428,17 +456,25 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 
 // Stop stops the frame capture loop and cleanup infrastructure.
 func (fm *FrameManager) Stop() {
+	fm.cleanupStopOnce.Do(func() {
+		close(fm.cleanupStop)
+	})
+
 	fm.stopped.Store(true)
-	fm.stopCapture()
+
+	fm.cleanupSendMu.Lock()
+	fm.cleanupAccept = false
+	for fm.cleanupSenders > 0 {
+		fm.cleanupSendCond.Wait()
+	}
+	fm.cleanupSendMu.Unlock()
 
 	// Close cleanup channel to signal cleanup loop to exit (protect against double-close)
 	fm.cleanupChOnce.Do(func() {
 		close(fm.cleanupCh)
 	})
 
-	fm.cleanupStopOnce.Do(func() {
-		close(fm.cleanupStop)
-	})
+	fm.stopCapture()
 
 	// Wait for cleanup loop to exit
 	<-fm.cleanupDone
