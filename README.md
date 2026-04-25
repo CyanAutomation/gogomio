@@ -55,10 +55,14 @@ A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-p
 ### Development (Mock Camera - No Hardware)
 
 ```bash
+# Copy the example env file (works for both local and Docker runs)
+cp .env.example .env
+
 # Run in Docker (easiest)
-docker-compose -f docker-compose.mock.yml up
+docker-compose --env-file .env -f docker-compose.mock.yml up
 
 # Or run locally with Go
+set -a && source .env && set +a
 MOCK_CAMERA=true go run ./cmd/gogomio
 
 # Test endpoints
@@ -92,13 +96,12 @@ curl http://localhost:8000/api/config | jq
 git clone https://github.com/CyanAutomation/gogomio.git
 cd gogomio
 
-# Configure for your Pi (optional)
-export MIO_RESOLUTION=1280x720
-export MIO_FPS=24
-export MIO_JPEG_QUALITY=90
+# Copy and edit environment settings for your Pi
+cp .env.example .env
+# Then update values in .env (for example: MOCK_CAMERA=false, MIO_RESOLUTION=1280x720)
 
 # Run in Docker
-docker-compose up -d
+docker-compose --env-file .env up -d
 
 # View logs
 docker-compose logs -f gogomio
