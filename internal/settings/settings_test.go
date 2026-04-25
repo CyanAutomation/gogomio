@@ -159,15 +159,15 @@ func TestSettingsPersistence(t *testing.T) {
 // TestSettingsAtomicWrite tests that writes are atomic
 func TestSettingsAtomicWrite(t *testing.T) {
 	tmpDir := t.TempDir()
-	filepath := filepath.Join(tmpDir, "atomic_test.json")
-	tempPath := filepath + ".tmp"
+	settingsPath := filepath.Join(tmpDir, "atomic_test.json")
+	tempGlob := settingsPath + ".*.tmp"
 
-	m := NewManager(filepath)
+	m := NewManager(settingsPath)
 
 	readAndValidate := func(expectedValue string) {
 		t.Helper()
 
-		data, err := os.ReadFile(filepath)
+		data, err := os.ReadFile(settingsPath)
 		if err != nil {
 			t.Fatalf("Failed to read settings file: %v", err)
 		}
@@ -193,8 +193,10 @@ func TestSettingsAtomicWrite(t *testing.T) {
 		}
 		readAndValidate(value)
 
-		if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
-			t.Fatalf("temp file should not exist after successful write, stat err=%v", err)
+		if leftovers, err := filepath.Glob(tempGlob); err != nil {
+			t.Fatalf("failed to check temp file leftovers: %v", err)
+		} else if len(leftovers) != 0 {
+			t.Fatalf("temp files should not exist after successful write, found=%v", leftovers)
 		}
 	}
 
@@ -206,7 +208,7 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for atomic.LoadInt32(&stop) == 0 {
-			data, err := os.ReadFile(filepath)
+			data, err := os.ReadFile(settingsPath)
 			if err != nil {
 				readerErr <- fmt.Errorf("read failed: %w", err)
 				return
@@ -244,14 +246,14 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	if err := m.Set("key", "stable-before-failure"); err != nil {
 		t.Fatalf("failed to set stable state: %v", err)
 	}
-	beforeFailureData, err := os.ReadFile(filepath)
+	beforeFailureData, err := os.ReadFile(settingsPath)
 	if err != nil {
 		t.Fatalf("failed to read baseline file: %v", err)
 	}
-	if err := os.Remove(filepath); err != nil {
+	if err := os.Remove(settingsPath); err != nil {
 		t.Fatalf("failed to remove settings file for fault setup: %v", err)
 	}
-	if err := os.Mkdir(filepath, 0755); err != nil {
+	if err := os.Mkdir(settingsPath, 0755); err != nil {
 		t.Fatalf("failed to create directory at settings path for fault setup: %v", err)
 	}
 
@@ -261,17 +263,69 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	}
 
 	// Restore original file and verify it is still valid/unchanged from before the interrupted path.
-	if err := os.Remove(filepath); err != nil {
+	if err := os.Remove(settingsPath); err != nil {
 		t.Fatalf("failed to remove fault directory: %v", err)
 	}
-	if err := os.WriteFile(filepath, beforeFailureData, 0644); err != nil {
+	if err := os.WriteFile(settingsPath, beforeFailureData, 0644); err != nil {
 		t.Fatalf("failed to restore baseline file: %v", err)
 	}
 	readAndValidate("stable-before-failure")
 
 	// Failed path should also clean up temp file.
-	if _, statErr := os.Stat(tempPath); !os.IsNotExist(statErr) {
-		t.Fatalf("temp file should be cleaned up after failed rename, stat err=%v", statErr)
+	if leftovers, err := filepath.Glob(tempGlob); err != nil {
+		t.Fatalf("failed to check temp file leftovers after failed rename: %v", err)
+	} else if len(leftovers) != 0 {
+		t.Fatalf("temp files should be cleaned up after failed rename, found=%v", leftovers)
+	}
+}
+
+// TestSettingsConcurrentWritersSamePath ensures concurrent writers to the same file path
+// never leave truncated/invalid JSON on disk.
+func TestSettingsConcurrentWritersSamePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "shared_settings.json")
+
+	const writers = 8
+	const writesPerWriter = 25
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, writers*writesPerWriter)
+
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+
+			m := NewManager(settingsPath)
+			for j := 0; j < writesPerWriter; j++ {
+				key := fmt.Sprintf("writer_%d", id)
+				value := fmt.Sprintf("value_%d", j)
+				if err := m.Set(key, value); err != nil {
+					errCh <- fmt.Errorf("writer %d iteration %d failed: %w", id, j, err)
+					return
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed reading final settings file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("final settings file is empty")
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("final settings file contains invalid/truncated JSON: %v; payload=%q", err, string(data))
 	}
 }
 
