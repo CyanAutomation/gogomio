@@ -22,11 +22,14 @@ COPY go.mod go.sum ./
 # Download dependencies (cached until go.mod/go.sum change)
 RUN go mod download
 
+# Install C toolchain required for -race (CGO) test builds
+RUN apk add --no-cache gcc musl-dev
+
 # Copy remaining source code
 COPY . .
 
 # Run tests to validate the build (fail fast if tests fail)
-RUN go test ./... -v -race
+RUN CGO_ENABLED=1 go test ./... -v -race
 
 # Install swag CLI and generate Swagger docs
 RUN go install github.com/swaggo/swag/cmd/swag@latest && \
