@@ -1282,3 +1282,413 @@ func contains(s, substr string) bool {
 	}
 	return false
 }
+
+// ====================== PHASE 3: Lifecycle Tests ======================
+
+// TestFrameManager_CaptureLoop_StartAndStop tests capture loop start and stop
+func TestFrameManager_CaptureLoop_StartAndStop(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Initially capture should not be started
+	fm.captureMu.Lock()
+	if fm.captureStarted {
+		fm.captureMu.Unlock()
+		t.Fatal("expected captureStarted to be false initially")
+	}
+	fm.captureMu.Unlock()
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Stop capture
+	fm.stopCapture()
+	waitForCaptureState(t, fm, false)
+}
+
+// TestFrameManager_CaptureLoop_RestartAfterStop tests restarting capture after stop
+func TestFrameManager_CaptureLoop_RestartAfterStop(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Start, stop, then start again
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	fm.stopCapture()
+	waitForCaptureState(t, fm, false)
+
+	// Restart
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	fm.stopCapture()
+	waitForCaptureState(t, fm, false)
+}
+
+// TestFrameManager_CaptureLoop_IdempotentStart tests that starting twice is idempotent
+func TestFrameManager_CaptureLoop_IdempotentStart(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Get initial capture starts count
+	fm.captureMu.Lock()
+	initialStarts := fm.captureStarts
+	fm.captureMu.Unlock()
+
+	// Start capture twice
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	fm.captureMu.Lock()
+	startsAfterFirst := fm.captureStarts
+	fm.captureMu.Unlock()
+
+	fm.startCapture() // Should be idempotent
+	waitForCaptureState(t, fm, true)
+
+	fm.captureMu.Lock()
+	startsAfterSecond := fm.captureStarts
+	fm.captureMu.Unlock()
+
+	// Only one actual start should have occurred
+	if startsAfterSecond != startsAfterFirst {
+		t.Fatalf("expected capture to start once, but got %d starts", startsAfterSecond-initialStarts)
+	}
+}
+
+// TestFrameManager_StopCaptureIfIdle tests idle timeout behavior
+func TestFrameManager_StopCaptureIfIdle(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Get the current done channel
+	fm.captureMu.Lock()
+	done := fm.doneChan
+	fm.captureMu.Unlock()
+
+	// Should be able to stop when no clients are connected
+	if !fm.stopCaptureIfIdle(done) {
+		t.Fatal("expected stopCaptureIfIdle to succeed when no clients")
+	}
+
+	waitForCaptureState(t, fm, false)
+}
+
+// TestFrameManager_StopCaptureIfIdle_WithClient tests idle stop is prevented when client connected
+func TestFrameManager_StopCaptureIfIdle_WithClient(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Simulate a client connecting
+	atomic.AddInt64(&fm.clientCount, 1)
+
+	// Get the current done channel
+	fm.captureMu.Lock()
+	done := fm.doneChan
+	fm.captureMu.Unlock()
+
+	// Should NOT be able to stop when a client is connected
+	if fm.stopCaptureIfIdle(done) {
+		t.Fatal("expected stopCaptureIfIdle to fail when client connected")
+	}
+
+	// Verify capture is still running
+	waitForCaptureState(t, fm, true)
+
+	// Clean up client count
+	atomic.AddInt64(&fm.clientCount, -1)
+
+	// Now it should work
+	if !fm.stopCaptureIfIdle(done) {
+		t.Fatal("expected stopCaptureIfIdle to succeed after client disconnect")
+	}
+}
+
+// TestFrameManager_ScheduleStopCapture tests scheduling delayed capture stop
+func TestFrameManager_ScheduleStopCapture(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	}
+	fm := NewFrameManager(cam, cfg)
+	defer fm.Stop()
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Schedule stop (should stop after idle timeout ~3 seconds)
+	fm.scheduleStopCapture()
+
+	// Wait for capture to stop (with timeout longer than idle delay + buffer)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		fm.captureMu.Lock()
+		started := fm.captureStarted
+		fm.captureMu.Unlock()
+		if !started {
+			return // Success
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	t.Fatal("expected capture to stop after scheduling stop")
+}
+
+// TestFrameManager_MultipleConcurrentStreams tests multiple simultaneous streams
+func TestFrameManager_MultipleConcurrentStreams(t *testing.T) {
+	router, cam, _ := setupTestServer(t)
+	defer func() { _ = cam.Stop() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start 2 concurrent streams
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			req := httptest.NewRequest("GET", "/stream.mjpg", nil)
+			req = req.WithContext(ctx)
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+		}()
+	}
+
+	// Let streams run briefly
+	time.Sleep(500 * time.Millisecond)
+
+	// Cancel to stop streams
+	cancel()
+
+	// Wait for all streams to finish
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(2 * time.Second):
+		t.Fatal("concurrent streams did not complete in time")
+	}
+}
+
+// TestFrameManager_CleanupLoop_GracefulShutdown tests cleanup loop exits cleanly
+func TestFrameManager_CleanupLoop_GracefulShutdown(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+
+	// Start capture to activate cleanup loop
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Stop frame manager (should cleanly stop cleanup loop)
+	fm.Stop()
+
+	// Verify cleanup loop exited
+	select {
+	case <-fm.cleanupDone:
+		// Success - cleanup loop exited
+	case <-time.After(1 * time.Second):
+		t.Fatal("cleanup loop did not exit during shutdown")
+	}
+}
+
+// TestFrameManager_FrameBuffer_ConcurrentAccess tests frame buffer concurrent reads
+func TestFrameManager_FrameBuffer_ConcurrentAccess(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Allow frames to be captured
+	time.Sleep(200 * time.Millisecond)
+
+	// Simulate concurrent reads from multiple clients
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Each goroutine tries to read frame 10 times
+			for j := 0; j < 10; j++ {
+				frame := fm.GetFrame()
+				if len(frame) == 0 {
+					t.Error("expected non-empty frame")
+					return
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+	}
+
+	wg.Wait()
+}
+
+// TestFrameManager_Metrics_FrameCount tests frame counting during capture
+func TestFrameManager_Metrics_FrameCount(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+	defer fm.Stop()
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Let some frames be captured
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify that frames were captured by checking if frame buffer has data
+	frame := fm.GetFrame()
+	if len(frame) == 0 {
+		t.Errorf("expected frames to be captured")
+	}
+}
+
+// TestFrameManager_Stop_MultipleTimes tests Stop() is idempotent
+func TestFrameManager_Stop_MultipleTimes(t *testing.T) {
+	cam := camera.NewMockCamera()
+	if err := cam.Start(640, 480, 24, 90); err != nil {
+		t.Fatalf("failed to start camera: %v", err)
+	}
+	defer func() { _ = cam.Stop() }()
+
+	fm := NewFrameManager(cam, &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	})
+
+	// Start capture
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+
+	// Stop multiple times - should not panic
+	fm.Stop()
+	fm.Stop()
+	fm.Stop()
+}
