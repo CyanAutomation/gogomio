@@ -5,11 +5,13 @@
 This rubric measures how close a repository is to being a reliable, runnable, and maintainable product.
 
 **It is:**
+
 - Deterministic
 - Repeatable
 - Automation-friendly
 
 **It does not measure:**
+
 - Popularity
 - Code cleverness
 - Project size
@@ -39,6 +41,7 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 ## 🧱 Base Rubric (Signal-Based)
 
 **Each category:**
+
 - Contains 5 binary signals (0 or 1)
 - Total signals → category score (0–5)
 - Weighted into final base score
@@ -92,7 +95,7 @@ category_contribution = (category_score / 5) × weight
 
 | Signal | Detection Rule |
 |--------|----------------|
-| Tests directory/files exist | /tests, __tests__, or test naming patterns |
+| Tests directory/files exist | /tests, **tests**, or test naming patterns |
 | Tests runnable locally | Test command present (e.g. npm test, pytest) |
 | Tests executed in CI | CI workflow includes test step |
 | Multiple test types exist | ≥2 of: unit, integration, e2e, smoke |
