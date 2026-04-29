@@ -193,7 +193,7 @@ func TestLogGoroutineStats(t *testing.T) {
 	// This test verifies that logGoroutineStats doesn't panic
 	// We can't easily test the logging output since it uses a 10-second ticker
 	// Just verify the function can be called without panicking
-	
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -202,7 +202,7 @@ func TestLogGoroutineStats(t *testing.T) {
 				t.Errorf("logGoroutineStats panicked: %v", r)
 			}
 		}()
-		
+
 		// We can't block forever, so we'll just verify the function starts
 		// The actual ticker-based logging is tested indirectly through integration tests
 		logGoroutineStats()
