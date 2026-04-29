@@ -353,7 +353,7 @@ This is not a crash or data corruption, just potential duplicate calculation. Th
 
 ### P1: HIGH - Should Fix
 
-3. **streamDone stale reference:**
+1. **streamDone stale reference:**
    - Recapture `fm.doneChan` each loop iteration with lock
 
 2. **stopChancel reference race:**
@@ -362,7 +362,7 @@ This is not a crash or data corruption, just potential duplicate calculation. Th
 
 ### P2: MEDIUM - Nice to Have
 
-5. **captureStarted fragile logic:**
+1. **captureStarted fragile logic:**
    - Add clear documentation and invariant checking
    - Consider redesigning capture start/stop lifecycle
 
