@@ -1,0 +1,16 @@
+#!/bin/bash
+# Pre-commit hook: Ensure tests pass before committing
+
+set -e
+
+echo "🧪 Running tests before commit..."
+
+# Run tests with race detection
+if ! go test ./... -v -race -cover > /dev/null 2>&1; then
+    echo "❌ Tests failed! Fix them before committing."
+    exit 1
+fi
+
+echo "✅ All tests passed!"
+echo "💾 Proceeding with commit..."
+exit 0

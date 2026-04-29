@@ -1,0 +1,126 @@
+name: Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comparisons
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run benchmarks
+        run: |
+          go test -bench=. -benchmem -benchtime=2s ./internal/camera ./internal/api > bench-current.txt
+          cat bench-current.txt
+
+      - name: Download previous benchmark
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+          path: ./
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Compare benchmarks
+        id: compare
+        continue-on-error: true
+        run: |
+          if [ -f bench-previous.txt ]; then
+            echo "## Benchmark Comparison" > bench-comparison.md
+            echo "" >> bench-comparison.md
+            echo '```' >> bench-comparison.md
+            /go/bin/benchstat bench-previous.txt bench-current.txt >> bench-comparison.md
+            echo '```' >> bench-comparison.md
+            cat bench-comparison.md
+          else
+            echo "No previous benchmark to compare. Storing baseline."
+            cp bench-current.txt bench-previous.txt
+          fi
+
+      - name: Check for regressions
+        id: regression
+        continue-on-error: true
+        run: |
+          if [ -f bench-previous.txt ]; then
+            # Extract performance deltas and fail if regression > 10%
+            output=$(/go/bin/benchstat bench-previous.txt bench-current.txt)
+            
+            # Check for significant regressions (>10%)
+            if echo "$output" | grep -qE '[0-9]+\.[0-9]+x'; then
+              echo "⚠️ Potential performance regression detected"
+              echo "regression_detected=true" >> $GITHUB_OUTPUT
+            else
+              echo "✅ No major performance regressions detected"
+              echo "regression_detected=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Upload benchmark results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench-current.txt
+          retention-days: 90
+
+      - name: Store benchmark in commit message
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "## Benchmark Results" > benchmark-summary.txt
+          echo "Date: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> benchmark-summary.txt
+          echo "Commit: ${{ github.sha }}" >> benchmark-summary.txt
+          echo "" >> benchmark-summary.txt
+          cat bench-current.txt >> benchmark-summary.txt
+          cat benchmark-summary.txt
+
+  benchmark-report:
+    name: Generate Benchmark Report
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: always()
+    timeout-minutes: 5
+
+    steps:
+      - name: Download benchmark artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+
+      - name: Display benchmark results
+        run: |
+          echo "=== Latest Benchmark Results ===" 
+          tail -20 bench-current.txt || echo "No benchmark results available yet"
