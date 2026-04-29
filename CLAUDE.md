@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GoGoMio is a high-performance MJPEG streaming server for Raspberry Pi CSI cameras, written in Go. The binary runs in two modes: **server mode** (no args → starts HTTP server) and **CLI mode** (any subcommand → queries a running server over HTTP).
 
+**Project Maturity**: See [docs/repo-maturity.md](docs/repo-maturity.md) for a comprehensive assessment against the maturity rubric, identified gaps, and a prioritized improvement roadmap. Current score: **93/100 (Mature Product)**.
+
 ## Commands
 
 ```bash
