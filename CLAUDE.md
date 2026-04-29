@@ -17,6 +17,9 @@ go build -o gogomio ./cmd/gogomio
 # Test (all)
 go test ./... -v -race -cover
 
+# Test with coverage report
+go test ./... -v -race -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html
+
 # Test (single test)
 go test -v ./internal/camera -run TestFrameBuffer
 
@@ -28,10 +31,9 @@ go test -v ./internal/camera -bench=. -benchmem
 
 # Development with mock camera (no hardware needed)
 docker-compose -f docker-compose.mock.yml up --build
-
-# Production (real Pi camera)
-docker-compose up -d
 ```
+
+**CI/CD Note**: Tests run automatically on every push/PR via [.github/workflows/test.yml](.github/workflows/test.yml). All tests must pass and coverage must be ≥75% to merge to `main`. Coverage is tracked on [Codecov](https://codecov.io/gh/CyanAutomation/gogomio).
 
 There is no Makefile. The repo uses standard Go tooling and GitHub Actions for multi-arch Docker builds via `./scripts/build-multiarch.sh`.
 
