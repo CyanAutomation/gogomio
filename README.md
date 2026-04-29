@@ -122,6 +122,7 @@ docker-compose logs gogomio | grep camera-check
 GoGoMio supports a **two-mode binary**: serve HTTP or execute CLI commands.
 
 ### Server Mode (Default)
+
 ```bash
 ./gogomio                    # Start HTTP server
 ./gogomio server             # Explicit server mode
@@ -129,6 +130,7 @@ MOCK_CAMERA=true ./gogomio   # Development mode
 ```
 
 ### CLI Mode
+
 Query a running server with CLI commands:
 
 ```bash
@@ -153,6 +155,7 @@ Query a running server with CLI commands:
 ```
 
 ### Docker Compose CLI Usage
+
 ```bash
 docker-compose up -d                       # Start server
 docker-compose exec gogomio gogomio status # Run CLI command
@@ -226,6 +229,7 @@ All API endpoints are subject to **per-IP rate limiting**:
 - **Use Case**: Prevents abuse and ensures fair resource allocation
 
 **Example Rate Limit Exceeded Response**:
+
 ```json
 {
   "code": 429,
@@ -235,6 +239,7 @@ All API endpoints are subject to **per-IP rate limiting**:
 ```
 
 **Best Practices**:
+
 1. Implement exponential backoff when you receive 429 responses
 2. Cache responses when possible (especially `/v1/config/camera` which is static)
 3. Use `/v1/health` for quick probes instead of `/v1/health/detailed`
@@ -256,12 +261,14 @@ The API includes deprecated endpoints for backward compatibility. Migrate to new
 **Migration Example**:
 
 **Old (Deprecated)**:
+
 ```bash
 # Get both config and metrics from one endpoint
 curl http://localhost:8000/api/config | jq
 ```
 
 **New (Recommended)**:
+
 ```bash
 # Get static config
 curl http://localhost:8000/v1/config/camera | jq '.resolution, .fps, .jpeg_quality'
@@ -274,12 +281,14 @@ curl http://localhost:8000/v1/health/detailed | jq
 ```
 
 **Benefits of Migration**:
+
 - **Clear Separation**: Config is static (cacheable), metrics are dynamic (request frequently)
 - **Better Caching**: Cache `/v1/config/camera` responses since they don't change unless restarted
 - **Clearer API**: Each endpoint has a single responsibility
 - **Future Proof**: New v1 endpoints won't be removed, legacy endpoints will be
 
 **Timeline**:
+
 - **v0.1.0** (now): Deprecated endpoints work with `Deprecation: true` header
 - **v0.2.x**: Will continue supporting but recommend migration
 - **v0.3.0**: Legacy endpoints removed; migration required
@@ -536,6 +545,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 **This service has NO built-in authentication and is designed for private/trusted networks only.**
 
 **DO NOT expose this service directly to the internet.** Deploy it behind:
+
 - Firewall with restricted access
 - VPN or private network
 - Reverse proxy with authentication (nginx, Caddy, etc.)
@@ -554,6 +564,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 ### Recommended Deployment Patterns
 
 **Local Network Only (Recommended for Raspberry Pi)**:
+
 ```bash
 # Run on local network, firewall restricts access
 docker-compose up -d
@@ -561,6 +572,7 @@ docker-compose up -d
 ```
 
 **Remote Access with VPN**:
+
 ```bash
 # Expose only to VPN network
 # Users connect via VPN to access the camera
@@ -568,6 +580,7 @@ docker-compose up -d
 ```
 
 **Reverse Proxy with Auth (Advanced)**:
+
 ```bash
 # Nginx/Caddy in front with authentication
 # Reverse proxy example:
@@ -579,6 +592,7 @@ docker-compose up -d
 ### Future Security Enhancements
 
 Planned for future versions:
+
 - [ ] Basic authentication support (v0.2+)
 - [ ] HTTPS/TLS native support (v0.2+)
 - [ ] API key authentication (v0.3+)
@@ -597,6 +611,7 @@ Contributions are welcome! We follow a standard pull request workflow:
 6. Open a pull request
 
 Please ensure code includes:
+
 - Unit tests with race condition detection
 - Updated documentation
 - Descriptive commit messages
