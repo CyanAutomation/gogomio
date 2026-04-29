@@ -34,7 +34,7 @@ This directory is organized around **canonical, current documentation** and a se
 
 ### Architecture
 
-- [Repository Maturity Analysis](./architecture/repo-maturity.md)
+- [Repository Maturity Assessment](./repo-maturity.md) — **Project health check**: self-assessment against maturity rubric with improvement roadmap
 - [Race Conditions Analysis](./architecture/RACE_CONDITIONS_ANALYSIS.md)
 - [Dependency Security Audit](./architecture/DEPENDENCY_SECURITY_AUDIT.md)
 - [Frame Buffer GC Analysis](./architecture/FRAME_BUFFER_GC_ANALYSIS.md)
