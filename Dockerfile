@@ -25,6 +25,9 @@ RUN go mod download
 # Copy remaining source code
 COPY . .
 
+# Run tests to validate the build (fail fast if tests fail)
+RUN go test ./... -v -race
+
 # Install swag CLI and generate Swagger docs
 RUN go install github.com/swaggo/swag/cmd/swag@latest && \
     /go/bin/swag init -g cmd/gogomio/main.go

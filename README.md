@@ -1,7 +1,8 @@
 # Motion In Ocean - Go Edition 🌊
 
 [![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-blue)](https://golang.org)
-[![Tests](https://img.shields.io/badge/tests-51%2B-green)](./docs/README.md)
+[![Tests](https://github.com/CyanAutomation/gogomio/actions/workflows/test.yml/badge.svg)](https://github.com/CyanAutomation/gogomio/actions/workflows/test.yml)
+[![Coverage Status](https://codecov.io/gh/CyanAutomation/gogomio/graph/badge.svg)](https://codecov.io/gh/CyanAutomation/gogomio)
 [![Docker](https://img.shields.io/badge/Docker-multi--arch-blue)](./Dockerfile)
 [![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](./LICENSE)
 

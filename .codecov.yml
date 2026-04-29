@@ -1,0 +1,44 @@
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+ignore:
+  - "docs"
+  - "design"
+  - "scripts"
+  - ".*_test.go"
+
+codecov:
+  require_ci_to_pass: yes
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: no
+  require_base: no
+  require_head: yes
+  show_carryforward_flags: yes
+
+status:
+  project:
+    default:
+      target: auto
+      threshold: 75%
+      base: auto
+      branches:
+        - main
+        - develop
+  patch:
+    default:
+      target: auto
+      threshold: null
+  changes:
+    default:
+      branches:
+        - main
+        - develop
+
+flags:
+  unittests:
+    carryforward: yes
