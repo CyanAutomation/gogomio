@@ -8,6 +8,7 @@ The GoGoMio binary supports two modes:
 ## Quick Start
 
 ### Start the server
+
 ```bash
 ./gogomio                    # Default: server mode
 ./gogomio server            # Explicit: server mode
@@ -15,6 +16,7 @@ MOCK_CAMERA=true ./gogomio  # Development: mock camera
 ```
 
 ### Run CLI commands
+
 ```bash
 # Basic status and info
 ./gogomio status                    # Show streaming status
@@ -47,12 +49,14 @@ MOCK_CAMERA=true ./gogomio  # Development: mock camera
 ## Docker Usage
 
 ### Start server
+
 ```bash
 docker-compose up -d
 docker-compose logs gogomio
 ```
 
 ### Run CLI commands
+
 ```bash
 # Status commands
 docker-compose exec gogomio gogomio status
@@ -94,12 +98,15 @@ GOGOMIO_URL=http://localhost:9000 ./gogomio status
 ## Command Reference
 
 ### Status Command
+
 ```bash
 ./gogomio status
 ```
+
 Shows current streaming status, FPS, resolution, uptime, and JPEG quality.
 
 ### Config Commands
+
 ```bash
 ./gogomio config                    # Show all configuration
 ./gogomio config get                # Show all configuration
@@ -107,29 +114,34 @@ Shows current streaming status, FPS, resolution, uptime, and JPEG quality.
 ```
 
 ### Health Commands
+
 ```bash
 ./gogomio health check              # Quick health status
 ./gogomio health detailed           # Comprehensive health report
 ```
 
 ### Stream Commands
+
 ```bash
 ./gogomio stream info               # Current stream metrics
 ./gogomio stream stop               # Stop all active streams
 ```
 
 ### Diagnostics Command
+
 ```bash
 ./gogomio diagnostics               # System diagnostics including version, uptime, goroutines, memory
 ```
 
 ### Snapshot Commands
+
 ```bash
 ./gogomio snapshot capture          # Capture frame and write to stdout
 ./gogomio snapshot save <path>      # Capture frame and save to file
 ```
 
 ### Settings Commands
+
 ```bash
 ./gogomio settings get              # List all persistent settings
 ./gogomio settings get <key>        # Get specific setting value
@@ -137,6 +149,7 @@ Shows current streaming status, FPS, resolution, uptime, and JPEG quality.
 ```
 
 ### Version Command
+
 ```bash
 ./gogomio version                   # Display version and build information
 ```
@@ -158,6 +171,7 @@ Error: unknown config key: invalid_key
 ## Integration Examples
 
 ### Health Monitoring Script
+
 ```bash
 #!/bin/bash
 # Monitor health every 10 seconds
@@ -168,6 +182,7 @@ done
 ```
 
 ### Automated Snapshots
+
 ```bash
 #!/bin/bash
 # Capture snapshots every minute
@@ -179,6 +194,7 @@ done
 ```
 
 ### Performance Monitoring
+
 ```bash
 #!/bin/bash
 # Monitor streaming metrics
@@ -187,6 +203,7 @@ done
 ```
 
 ### Docker Compose Health Check
+
 ```bash
 #!/bin/bash
 # Run health check in Docker Compose
@@ -196,6 +213,7 @@ docker-compose exec gogomio gogomio health check && echo "✓ Healthy" || echo "
 ## Development
 
 ### Building from Source
+
 ```bash
 # Build CLI-enabled binary
 go build -o gogomio ./cmd/gogomio
@@ -208,6 +226,7 @@ go build -o gogomio ./cmd/gogomio
 ```
 
 ### Running Tests
+
 ```bash
 # Run all CLI tests
 go test ./internal/cli -v
@@ -228,6 +247,7 @@ The CLI uses HTTP to communicate with the running server:
 ## Troubleshooting
 
 ### "Server not running" error
+
 ```bash
 # Make sure server is started
 ./gogomio server &
@@ -238,11 +258,13 @@ curl http://localhost:8000/health
 ```
 
 ### Slow responses
+
 - Check server load: `./gogomio diagnostics`
 - Check goroutines: `./gogomio diagnostics`
 - Review memory usage: `./gogomio diagnostics`
 
 ### Docker permission issues
+
 ```bash
 # Ensure gogomio user has video device access
 docker-compose exec gogomio ls -l /dev/video0

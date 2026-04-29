@@ -18,6 +18,7 @@ This directory is organized around **canonical, current documentation** and a se
 ## Canonical Entry Points
 
 ### Guides
+
 - [CLI Guide](./guides/CLI_GUIDE.md)
 - [Quick Reference](./guides/QUICK_REFERENCE.md)
 - [Deployment Guide](./guides/DEPLOYMENT_GUIDE.md)
@@ -27,10 +28,12 @@ This directory is organized around **canonical, current documentation** and a se
 - [Multi-Arch Build](./guides/MULTI_ARCH_BUILD.md)
 
 ### Reference
+
 - [OpenAPI JSON](./reference/swagger.json)
 - [OpenAPI YAML](./reference/swagger.yaml)
 
 ### Architecture
+
 - [Repository Maturity Analysis](./architecture/repo-maturity.md)
 - [Race Conditions Analysis](./architecture/RACE_CONDITIONS_ANALYSIS.md)
 - [Dependency Security Audit](./architecture/DEPENDENCY_SECURITY_AUDIT.md)
@@ -39,6 +42,7 @@ This directory is organized around **canonical, current documentation** and a se
 - [MIO Sprite Migration](./architecture/MIO_SPRITE_MIGRATION.md)
 
 ### Archive
+
 - [Comprehensive Improvement Summary](./archive/COMPREHENSIVE_IMPROVEMENT_SUMMARY.md)
 - [Docker Deployment Summary](./archive/DOCKER_DEPLOYMENT_SUMMARY.md)
 - [Option 2 Implementation](./archive/OPTION2_IMPLEMENTATION.md)
