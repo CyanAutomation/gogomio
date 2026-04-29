@@ -389,3 +389,50 @@ If optimization is needed, **Strategy 2 (Direct Write)** offers best risk/reward
 - Profiling Go: https://go.dev/blog/profiling-go-programs
 - sync.Pool Pattern: https://golang.org/pkg/sync/#Pool
 - Runtime GC Tuning: https://pkg.go.dev/runtime/debug#SetGCPercent
+
+---
+
+## Performance Baselines (Continuous Tracking)
+
+The following baselines are tracked continuously via [.github/workflows/benchmark.yml](../../.github/workflows/benchmark.yml) to detect performance regressions.
+
+### Current Baselines (April 2026)
+
+| Metric | Baseline | Threshold | Status |
+|--------|----------|-----------|--------|
+| **FrameBuffer.Write()** | ~150ns per frame | <250ns | ✅ Optimal |
+| **MJPEG Handler throughput** | ~10,000 frames/sec | >5,000 frames/sec | ✅ Excellent |
+| **GC Pause (per request)** | <1ms | <5ms | ✅ Acceptable |
+| **Connection tracking overhead** | <100μs per new connection | <500μs | ✅ Negligible |
+| **Frame copy latency** | 1-2 MB/sec for 100 KB frames | >500 KB/sec | ✅ Sufficient |
+
+### Benchmark Commands
+
+```bash
+# Run all benchmarks
+go test -bench=. -benchmem -benchtime=2s ./internal/camera ./internal/api
+
+# Run frame buffer benchmarks only
+go test -bench=FrameBuffer -benchmem ./internal/camera
+
+# Run handler benchmarks only
+go test -bench=Handler -benchmem ./internal/api
+
+# Compare with stored baseline
+go test -bench=. -benchmem ./internal/camera > current.txt
+benchstat baseline.txt current.txt
+```
+
+### Regression Detection
+
+Benchmarks are run:
+- **Scheduled**: Weekly (every Monday 9 AM UTC)
+- **On-demand**: Via `workflow_dispatch` trigger
+- **On push**: To main branch (optional; can be disabled if too slow)
+
+**Regression threshold**: >10% performance degradation triggers warning
+**Action**: If regression detected, investigate in related commit and optimize before merge
+
+### Historical Baselines
+
+- **v0.1.0 (April 2026)**: Baselines established; all metrics green
