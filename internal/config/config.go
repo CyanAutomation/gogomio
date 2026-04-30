@@ -123,10 +123,15 @@ func (c *Config) FrameTimeout() time.Duration {
 		return 5 * time.Second // Default if no FPS set
 	}
 
-	frameIntervalMS := 1000.0 / float64(c.TargetFPS)
-	timeoutMS := frameIntervalMS * 3.0
+	frameInterval := time.Second / time.Duration(c.TargetFPS)
+	timeout := frameInterval * 3
+	const minTimeout = 10 * time.Millisecond
 
-	return time.Duration(int64(timeoutMS)) * time.Millisecond
+	if timeout < minTimeout {
+		return minTimeout
+	}
+
+	return timeout
 }
 
 // AddressString returns the full address string for the HTTP server.
