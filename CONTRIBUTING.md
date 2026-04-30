@@ -174,6 +174,12 @@ func TestNewFeatureRace(t *testing.T) {
    go test -bench=. -benchmem ./internal/camera ./internal/api
    ```
 
+### Fault-Injection Logging Notes
+
+- Some `internal/settings` fault-injection tests intentionally trigger persist failures to validate rollback and cleanup paths.
+- These tests are expected to emit error-level log lines while still **passing**.
+- Expected-path logs in these tests are prefixed with `[expected-failure-path]` to help CI readers distinguish intentional error logs from real regressions.
+
 2. **Table-driven tests** for multiple scenarios:
    ```go
    func TestFrameBuffer(t *testing.T) {
