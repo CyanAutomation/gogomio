@@ -1,15 +1,37 @@
 package settings
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 )
+
+func captureSettingsLogs(t *testing.T) (*bytes.Buffer, func()) {
+	t.Helper()
+
+	var captured bytes.Buffer
+	originalWriter := log.Writer()
+	originalFlags := log.Flags()
+	originalPrefix := log.Prefix()
+
+	log.SetOutput(&captured)
+	log.SetFlags(0)
+	log.SetPrefix("")
+
+	return &captured, func() {
+		log.SetOutput(originalWriter)
+		log.SetFlags(originalFlags)
+		log.SetPrefix(originalPrefix)
+	}
+}
 
 // TestSettingsSetGet tests basic set and get operations
 func TestSettingsSetGet(t *testing.T) {
@@ -227,6 +249,8 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	settingsPath := filepath.Join(tmpDir, "atomic_test.json")
 	tempGlob := settingsPath + ".*.tmp"
 	lockPath := settingsPath + ".lock"
+	logBuffer, restoreLogs := captureSettingsLogs(t)
+	defer restoreLogs()
 
 	m := NewManager(settingsPath)
 
@@ -332,6 +356,12 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	err = m.Set("key", "should-fail")
 	if err == nil {
 		t.Fatal("expected Set to fail when rename destination is a directory")
+	}
+	// Fault-injection path intentionally emits error-level logs.
+	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
+	t.Log("[expected-failure-path] forcing persist rename failure for Set")
+	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
+		t.Fatalf("expected rename failure log, got: %q", output)
 	}
 
 	// Restore original file and verify it is still valid/unchanged from before the interrupted path.
@@ -490,6 +520,8 @@ func TestSettingsSetAfterNullFile(t *testing.T) {
 func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "batch_settings.json")
+	logBuffer, restoreLogs := captureSettingsLogs(t)
+	defer restoreLogs()
 
 	m := NewManager(settingsPath)
 	if err := m.Set("stable", "value"); err != nil {
@@ -516,6 +548,12 @@ func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected SetMany to fail when rename destination is a directory")
 	}
+	// Fault-injection path intentionally emits error-level logs.
+	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
+	t.Log("[expected-failure-path] forcing persist rename failure for SetMany")
+	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
+		t.Fatalf("expected rename failure log, got: %q", output)
+	}
 
 	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
 		t.Fatalf("in-memory settings changed after failed SetMany, got=%v want=%v", gotState, beforeState)
@@ -541,6 +579,8 @@ func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "delete_settings.json")
+	logBuffer, restoreLogs := captureSettingsLogs(t)
+	defer restoreLogs()
 
 	m := NewManager(settingsPath)
 	if err := m.SetMany(map[string]interface{}{
@@ -563,6 +603,12 @@ func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected Delete to fail when rename destination is a directory")
 	}
+	// Fault-injection path intentionally emits error-level logs.
+	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
+	t.Log("[expected-failure-path] forcing persist rename failure for Delete")
+	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
+		t.Fatalf("expected rename failure log, got: %q", output)
+	}
 
 	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
 		t.Fatalf("in-memory settings changed after failed Delete, got=%v want=%v", gotState, beforeState)
@@ -573,6 +619,8 @@ func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
 func TestSettingsClearRollbackOnPersistFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "clear_settings.json")
+	logBuffer, restoreLogs := captureSettingsLogs(t)
+	defer restoreLogs()
 
 	m := NewManager(settingsPath)
 	if err := m.SetMany(map[string]interface{}{
@@ -594,6 +642,12 @@ func TestSettingsClearRollbackOnPersistFailure(t *testing.T) {
 	err := m.Clear()
 	if err == nil {
 		t.Fatal("expected Clear to fail when rename destination is a directory")
+	}
+	// Fault-injection path intentionally emits error-level logs.
+	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
+	t.Log("[expected-failure-path] forcing persist rename failure for Clear")
+	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
+		t.Fatalf("expected rename failure log, got: %q", output)
 	}
 
 	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
