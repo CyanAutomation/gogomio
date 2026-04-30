@@ -153,10 +153,10 @@
         }
 
         h1 {
-            font-size: var(--font-size-xl);
+            font-size: 26px;
             font-weight: 700;
             margin-bottom: 2px;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.3px;
         }
 
         .subtitle {
@@ -184,8 +184,7 @@
             background: var(--color-surface);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
-            border: 1px solid var(--color-border);
-            border-top: 3px solid var(--mio-highlight);
+            border-top: 3px solid var(--mio-primary);
             padding: var(--spacing-2xl);
             transition: all var(--transition-base);
             display: flex;
@@ -193,9 +192,8 @@
         }
 
         .card:hover {
-            box-shadow: var(--shadow-lg);
-            border-color: var(--color-primary-light);
-            border-top-color: var(--mio-primary);
+            box-shadow: var(--shadow-xl);
+            border-top-color: var(--mio-dark);
         }
 
         /* ====== SECTION HEADERS ====== */
@@ -607,6 +605,13 @@
 
         .mio-pulse { animation: mioPulse 1.5s ease-in-out infinite; }
 
+        @keyframes mioBlink {
+            0%, 88%, 100% { opacity: 1; }
+            92%            { opacity: 0.1; }
+        }
+
+        .mio-blink { animation: mioFloat 3s ease-in-out infinite, mioBlink 5s 1s ease-in-out infinite; }
+
         #stream-spinner {
             animation: none !important;
             border: none !important;
@@ -618,12 +623,54 @@
         #stream-idle {
             display: block;
         }
+
+        /* ====== ENTRANCE ANIMATIONS ====== */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .main-grid > .card:nth-child(1) {
+            animation: fadeInUp 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
+        }
+
+        .main-grid > .card:nth-child(2) {
+            animation: fadeInUp 400ms 100ms cubic-bezier(0.4, 0, 0.2, 1) both;
+        }
+
+        /* ====== MODAL POLISH ====== */
+        #diagnostics-modal {
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        @keyframes modalEnter {
+            from { opacity: 0; transform: scale(0.96) translateY(8px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .modal-inner {
+            animation: modalEnter var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1) both;
+        }
+
+        /* ====== ACCESSIBILITY ====== */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
 </head>
 <body>
     <header>
         <div class="container" style="display: flex; align-items: center; justify-content: center; gap: 14px; padding-top: var(--spacing-sm); padding-bottom: var(--spacing-sm);">
-            <img src="/static/mio/mio_pose_idle.png" alt="MIO mascot" class="mio-header-avatar">
+            <img src="/static/mio/mio_pose_idle.png" alt="MIO mascot" class="mio-header-avatar mio-blink">
             <div>
                 <h1>Motion In Ocean</h1>
                 <p class="subtitle">Live Streaming Camera — Go Edition</p>
@@ -645,26 +692,26 @@
                                     <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png" alt="MIO is thinking" class="mio-state-image mio-pulse">
                                 </div>
                                 <div id="stream-idle">
-                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png" alt="MIO is resting" class="mio-state-image mio-float">
+                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png" alt="MIO is resting" class="mio-state-image mio-blink">
                                 </div>
                             </div>
-                            <p id="stream-placeholder-text" style="margin: 0; color: #aac8d8; font-size: var(--font-size-lg); font-weight: 500;">Stream is stopped</p>
-                            <p id="stream-placeholder-desc" style="margin: var(--spacing-md) 0 0 0; color: #88aabb; font-size: var(--font-size-sm);">Start stream to begin viewing</p>
+                            <p id="stream-placeholder-text" style="margin: 0; color: #aac8d8; font-size: var(--font-size-lg); font-weight: 500;">Ready to stream</p>
+                            <p id="stream-placeholder-desc" style="margin: var(--spacing-md) 0 0 0; color: #88aabb; font-size: var(--font-size-sm);">Hit Start to begin viewing</p>
                         </div>
                     </div>
                 </div>
                 <div class="stream-controls">
-                    <button class="btn-primary" id="start-stream">
-                        <span>▶️</span>
+                    <button class="btn-primary" id="start-stream" aria-label="Start live stream">
+                        <span aria-hidden="true">▶️</span>
                         <span>Start Stream</span>
                     </button>
-                    <button class="btn-secondary" id="stop-stream" disabled>
-                        <span>⏹️</span>
+                    <button class="btn-secondary" id="stop-stream" aria-label="Stop live stream" disabled>
+                        <span aria-hidden="true">⏹️</span>
                         <span>Stop Stream</span>
                     </button>
                 </div>
-                <div class="stream-status">
-                    <span class="status-indicator inactive" id="status-indicator"></span>
+                <div class="stream-status" role="status" aria-live="polite">
+                    <span class="status-indicator inactive" id="status-indicator" aria-hidden="true"></span>
                     <span id="status-text">Stopped</span>
                 </div>
             </div>
@@ -672,7 +719,7 @@
             <div class="card controls-section">
                 <h2>⚙️ Settings & Stats</h2>
 
-                <div id="message" class="message"></div>
+                <div id="message" class="message" role="alert" aria-live="assertive"></div>
 
                 <button class="btn-secondary" id="diagnostics-btn" onclick="openDiagnosticsModal()">📊 Diagnostics</button>
 
@@ -706,10 +753,10 @@
     </footer>
 
     <!-- Diagnostics Modal -->
-    <div id="diagnostics-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-3xl); max-width: 600px; box-shadow: var(--shadow-2xl); max-height: 85vh; overflow-y: auto; animation: slideDown var(--transition-slow) ease;">
+    <div id="diagnostics-modal" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 1000; align-items: center; justify-content: center; padding: var(--spacing-2xl);">
+        <div class="modal-inner" style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-3xl); max-width: 600px; width: 100%; box-shadow: var(--shadow-2xl); max-height: 85vh; overflow-y: auto;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-2xl); padding-bottom: var(--spacing-lg); border-bottom: 1px solid var(--color-border);">
-                <h2 style="margin: 0; color: var(--color-primary); font-size: var(--font-size-xl);">📊 System Diagnostics</h2>
+                <h2 id="diagnostics-title" style="margin: 0; color: var(--color-primary); font-size: var(--font-size-xl);">System Diagnostics</h2>
                 <button onclick="closeDiagnosticsModal()" style="background: none; border: none; font-size: var(--font-size-2xl); cursor: pointer; color: var(--color-text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast);" onmouseover="this.style.color='var(--color-text)'" onmouseout="this.style.color='var(--color-text-secondary)'">&times;</button>
             </div>
             
@@ -720,6 +767,20 @@
     </div>
 
     <script>
+        const DIAG_ICONS = {
+            camera:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
+            grid:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
+            quality: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`,
+            image:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+            clock:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+            link:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+            alert:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+            chart:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
+            uptime:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+            warning: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+            info:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+        };
+
         class StreamController {
             constructor() {
                 this.imageElement = document.getElementById("stream-img");
@@ -745,11 +806,11 @@
                     idle: {
                         src: "/static/mio/mio_pose_sleeping.png",
                         alt: "MIO is resting",
-                        animationClass: "mio-float",
+                        animationClass: "mio-blink",
                     },
                     loading: {
-                        src: "/static/mio/mio_pose_concerned.png",
-                        alt: "MIO is thinking",
+                        src: "/static/mio/mio_pose_curious.png",
+                        alt: "MIO is curious",
                         animationClass: "mio-pulse",
                     },
                     success: {
@@ -763,9 +824,19 @@
                         animationClass: "mio-pulse",
                     },
                     running: {
-                        src: "/static/mio/mio_pose_worried.png",
-                        alt: "MIO is focused",
+                        src: "/static/mio/mio_pose_curious.png",
+                        alt: "MIO is attentive",
                         animationClass: "mio-pulse",
+                    },
+                    error: {
+                        src: "/static/mio/mio_pose_angry.png",
+                        alt: "MIO is distressed",
+                        animationClass: "mio-pulse",
+                    },
+                    looking: {
+                        src: "/static/mio/mio_pose_looking.png",
+                        alt: "MIO is scanning",
+                        animationClass: "mio-float",
                     },
                 };
 
@@ -949,7 +1020,19 @@
                     if (!response.ok) throw new Error("Failed to load stats");
 
                     const config = await response.json();
-                    document.getElementById("stat-fps").textContent = config.fps || "--";
+                    // FPS with color coding relative to target
+                    const fps = config.fps || 0;
+                    const targetFps = config.target_fps || fps || 30;
+                    const fpsEl = document.getElementById("stat-fps");
+                    fpsEl.textContent = fps || "--";
+                    if (fps) {
+                        const ratio = fps / targetFps;
+                        fpsEl.style.color = ratio >= 0.9 ? 'var(--color-success)'
+                            : ratio >= 0.5 ? 'var(--color-warning)'
+                            : 'var(--color-error)';
+                    } else {
+                        fpsEl.style.color = 'var(--color-primary)';
+                    }
                     document.getElementById("stat-resolution").textContent =
                         (config.resolution ? `${config.resolution[0]}x${config.resolution[1]}` : "--");
                     document.getElementById("stat-quality").textContent = (config.jpeg_quality || "--") + "%";
@@ -970,7 +1053,10 @@
                     if (type === "success") {
                         this.setIdlePose("success");
                         this.schedulePoseResetToIdle(2200);
-                    } else if (type === "warning" || type === "error") {
+                    } else if (type === "error") {
+                        this.setIdlePose("error");
+                        this.schedulePoseResetToIdle(5000);
+                    } else if (type === "warning") {
                         this.setIdlePose("warning");
                         this.schedulePoseResetToIdle(3000);
                     }
@@ -1002,6 +1088,11 @@
             const controller = getStreamController();
             if (!controller || controller.isStreaming) return;
 
+            if (!data.camera_ready && (data.capture_failures_consecutive || 0) > 3) {
+                controller.setIdlePose("error");
+                return;
+            }
+
             if (!data.camera_ready || (data.error_rate_percent || 0) > 20 || (data.capture_failures_consecutive || 0) > 0) {
                 controller.setIdlePose("warning");
                 return;
@@ -1024,12 +1115,12 @@
             document.getElementById('diagnostics-modal').style.display = 'flex';
             const controller = getStreamController();
             if (controller && !controller.isStreaming) {
-                controller.setLoadingPose("running");
+                controller.setLoadingPose("looking");
             }
             fetchDiagnostics();
-            // Auto-refresh diagnostics every 2 seconds
+            // Auto-refresh diagnostics every 3 seconds
             if (diagnosticsRefreshInterval) clearInterval(diagnosticsRefreshInterval);
-            diagnosticsRefreshInterval = setInterval(fetchDiagnostics, 2000);
+            diagnosticsRefreshInterval = setInterval(fetchDiagnostics, 3000);
         }
 
         function closeDiagnosticsModal() {
@@ -1092,64 +1183,64 @@
                         <!-- Quick Stats -->
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
                             <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
-                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">⏱️ Uptime</div>
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">${DIAG_ICONS.uptime} Uptime</div>
                                 <div style="font-size: var(--font-size-lg); font-weight: 700; color: var(--color-primary);">${formatUptime(data.uptime_seconds)}</div>
                             </div>
                             <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
-                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">⚠️ Error Rate</div>
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">${DIAG_ICONS.warning} Error Rate</div>
                                 <div style="font-size: var(--font-size-lg); font-weight: 700; color: ${healthColor};">${data.error_rate_percent.toFixed(1)}%</div>
                             </div>
                         </div>
 
                         <!-- Detailed Metrics -->
                         <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-lg);">
-                            <div style="font-weight: 600; margin-bottom: var(--spacing-lg); color: var(--color-text); font-size: var(--font-size-lg);">📋 Detailed Metrics</div>
+                            <div style="font-weight: 600; margin-bottom: var(--spacing-lg); color: var(--color-text); font-size: var(--font-size-lg);">Detailed Metrics</div>
                             <div style="display: grid; gap: var(--spacing-md);">
                                 <!-- FPS Metric -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🎥 Frame Rate</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.camera} Frame Rate</span>
                                     <span style="color: var(--color-primary); font-weight: 700; font-size: var(--font-size-lg);">${(data.fps_current || 0).toFixed(1)} fps</span>
                                 </div>
                                 
                                 <!-- Resolution Metric -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">📐 Resolution</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.grid} Resolution</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.resolution}</span>
                                 </div>
                                 
                                 <!-- Quality Metric -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🎨 JPEG Quality</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.quality} JPEG Quality</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.jpeg_quality}%</span>
                                 </div>
                                 
                                 <!-- Frames Captured -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">📸 Frames Captured</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.image} Frames Captured</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.frames_captured.toLocaleString()}</span>
                                 </div>
                                 
                                 <!-- Last Frame Age -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">⏳ Last Frame Age</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.clock} Last Frame Age</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.last_frame_age_seconds.toFixed(2)}s ago</span>
                                 </div>
                                 
                                 <!-- Active Streams -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🔗 Active Streams</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.link} Active Streams</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.stream_connections}/${data.max_stream_connections}</span>
                                 </div>
 
                                 <!-- Capture Failures -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">🚨 Recent Failures</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.alert} Recent Failures</span>
                                     <span style="color: ${(data.capture_failures_consecutive || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}; font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_consecutive || 0}</span>
                                 </div>
 
                                 <!-- Total Capture Failures -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">📊 Total Failures</span>
+                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.chart} Total Failures</span>
                                     <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_total}</span>
                                 </div>
                             </div>
@@ -1158,14 +1249,14 @@
                         <!-- Status Message -->
                         <div style="background: ${messageBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid ${messageBorder};">
                             <div style="font-size: var(--font-size-sm); color: ${messageColor}; font-weight: 500;">
-                                <strong>ℹ️ System Status:</strong><br/>
+                                <strong>${DIAG_ICONS.info} System Status:</strong><br/>
                                 ${data.message}
                             </div>
                         </div>
 
                         <!-- Auto-refresh indicator -->
                         <div style="text-align: center; font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--spacing-lg); animation: pulse 2s infinite;">
-                            ↻ Auto-updating every 2 seconds
+                            ↻ Auto-updating every 3 seconds
                         </div>
                     `;
                 })
@@ -1190,6 +1281,25 @@
             if (mins > 0) return `${mins}m ${secs}s`;
             return `${secs}s`;
         }
+
+        // Keyboard accessibility for modal
+        document.addEventListener('keydown', function(e) {
+            const modal = document.getElementById('diagnostics-modal');
+            if (modal.style.display !== 'flex') return;
+            if (e.key === 'Escape') {
+                closeDiagnosticsModal();
+                return;
+            }
+            if (e.key === 'Tab') {
+                const focusable = modal.querySelectorAll('button, [href], input, select, [tabindex]:not([tabindex="-1"])');
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+                    e.preventDefault();
+                    (e.shiftKey ? last : first).focus();
+                }
+            }
+        });
 
         // Close modal when clicking outside
         document.getElementById('diagnostics-modal')?.addEventListener('click', function(e) {
