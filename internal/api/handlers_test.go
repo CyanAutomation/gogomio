@@ -644,9 +644,14 @@ func TestStreamingConnectionLimit(t *testing.T) {
 	time.Sleep(600 * time.Millisecond)
 
 	// First request should succeed
-	req1, _ := http.NewRequest("GET", "/stream.mjpg", nil)
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	req1, _ := http.NewRequestWithContext(ctx1, "GET", "/stream.mjpg", nil)
 	w1 := httptest.NewRecorder()
-	go router.ServeHTTP(w1, req1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.ServeHTTP(w1, req1)
+	}()
 	time.Sleep(100 * time.Millisecond)
 
 	// Second request should be rejected (conn limit)
@@ -660,6 +665,13 @@ func TestStreamingConnectionLimit(t *testing.T) {
 
 	if !contains(w2.Body.String(), "Max stream connections") {
 		t.Error("error message not found in response")
+	}
+
+	cancel1()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first stream handler did not exit after cancel")
 	}
 }
 
