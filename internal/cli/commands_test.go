@@ -180,11 +180,7 @@ func TestSettingsGetCmd_PrintsAllKeysAndSpecificValue(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	allOutput, err := captureStdout(func() error {
 		return settingsGetCmd.RunE(settingsGetCmd, []string{})
@@ -247,11 +243,7 @@ func TestStatusCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return statusCmd.RunE(statusCmd, []string{})
@@ -275,11 +267,7 @@ func TestStatusCmd_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	_, err := captureStdout(func() error {
 		return statusCmd.RunE(statusCmd, []string{})
@@ -305,11 +293,7 @@ func TestConfigCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return configCmd.RunE(configCmd, []string{})
@@ -337,11 +321,7 @@ func TestConfigGetCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	// Test getting specific key
 	output, err := captureStdout(func() error {
@@ -366,11 +346,7 @@ func TestConfigGetCmd_InvalidKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	_, err := captureStdout(func() error {
 		return configGetCmd.RunE(configGetCmd, []string{"nonexistent"})
@@ -397,11 +373,7 @@ func TestHealthCheckCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return healthCheckCmd.RunE(healthCheckCmd, []string{})
@@ -431,11 +403,7 @@ func TestHealthDetailedCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return healthDetailedCmd.RunE(healthDetailedCmd, []string{})
@@ -461,11 +429,7 @@ func TestSnapshotCaptureCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	// Capture stdout to verify JPEG is written
 	output, err := captureStdout(func() error {
@@ -492,11 +456,7 @@ func TestSnapshotSaveCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	// Create temp file
 	tmpDir := t.TempDir()
@@ -542,11 +502,7 @@ func TestDiagnosticsCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return diagnosticsCmd.RunE(diagnosticsCmd, []string{})
@@ -583,11 +539,7 @@ func TestStreamInfoCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return streamInfoCmd.RunE(streamInfoCmd, []string{})
@@ -614,11 +566,7 @@ func TestStreamStopCmd(t *testing.T) {
 	}))
 	defer server.Close()
 
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", server.URL)
+	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
 		return streamStopCmd.RunE(streamStopCmd, []string{})
@@ -633,11 +581,7 @@ func TestStreamStopCmd(t *testing.T) {
 
 // TestClientConnectionError tests client error handling when server is unreachable
 func TestClientConnectionError(t *testing.T) {
-	originalURL := os.Getenv("GOGOMIO_URL")
-	t.Cleanup(func() {
-		_ = os.Setenv("GOGOMIO_URL", originalURL)
-	})
-	_ = os.Setenv("GOGOMIO_URL", "http://localhost:1234") // Unused port
+	t.Setenv("GOGOMIO_URL", "http://localhost:1234") // Unused port
 
 	_, err := captureStdout(func() error {
 		return statusCmd.RunE(statusCmd, []string{})
