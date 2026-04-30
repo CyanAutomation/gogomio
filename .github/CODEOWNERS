@@ -1,0 +1,27 @@
+# Global owner — all files default to CyanAutomation
+
+* @CyanAutomation
+
+# Core streaming and camera logic
+
+/internal/camera/ @CyanAutomation
+
+# HTTP API and handlers
+
+/internal/api/ @CyanAutomation
+
+# CLI commands
+
+/internal/cli/ @CyanAutomation
+
+# Configuration
+
+/internal/config/ @CyanAutomation
+
+# Documentation
+
+/docs/ @CyanAutomation
+
+# CI/CD workflows
+
+/.github/workflows/ @CyanAutomation
