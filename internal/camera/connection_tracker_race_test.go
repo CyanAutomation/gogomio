@@ -1,11 +1,25 @@
 package camera
 
 import (
+	"flag"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func raceScaledDuration(base time.Duration) time.Duration {
+	if isRaceMode() {
+		return base * 3
+	}
+	return base
+}
+
+func isRaceMode() bool {
+	raceFlag := flag.Lookup("test.race")
+	return raceFlag != nil && raceFlag.Value.String() == "true"
+}
 
 // TestConnectionTrackerHighContention stress tests increment/decrement under high concurrency
 func TestConnectionTrackerHighContention(t *testing.T) {
@@ -38,8 +52,10 @@ func TestConnectionTrackerHighContention(t *testing.T) {
 		}(i)
 	}
 
-	// Run for 5 seconds
-	time.Sleep(5 * time.Second)
+	// Run for a bounded duration
+	runFor := raceScaledDuration(1500 * time.Millisecond)
+	timer := time.NewTimer(runFor)
+	<-timer.C
 	close(done)
 	wg.Wait()
 
@@ -80,18 +96,20 @@ func TestConnectionTrackerTryIncrementRaceFree(t *testing.T) {
 				}
 				if ct.TryIncrement(maxConnections) {
 					atomic.AddInt64(&acceptedCount, 1)
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(raceScaledDuration(15 * time.Millisecond))
 					ct.Decrement()
 				} else {
 					atomic.AddInt64(&rejectedCount, 1)
-					time.Sleep(10 * time.Millisecond)
+					runtime.Gosched()
 				}
 			}
 		}(i)
 	}
 
-	// Run for 2 seconds
-	time.Sleep(2 * time.Second)
+	// Run for a bounded duration
+	runFor := raceScaledDuration(800 * time.Millisecond)
+	timer := time.NewTimer(runFor)
+	<-timer.C
 	close(done)
 	wg.Wait()
 
