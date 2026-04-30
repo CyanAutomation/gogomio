@@ -297,12 +297,18 @@ func (fm *FrameManager) delayedStopFallback(req cleanupRequest) {
 		}
 	case <-req.stopCh:
 		if !timer.Stop() {
-			<-timer.C
+			select {
+			case <-timer.C:
+			default:
+			}
 		}
 		log.Printf("📊 Fallback stop cancelled: new client connected")
 	case <-fm.cleanupStop:
 		if !timer.Stop() {
-			<-timer.C
+			select {
+			case <-timer.C:
+			default:
+			}
 		}
 	}
 }
@@ -357,14 +363,20 @@ func (fm *FrameManager) cleanupLoop() {
 
 			case <-req.stopCh:
 				if !timer.Stop() {
-					<-timer.C
+					select {
+					case <-timer.C:
+					default:
+					}
 				}
 				// Stop was cancelled (new client connected)
 				log.Printf("📊 Stop cancelled: new client connected")
 
 			case <-fm.cleanupStop:
 				if !timer.Stop() {
-					<-timer.C
+					select {
+					case <-timer.C:
+					default:
+					}
 				}
 				return
 			}

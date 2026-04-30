@@ -1363,6 +1363,41 @@ func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
 	}
 }
 
+func TestFrameManagerStopReturnsDuringTimerCancelExpiryRaces(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 5*time.Millisecond)
+	t.Cleanup(fm.Stop)
+
+	for i := 0; i < 100; i++ {
+		stopCh := make(chan struct{})
+		req := cleanupRequest{
+			delay:  1 * time.Millisecond,
+			stopCh: stopCh,
+			done:   make(chan struct{}),
+		}
+
+		fm.fallbackWG.Add(1)
+		go fm.delayedStopFallback(req)
+
+		// Race cancellation against timer expiry.
+		time.Sleep(500 * time.Microsecond)
+		close(stopCh)
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		fm.Stop()
+		close(stopDone)
+	}()
+
+	select {
+	case <-stopDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop() did not return during timer cancel/expiry races")
+	}
+}
+
 func TestHandleSettingsGet_ReturnsSettingsEnvelope(t *testing.T) {
 	fm := NewFrameManager(&readinessCamera{ready: true}, &config.Config{})
 	if err := fm.settingsM.SetMany(map[string]interface{}{
