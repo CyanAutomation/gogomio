@@ -459,19 +459,25 @@ func TestSignalHandling_ContextCancellation(t *testing.T) {
 
 	// Track if signal was received
 	signalReceived := atomic.Bool{}
+	processed := make(chan struct{})
 
 	// Simulate the signal handling pattern from main.go
 	go func() {
 		signal.Notify(testSigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-testSigChan
 		signalReceived.Store(true)
+		close(processed)
 	}()
 
 	// Send a signal
 	testSigChan <- syscall.SIGINT
 
-	// Wait briefly for signal to be processed
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-processed:
+	case <-time.After(300 * time.Millisecond):
+		t.Logf("timeout waiting for signal processing ack")
+		t.Fatalf("signal processing was not acknowledged")
+	}
 
 	if !signalReceived.Load() {
 		t.Fatalf("expected signal to be received")

@@ -48,7 +48,7 @@ func TestFrameBufferConcurrentWriteRead(t *testing.T) {
 					return
 				default:
 				}
-				_, seq := fb.WaitFrame(10*time.Millisecond, lastSeq)
+				_, seq := fb.WaitFrame(raceScaledDuration(10*time.Millisecond), lastSeq)
 				if seq > lastSeq {
 					lastSeq = seq
 					atomic.AddInt64(&readCount, 1)
@@ -57,8 +57,9 @@ func TestFrameBufferConcurrentWriteRead(t *testing.T) {
 		}(i)
 	}
 
-	// Run for 1 second
-	time.Sleep(1 * time.Second)
+	runFor := raceScaledDuration(400 * time.Millisecond)
+	timer := time.NewTimer(runFor)
+	<-timer.C
 	close(done)
 	wg.Wait()
 
@@ -66,10 +67,17 @@ func TestFrameBufferConcurrentWriteRead(t *testing.T) {
 		t.Logf("concurrent write/read stress test: %d writes, %d reads", writeCount, readCount)
 	}
 
-	// Verify frameSeq monotonicity
+	// Verify frameSeq monotonicity with a bounded eventual loop.
 	seq1 := fb.CurrentSequence()
-	time.Sleep(100 * time.Millisecond)
-	seq2 := fb.CurrentSequence()
+	var seq2 uint64
+	deadline := time.Now().Add(raceScaledDuration(300 * time.Millisecond))
+	for {
+		seq2 = fb.CurrentSequence()
+		if seq2 >= seq1 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	if seq2 < seq1 {
 		t.Errorf("frame sequence went backwards: %d -> %d", seq1, seq2)
 	}
@@ -98,7 +106,7 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 				return
 			default:
 				_, _ = fb.Write(frame)
-				time.Sleep(5 * time.Millisecond)
+				time.Sleep(raceScaledDuration(2 * time.Millisecond))
 			}
 		}
 	}()
@@ -109,7 +117,7 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 		go func(id int) {
 			defer readersWG.Done()
 			for j := 0; j < 50; j++ {
-				frame, _ := fb.WaitFrame(20*time.Millisecond, 0)
+				frame, _ := fb.WaitFrame(raceScaledDuration(20*time.Millisecond), 0)
 				mu.Lock()
 				if frame != nil {
 					successCount++
@@ -130,6 +138,7 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 	mu.Unlock()
 
 	if total != 30*50 {
+		t.Logf("timeout branch diagnostic: success=%d timeout=%d expected=%d", successCount, timeoutCount, 30*50)
 		t.Errorf("expected 1500 waits, got %d", total)
 	}
 
@@ -143,7 +152,7 @@ func TestFrameBufferWaitFrameNoPerWaiterGoroutine(t *testing.T) {
 	fb := NewFrameBuffer(stats, 0)
 
 	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(raceScaledDuration(20 * time.Millisecond))
 	before := runtime.NumGoroutine()
 
 	const waiters = 200
@@ -152,7 +161,7 @@ func TestFrameBufferWaitFrameNoPerWaiterGoroutine(t *testing.T) {
 	for i := 0; i < waiters; i++ {
 		go func() {
 			defer wg.Done()
-			frame, seq := fb.WaitFrame(20*time.Millisecond, 0)
+			frame, seq := fb.WaitFrame(raceScaledDuration(20*time.Millisecond), 0)
 			if frame != nil || seq != 0 {
 				t.Errorf("expected timeout result, got frame=%v seq=%d", frame != nil, seq)
 			}
@@ -161,9 +170,9 @@ func TestFrameBufferWaitFrameNoPerWaiterGoroutine(t *testing.T) {
 	wg.Wait()
 
 	// Allow timer internals and goroutines to settle before measuring.
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(raceScaledDuration(100 * time.Millisecond))
 	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(raceScaledDuration(20 * time.Millisecond))
 	after := runtime.NumGoroutine()
 
 	// Large growth would indicate per-wait goroutine behavior.
