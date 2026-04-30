@@ -492,21 +492,22 @@ func (fm *FrameManager) Stop() {
 	log.Printf("✓ Cleanup loop exited cleanly")
 }
 
-// GetFrame returns a copy of the current frame for snapshot endpoints.
-// Ensures capture is running to provide current frames on-demand.
+// GetFrame returns an owned immutable snapshot of the latest frame bytes.
+// The returned slice never aliases internal frame-buffer memory.
 func (fm *FrameManager) GetFrame() []byte {
 	// Temporarily increment client count to ensure capture is running
 	fm.IncrementClients()
 	defer fm.DecrementClients()
 
-	// Wait briefly for a frame to become available
-	// Wait briefly for a frame to become available
+	// Wait briefly for a frame to become available.
 	frame, _ := fm.frameBuffer.WaitFrame(100*time.Millisecond, 0)
 	if frame != nil {
-		return frame
+		frameCopy := make([]byte, len(frame))
+		copy(frameCopy, frame)
+		return frameCopy
 	}
 
-	// Fall back to existing frame if available
+	// Fall back to existing frame if available (already returned as a copy).
 	return fm.frameBuffer.GetFrame()
 }
 
