@@ -585,9 +585,7 @@ func TestProbeV4L2CaptureNodeSuccess(t *testing.T) {
 		return nil, nil
 	}
 	var buf bytes.Buffer
-	orig := log.Writer()
-	log.SetOutput(&buf)
-	defer log.SetOutput(orig)
+	rc.SetLogger(log.New(&buf, "", 0))
 
 	if err := rc.probeV4L2CaptureNode(); err != nil {
 		t.Fatalf("expected probe success, got %v", err)

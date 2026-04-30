@@ -141,11 +141,10 @@ func TestInitializeCamera_RealFailureLogsMockFallbackRuntimeSwitch(t *testing.T)
 	mockCam := &fakeCamera{}
 
 	var logBuffer bytes.Buffer
-	originalWriter := log.Writer()
-	log.SetOutput(&logBuffer)
-	defer log.SetOutput(originalWriter)
+	logger := log.New(&logBuffer, "", 0)
 
-	_, backend, err := initializeCamera(
+	_, backend, err := initializeCameraWithLogger(
+		logger,
 		cfg,
 		func() camera.Camera { return realCam },
 		func() camera.Camera { return mockCam },
@@ -267,11 +266,9 @@ func TestServerInitialization_ErrorHandling(t *testing.T) {
 	mockCam := &fakeCamera{startErr: errors.New("mock initialization failed")}
 
 	var logBuffer bytes.Buffer
-	originalWriter := log.Writer()
-	log.SetOutput(&logBuffer)
-	defer log.SetOutput(originalWriter)
+	logger := log.New(&logBuffer, "", 0)
 
-	_, _, err := initializeCamera(cfg,
+	_, _, err := initializeCameraWithLogger(logger, cfg,
 		func() camera.Camera { return realCam },
 		func() camera.Camera { return mockCam },
 	)
