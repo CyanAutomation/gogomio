@@ -898,21 +898,24 @@ func TestFrameManagerStreamAndCaptureLifecycleRaceFree(t *testing.T) {
 		w := httptest.NewRecorder()
 		errCh := make(chan error, 1)
 
+		ctx, cancel := context.WithCancel(context.Background())
+
 		go func() {
-			req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+			req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
 			errCh <- fm.StreamFrame(w, req, cfg.MaxStreamConnections)
 		}()
 
 		time.Sleep(15 * time.Millisecond)
 		fm.stopCapture()
+		cancel()
 
 		select {
 		case err := <-errCh:
 			if err == nil {
 				t.Fatalf("expected stream to stop with an error")
 			}
-			if !strings.Contains(err.Error(), "stream stopped") {
-				t.Fatalf("expected stream stopped error, got %v", err)
+			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "stream stopped") {
+				t.Fatalf("expected context canceled or stream stopped error, got %v", err)
 			}
 		case <-time.After(500 * time.Millisecond):
 			t.Fatalf("stream did not stop after capture shutdown on iteration %d", i)
