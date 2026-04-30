@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -35,8 +36,9 @@ type FrameManager struct {
 	clientImbalance int64 // atomic counter for decrement calls when clientCount is already 0
 
 	// Channel to signal goroutine to stop
-	doneChan    chan struct{}
-	stopChancel chan struct{} // Channel to cancel pending stop
+	doneChan     chan struct{}
+	stopChancel  <-chan struct{} // Channel to cancel pending stop
+	stopCancelFn context.CancelFunc
 
 	// Cleanup infrastructure for idle timeout
 	cleanupCh       chan cleanupRequest
@@ -61,7 +63,7 @@ type FrameManager struct {
 // cleanupRequest represents a pending cleanup task
 type cleanupRequest struct {
 	delay  time.Duration
-	stopCh chan struct{}
+	stopCh <-chan struct{}
 	done   chan struct{}
 }
 
@@ -103,7 +105,6 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		connTracker:   camera.NewConnectionTracker(),
 		settingsM:     settings.NewManager("/tmp/gogomio/settings.json"),
 		doneChan:      make(chan struct{}),
-		stopChancel:   make(chan struct{}),
 		cleanupCh:     make(chan cleanupRequest, 8),
 		cleanupStop:   make(chan struct{}),
 		cleanupDone:   make(chan struct{}),
@@ -111,6 +112,7 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		idleStopDelay: idleStopDelay,
 		cleanupAccept: true,
 	}
+	fm.rotateStopCancelLocked()
 	fm.cleanupSendCond = sync.NewCond(&fm.cleanupSendMu)
 
 	// Start background cleanup goroutine
@@ -126,13 +128,21 @@ func (fm *FrameManager) IncrementClients() {
 	log.Printf("🔗 Client count incremented to: %d", new)
 	if new == 1 {
 		fm.captureMu.Lock()
-		// Cancel any pending stop by closing the stopChancel
-		close(fm.stopChancel)
-		fm.stopChancel = make(chan struct{})
+		// Cancel any pending stop and rotate to a fresh cancellation signal.
+		fm.rotateStopCancelLocked()
 		fm.captureMu.Unlock()
 		log.Printf("🎬 Starting capture (first client)")
 		fm.startCapture()
 	}
+}
+
+func (fm *FrameManager) rotateStopCancelLocked() {
+	if fm.stopCancelFn != nil {
+		fm.stopCancelFn()
+	}
+	stopCtx, cancel := context.WithCancel(context.Background())
+	fm.stopChancel = stopCtx.Done()
+	fm.stopCancelFn = cancel
 }
 
 // DecrementClients decrements the client count and stops capture if this is the last client.
@@ -163,8 +173,8 @@ func (fm *FrameManager) startCapture() {
 	done := make(chan struct{})
 	fm.captureStarted = true
 	fm.doneChan = done
-	// Create a new stopChancel for the new capture cycle
-	fm.stopChancel = make(chan struct{})
+	// Create a new stop-cancel signal for this capture cycle.
+	fm.rotateStopCancelLocked()
 	atomic.AddInt64(&fm.captureStarts, 1)
 	fm.captureMu.Unlock()
 	go fm.captureLoop(done)

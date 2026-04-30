@@ -1143,6 +1143,66 @@ func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T)
 	}
 }
 
+func TestFrameManagerConcurrentIncrementAndStopCancelTransitionsDoNotPanic(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+
+	for i := 0; i < 200; i++ {
+		cam := &captureLoopCountingCamera{}
+		fm := newFrameManager(cam, cfg, 10*time.Millisecond)
+
+		panicCh := make(chan any, 4)
+		var wg sync.WaitGroup
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCh <- r
+				}
+			}()
+			for j := 0; j < 20; j++ {
+				fm.IncrementClients()
+				time.Sleep(time.Microsecond)
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCh <- r
+				}
+			}()
+			for j := 0; j < 20; j++ {
+				fm.DecrementClients()
+				time.Sleep(time.Microsecond)
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					panicCh <- r
+				}
+			}()
+			time.Sleep(2 * time.Millisecond)
+			fm.Stop()
+		}()
+
+		wg.Wait()
+		select {
+		case p := <-panicCh:
+			t.Fatalf("iteration %d: unexpected panic from Increment/Decrement/Stop race: %v", i, p)
+		default:
+		}
+
+		// Ensure cleanup if Stop() lost the race in goroutine scheduling.
+		fm.Stop()
+	}
+}
+
 func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
