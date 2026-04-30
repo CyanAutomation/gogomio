@@ -29,7 +29,7 @@ RUN apk add --no-cache gcc musl-dev
 COPY . .
 
 # Run tests to validate the build with structured logs and concise failure summaries
-RUN set -eu;     mkdir -p /tmp/test-logs;     status=0;     for pkg in $(go list ./...); do       safe_pkg=$(echo "$pkg" | tr '/.' '__');       log_file="/tmp/test-logs/${safe_pkg}.jsonl";       echo "=== Testing package: ${pkg} ===";       if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file"; then         status=1;         echo "--- Failure summary for ${pkg} ---";         awk '
+RUN set -eu;     mkdir -p /tmp/test-logs;     status=0;     for pkg in $(go list ./...); do       safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g');       log_file="/tmp/test-logs/${safe_pkg}.jsonl";       echo "=== Testing package: ${pkg} ===";       if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file"; then         status=1;         echo "--- Failure summary for ${pkg} ---";         awk '
           BEGIN { pkg = ""; test = ""; msg = "" }
           /"Action":"fail"/ {
             if (match($0, /"Package":"[^"]+"/)) {
