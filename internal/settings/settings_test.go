@@ -200,10 +200,10 @@ func TestSettingsAtomicWrite(t *testing.T) {
 			t.Fatalf("temp files should not exist after successful write, found=%v", leftovers)
 		}
 
-		if _, err := os.Stat(lockPath); err == nil {
-			t.Fatalf("lock file should be cleaned up after successful write: %s", lockPath)
-		} else if !os.IsNotExist(err) {
-			t.Fatalf("failed to check lock file cleanup: %v", err)
+		if info, err := os.Stat(lockPath); err != nil {
+			t.Fatalf("lock file should persist and be reusable after successful write: %v", err)
+		} else if info.IsDir() {
+			t.Fatalf("lock path should be a file, got directory: %s", lockPath)
 		}
 	}
 

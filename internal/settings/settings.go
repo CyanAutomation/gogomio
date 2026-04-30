@@ -208,10 +208,8 @@ func (m *Manager) persistData(settings map[string]interface{}) error {
 		if err := lockFile.Close(); err != nil {
 			log.Printf("⚠️  Settings: failed to close lock file: %v", err)
 		}
-
-		if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
-			log.Printf("⚠️  Settings: failed to clean up lock file: %v", err)
-		}
+		// Keep the lock file on disk so all processes continue to lock the same inode.
+		// Deleting and recreating lockfiles can split lock domains across processes.
 	}()
 
 	// Create backup of existing file before writing new one
