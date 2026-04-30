@@ -74,6 +74,8 @@ type countingStreamWriter struct {
 
 	mu         sync.Mutex
 	boundaries int
+	statusCode int
+	buf        []byte
 }
 
 type frameProbeWriter struct {
@@ -121,19 +123,35 @@ func (w *countingStreamWriter) Write(p []byte) (int, error) {
 
 	// Count how many frame boundaries are in the data
 	w.boundaries += strings.Count(string(p), "--frame\r\n")
+	w.buf = append(w.buf, p...)
 	if w.boundaries >= w.targetFrames {
 		return 0, errStopStream
 	}
 	return len(p), nil
 }
 
-func (w *countingStreamWriter) WriteHeader(_ int) {}
+func (w *countingStreamWriter) WriteHeader(code int) { w.statusCode = code }
 func (w *countingStreamWriter) Flush()            {}
 
 func (w *countingStreamWriter) BoundaryCount() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.boundaries
+}
+
+func (w *countingStreamWriter) StatusCode() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.statusCode == 0 {
+		return http.StatusOK
+	}
+	return w.statusCode
+}
+
+func (w *countingStreamWriter) BodyString() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return string(w.buf)
 }
 
 // setupTestServer creates a test Chi router with API handlers
@@ -391,14 +409,18 @@ func TestSnapshotEndpoint(t *testing.T) {
 
 	// Pre-populate frame by making a stream request in background
 	// This ensures capture loop is started and frame buffer has content
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	streamWriter := newCountingStreamWriter(2)
 	go func() {
-		req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
+		defer close(done)
+		req, _ := http.NewRequestWithContext(ctx, "GET", "/stream.mjpg", nil)
+		router.ServeHTTP(streamWriter, req)
 	}()
-
-	// Wait for frame to be captured and buffered
-	time.Sleep(200 * time.Millisecond)
+	waitForStreamBoundaries(t, streamWriter, 1)
+	cancel()
+	waitForDone(t, done, 2*time.Second, "snapshot prefill stream")
 
 	// Now test snapshot endpoint
 	req, _ := http.NewRequest("GET", "/snapshot.jpg", nil)
@@ -436,38 +458,30 @@ func TestStreamEndpoint(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
 	req = req.WithContext(ctx)
-	recorder := httptest.NewRecorder()
-
 	done := make(chan struct{})
+	streamWriter := newCountingStreamWriter(2)
 	go func() {
 		defer close(done)
-		router.ServeHTTP(recorder, req)
+		router.ServeHTTP(streamWriter, req)
 	}()
 
-	// Wait a bit for the stream to start sending frames
-	time.Sleep(500 * time.Millisecond)
+	waitForStreamBoundaries(t, streamWriter, 1)
 
 	// Cancel the context to stop the handler
 	cancel()
 
 	// Wait for handler to exit before reading response
-	select {
-	case <-done:
-	case <-time.After(1 * time.Second):
-		t.Fatal("stream did not stop after context cancellation")
-	}
+	waitForDone(t, done, 2*time.Second, "stream handler")
 
-	// Now that handler is done, it's safe to read the response body without races
-	body := recorder.Body.String()
-	if !strings.Contains(body, "--frame\r\n") {
+	if streamWriter.BoundaryCount() < 1 {
 		t.Fatal("expected at least one frame boundary in response")
 	}
 
 	// Validate headers
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	if streamWriter.StatusCode() != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, streamWriter.StatusCode())
 	}
-	contentType := recorder.Header().Get("Content-Type")
+	contentType := streamWriter.Header().Get("Content-Type")
 	if contentType != "multipart/x-mixed-replace; boundary=frame" {
 		t.Fatalf("expected content type %q, got %q", "multipart/x-mixed-replace; boundary=frame", contentType)
 	}
@@ -560,39 +574,32 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
 
-	// Wait for mock camera to generate frames with lazy capture
-	time.Sleep(800 * time.Millisecond)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
 	req = req.WithContext(ctx)
-	w := httptest.NewRecorder()
-
 	// Run request in goroutine - will exit when context times out
-	done := make(chan bool)
+	done := make(chan struct{})
+	streamWriter := newCountingStreamWriter(4)
 	go func() {
-		router.ServeHTTP(w, req)
-		done <- true
+		defer close(done)
+		router.ServeHTTP(streamWriter, req)
 	}()
+	waitForStreamBoundaries(t, streamWriter, 1)
 
 	// Wait for handler to finish (context timeout or error)
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("stream handler did not exit")
-	}
+	waitForDone(t, done, 3*time.Second, "mjpeg stream handler")
 
 	// Now that handler is done, it's safe to read response without races
 
 	// Verify response headers
-	if ct := w.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
+	if ct := streamWriter.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
 		t.Errorf("Content-Type: got %q, want multipart/x-mixed-replace", ct)
 	}
 
 	// Read response body - httptest.ResponseRecorder buffers everything
-	responseBody := w.Body.String()
+	responseBody := streamWriter.BodyString()
 
 	// Verify MJPEG boundary markers are present
 	if len(responseBody) == 0 {
@@ -612,8 +619,8 @@ func TestMJPEGStreamingEndpoint(t *testing.T) {
 	}
 
 	// Verify status code is 200 (streaming started)
-	if w.Code != http.StatusOK {
-		t.Errorf("status code: got %d, want 200", w.Code)
+	if streamWriter.StatusCode() != http.StatusOK {
+		t.Errorf("status code: got %d, want 200", streamWriter.StatusCode())
 	}
 }
 
@@ -640,9 +647,6 @@ func TestStreamingConnectionLimit(t *testing.T) {
 	frame := NewFrameManager(mockCam, cfg)
 	RegisterHandlers(router, frame, cfg)
 
-	// Wait for frames to be available
-	time.Sleep(600 * time.Millisecond)
-
 	// First request should succeed
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	req1, _ := http.NewRequestWithContext(ctx1, "GET", "/stream.mjpg", nil)
@@ -652,7 +656,7 @@ func TestStreamingConnectionLimit(t *testing.T) {
 		defer close(done)
 		router.ServeHTTP(w1, req1)
 	}()
-	time.Sleep(100 * time.Millisecond)
+	waitForCaptureState(t, frame, true)
 
 	// Second request should be rejected (conn limit)
 	req2, _ := http.NewRequest("GET", "/stream.mjpg", nil)
@@ -1508,22 +1512,42 @@ func TestHandleSettingsGet_ReturnsSettingsEnvelope(t *testing.T) {
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for time.Now().Before(deadline) {
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
 		fm.captureMu.Lock()
 		started := fm.captureStarted
 		fm.captureMu.Unlock()
+		return started == want
+	}, "captureStarted to become %v", want)
+}
 
-		if started == want {
+func waitForCondition(t *testing.T, timeout, interval time.Duration, condition func() bool, format string, args ...interface{}) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
 			return
 		}
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(interval)
 	}
+	t.Fatalf(format, args...)
+}
 
-	fm.captureMu.Lock()
-	got := fm.captureStarted
-	fm.captureMu.Unlock()
-	t.Fatalf("captureStarted = %v, want %v", got, want)
+func waitForStreamBoundaries(t *testing.T, w *countingStreamWriter, minCount int) {
+	t.Helper()
+	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+		return w.BoundaryCount() >= minCount
+	}, "stream boundary count did not reach %d (got %d)", minCount, w.BoundaryCount())
+}
+
+func waitForDone(t *testing.T, done <-chan struct{}, timeout time.Duration, name string) {
+	t.Helper()
+	select {
+	case <-done:
+		return
+	case <-time.After(timeout):
+		t.Fatalf("%s did not complete in %v", name, timeout)
+	}
 }
 
 // Helper function
