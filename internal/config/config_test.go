@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -141,7 +142,7 @@ func TestConfigJSON(t *testing.T) {
 	}
 
 	// Compare
-	if *cfg != *cfg2 {
+	if !reflect.DeepEqual(cfg, cfg2) {
 		t.Errorf("Config mismatch after JSON round-trip: %+v vs %+v", cfg, cfg2)
 	}
 }
