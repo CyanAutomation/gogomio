@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -11,34 +10,9 @@ import (
 
 // TestConfigFromEnv tests loading configuration from environment variables
 func TestConfigFromEnv(t *testing.T) {
-	// Save original env vars
-	origResolution := os.Getenv("MIO_RESOLUTION")
-	origFPS := os.Getenv("MIO_FPS")
-	origPort := os.Getenv("MIO_PORT")
-
-	defer func() {
-		// Restore
-		if origResolution != "" {
-			_ = os.Setenv("MIO_RESOLUTION", origResolution)
-		} else {
-			_ = os.Unsetenv("MIO_RESOLUTION")
-		}
-		if origFPS != "" {
-			_ = os.Setenv("MIO_FPS", origFPS)
-		} else {
-			_ = os.Unsetenv("MIO_FPS")
-		}
-		if origPort != "" {
-			_ = os.Setenv("MIO_PORT", origPort)
-		} else {
-			_ = os.Unsetenv("MIO_PORT")
-		}
-	}()
-
-	// Set test values
-	_ = os.Setenv("MIO_RESOLUTION", "1280x720")
-	_ = os.Setenv("MIO_FPS", "30")
-	_ = os.Setenv("MIO_PORT", "8080")
+	t.Setenv("MIO_RESOLUTION", "1280x720")
+	t.Setenv("MIO_FPS", "30")
+	t.Setenv("MIO_PORT", "8080")
 
 	cfg := LoadFromEnv()
 
@@ -56,13 +30,8 @@ func TestConfigFromEnv(t *testing.T) {
 // TestConfigDefaults tests that default values are used when env vars are not set
 func TestConfigDefaults(t *testing.T) {
 	// Unset all config env vars
-	_ = os.Unsetenv("MIO_RESOLUTION")
-	_ = os.Unsetenv("MIO_FPS")
-	_ = os.Unsetenv("MIO_JPEG_QUALITY")
-	_ = os.Unsetenv("MIO_MAX_STREAM_CONNECTIONS")
-	_ = os.Unsetenv("MIO_TARGET_FPS")
-	_ = os.Unsetenv("MIO_PORT")
-	_ = os.Unsetenv("MIO_BIND_HOST")
+	t.Setenv("MIO_TARGET_FPS", "")
+	t.Setenv("MIO_BIND_HOST", "")
 
 	cfg := LoadFromEnv()
 
@@ -246,8 +215,7 @@ func TestFrameTimeout_HighFPSFloor(t *testing.T) {
 
 // TestConfig_InvalidResolution_ZeroWidth tests zero width in resolution
 func TestConfig_InvalidResolution_ZeroWidth(t *testing.T) {
-	_ = os.Setenv("MIO_RESOLUTION", "0x480")
-	defer func() { _ = os.Unsetenv("MIO_RESOLUTION") }()
+	t.Setenv("MIO_RESOLUTION", "0x480")
 
 	cfg := LoadFromEnv()
 	// Should fall back to default when invalid
@@ -258,8 +226,7 @@ func TestConfig_InvalidResolution_ZeroWidth(t *testing.T) {
 
 // TestConfig_InvalidResolution_ZeroHeight tests zero height in resolution
 func TestConfig_InvalidResolution_ZeroHeight(t *testing.T) {
-	_ = os.Setenv("MIO_RESOLUTION", "640x0")
-	defer func() { _ = os.Unsetenv("MIO_RESOLUTION") }()
+	t.Setenv("MIO_RESOLUTION", "640x0")
 
 	cfg := LoadFromEnv()
 	// Should fall back to default when invalid
@@ -270,8 +237,7 @@ func TestConfig_InvalidResolution_ZeroHeight(t *testing.T) {
 
 // TestConfig_InvalidResolution_NegativeWidth tests negative width
 func TestConfig_InvalidResolution_NegativeWidth(t *testing.T) {
-	_ = os.Setenv("MIO_RESOLUTION", "-640x480")
-	defer func() { _ = os.Unsetenv("MIO_RESOLUTION") }()
+	t.Setenv("MIO_RESOLUTION", "-640x480")
 
 	cfg := LoadFromEnv()
 	if cfg.Resolution != [2]int{640, 480} {
@@ -294,19 +260,17 @@ func TestConfig_InvalidResolution_Malformed(t *testing.T) {
 	}
 
 	for _, malformed := range tests {
-		_ = os.Setenv("MIO_RESOLUTION", malformed)
+		t.Setenv("MIO_RESOLUTION", malformed)
 		cfg := LoadFromEnv()
 		if cfg.Resolution != [2]int{640, 480} {
 			t.Errorf("malformed resolution %q should use default, got %v", malformed, cfg.Resolution)
 		}
 	}
-	_ = os.Unsetenv("MIO_RESOLUTION")
 }
 
 // TestConfig_InvalidFPS_Zero tests zero FPS
 func TestConfig_InvalidFPS_Zero(t *testing.T) {
-	_ = os.Setenv("MIO_FPS", "0")
-	defer func() { _ = os.Unsetenv("MIO_FPS") }()
+	t.Setenv("MIO_FPS", "0")
 
 	cfg := LoadFromEnv()
 	// Zero FPS should be ignored, use default
@@ -317,8 +281,7 @@ func TestConfig_InvalidFPS_Zero(t *testing.T) {
 
 // TestConfig_InvalidFPS_Negative tests negative FPS
 func TestConfig_InvalidFPS_Negative(t *testing.T) {
-	_ = os.Setenv("MIO_FPS", "-30")
-	defer func() { _ = os.Unsetenv("MIO_FPS") }()
+	t.Setenv("MIO_FPS", "-30")
 
 	cfg := LoadFromEnv()
 	if cfg.FPS != 24 {
@@ -337,22 +300,21 @@ func TestConfig_InvalidFPS_NonNumeric(t *testing.T) {
 	}
 
 	for _, invalid := range tests {
-		_ = os.Setenv("MIO_FPS", invalid)
+		t.Setenv("MIO_FPS", invalid)
 		cfg := LoadFromEnv()
 		if cfg.FPS != 24 {
 			t.Errorf("invalid FPS %q should use default, got %d", invalid, cfg.FPS)
 		}
 	}
-	_ = os.Unsetenv("MIO_FPS")
 }
 
 // TestConfig_TargetFPS_DefaultsToFPS tests target FPS defaults to FPS when not set
 func TestConfig_TargetFPS_DefaultsToFPS(t *testing.T) {
-	_ = os.Setenv("MIO_FPS", "30")
-	_ = os.Unsetenv("MIO_TARGET_FPS")
+	t.Setenv("MIO_FPS", "30")
+	t.Setenv("MIO_TARGET_FPS", "")
 	defer func() {
-		_ = os.Unsetenv("MIO_FPS")
-		_ = os.Unsetenv("MIO_TARGET_FPS")
+		t.Setenv("MIO_FPS", "")
+		t.Setenv("MIO_TARGET_FPS", "")
 	}()
 
 	cfg := LoadFromEnv()
@@ -363,8 +325,7 @@ func TestConfig_TargetFPS_DefaultsToFPS(t *testing.T) {
 
 // TestConfig_InvalidTargetFPS_Zero tests zero target FPS
 func TestConfig_InvalidTargetFPS_Zero(t *testing.T) {
-	_ = os.Setenv("MIO_TARGET_FPS", "0")
-	defer func() { _ = os.Unsetenv("MIO_TARGET_FPS") }()
+	t.Setenv("MIO_TARGET_FPS", "0")
 
 	cfg := LoadFromEnv()
 	// Zero target FPS should be ignored, defaults to regular FPS
@@ -375,8 +336,7 @@ func TestConfig_InvalidTargetFPS_Zero(t *testing.T) {
 
 // TestConfig_InvalidJPEGQuality_Below1 tests JPEG quality below 1
 func TestConfig_InvalidJPEGQuality_Below1(t *testing.T) {
-	_ = os.Setenv("MIO_JPEG_QUALITY", "0")
-	defer func() { _ = os.Unsetenv("MIO_JPEG_QUALITY") }()
+	t.Setenv("MIO_JPEG_QUALITY", "0")
 
 	cfg := LoadFromEnv()
 	// Should use default when outside 1-100 range
@@ -387,8 +347,7 @@ func TestConfig_InvalidJPEGQuality_Below1(t *testing.T) {
 
 // TestConfig_InvalidJPEGQuality_Above100 tests JPEG quality above 100
 func TestConfig_InvalidJPEGQuality_Above100(t *testing.T) {
-	_ = os.Setenv("MIO_JPEG_QUALITY", "101")
-	defer func() { _ = os.Unsetenv("MIO_JPEG_QUALITY") }()
+	t.Setenv("MIO_JPEG_QUALITY", "101")
 
 	cfg := LoadFromEnv()
 	if cfg.JPEGQuality != 90 {
@@ -398,8 +357,7 @@ func TestConfig_InvalidJPEGQuality_Above100(t *testing.T) {
 
 // TestConfig_InvalidJPEGQuality_Negative tests negative JPEG quality
 func TestConfig_InvalidJPEGQuality_Negative(t *testing.T) {
-	_ = os.Setenv("MIO_JPEG_QUALITY", "-50")
-	defer func() { _ = os.Unsetenv("MIO_JPEG_QUALITY") }()
+	t.Setenv("MIO_JPEG_QUALITY", "-50")
 
 	cfg := LoadFromEnv()
 	if cfg.JPEGQuality != 90 {
@@ -417,13 +375,12 @@ func TestConfig_InvalidJPEGQuality_NonNumeric(t *testing.T) {
 	}
 
 	for _, invalid := range tests {
-		_ = os.Setenv("MIO_JPEG_QUALITY", invalid)
+		t.Setenv("MIO_JPEG_QUALITY", invalid)
 		cfg := LoadFromEnv()
 		if cfg.JPEGQuality != 90 {
 			t.Errorf("invalid JPEG quality %q should use default, got %d", invalid, cfg.JPEGQuality)
 		}
 	}
-	_ = os.Unsetenv("MIO_JPEG_QUALITY")
 }
 
 // TestConfig_ValidJPEGQuality_BoundaryValues tests valid JPEG quality boundary values
@@ -432,19 +389,17 @@ func TestConfig_ValidJPEGQuality_BoundaryValues(t *testing.T) {
 
 	for _, quality := range tests {
 		qualityStr := fmt.Sprintf("%d", quality)
-		_ = os.Setenv("MIO_JPEG_QUALITY", qualityStr)
+		t.Setenv("MIO_JPEG_QUALITY", qualityStr)
 		cfg := LoadFromEnv()
 		if cfg.JPEGQuality != quality {
 			t.Errorf("JPEG quality %d should be accepted, got %d", quality, cfg.JPEGQuality)
 		}
 	}
-	_ = os.Unsetenv("MIO_JPEG_QUALITY")
 }
 
 // TestConfig_InvalidPort_Zero tests port 0
 func TestConfig_InvalidPort_Zero(t *testing.T) {
-	_ = os.Setenv("MIO_PORT", "0")
-	defer func() { _ = os.Unsetenv("MIO_PORT") }()
+	t.Setenv("MIO_PORT", "0")
 
 	cfg := LoadFromEnv()
 	// Port 0 should use default
@@ -455,8 +410,7 @@ func TestConfig_InvalidPort_Zero(t *testing.T) {
 
 // TestConfig_InvalidPort_Negative tests negative port
 func TestConfig_InvalidPort_Negative(t *testing.T) {
-	_ = os.Setenv("MIO_PORT", "-8000")
-	defer func() { _ = os.Unsetenv("MIO_PORT") }()
+	t.Setenv("MIO_PORT", "-8000")
 
 	cfg := LoadFromEnv()
 	if cfg.Port != 8000 {
@@ -466,8 +420,7 @@ func TestConfig_InvalidPort_Negative(t *testing.T) {
 
 // TestConfig_InvalidPort_TooHigh tests port > 65535
 func TestConfig_InvalidPort_TooHigh(t *testing.T) {
-	_ = os.Setenv("MIO_PORT", "65536")
-	defer func() { _ = os.Unsetenv("MIO_PORT") }()
+	t.Setenv("MIO_PORT", "65536")
 
 	cfg := LoadFromEnv()
 	if cfg.Port != 8000 {
@@ -486,13 +439,12 @@ func TestConfig_InvalidPort_NonNumeric(t *testing.T) {
 	}
 
 	for _, invalid := range tests {
-		_ = os.Setenv("MIO_PORT", invalid)
+		t.Setenv("MIO_PORT", invalid)
 		cfg := LoadFromEnv()
 		if cfg.Port != 8000 {
 			t.Errorf("invalid port %q should use default, got %d", invalid, cfg.Port)
 		}
 	}
-	_ = os.Unsetenv("MIO_PORT")
 }
 
 // TestConfig_ValidPort_BoundaryValues tests valid port boundary values
@@ -501,19 +453,17 @@ func TestConfig_ValidPort_BoundaryValues(t *testing.T) {
 
 	for _, port := range tests {
 		portStr := fmt.Sprintf("%d", port)
-		_ = os.Setenv("MIO_PORT", portStr)
+		t.Setenv("MIO_PORT", portStr)
 		cfg := LoadFromEnv()
 		if cfg.Port != port {
 			t.Errorf("port %d should be accepted, got %d", port, cfg.Port)
 		}
 	}
-	_ = os.Unsetenv("MIO_PORT")
 }
 
 // TestConfig_InvalidMaxConnections_Zero tests max connections 0
 func TestConfig_InvalidMaxConnections_Zero(t *testing.T) {
-	_ = os.Setenv("MIO_MAX_STREAM_CONNECTIONS", "0")
-	defer func() { _ = os.Unsetenv("MIO_MAX_STREAM_CONNECTIONS") }()
+	t.Setenv("MIO_MAX_STREAM_CONNECTIONS", "0")
 
 	cfg := LoadFromEnv()
 	// Zero should use default
@@ -524,8 +474,7 @@ func TestConfig_InvalidMaxConnections_Zero(t *testing.T) {
 
 // TestConfig_InvalidMaxConnections_Negative tests negative max connections
 func TestConfig_InvalidMaxConnections_Negative(t *testing.T) {
-	_ = os.Setenv("MIO_MAX_STREAM_CONNECTIONS", "-5")
-	defer func() { _ = os.Unsetenv("MIO_MAX_STREAM_CONNECTIONS") }()
+	t.Setenv("MIO_MAX_STREAM_CONNECTIONS", "-5")
 
 	cfg := LoadFromEnv()
 	if cfg.MaxStreamConnections != 2 {
@@ -543,13 +492,12 @@ func TestConfig_InvalidMaxConnections_NonNumeric(t *testing.T) {
 	}
 
 	for _, invalid := range tests {
-		_ = os.Setenv("MIO_MAX_STREAM_CONNECTIONS", invalid)
+		t.Setenv("MIO_MAX_STREAM_CONNECTIONS", invalid)
 		cfg := LoadFromEnv()
 		if cfg.MaxStreamConnections != 2 {
 			t.Errorf("invalid max connections %q should use default, got %d", invalid, cfg.MaxStreamConnections)
 		}
 	}
-	_ = os.Unsetenv("MIO_MAX_STREAM_CONNECTIONS")
 }
 
 // TestConfig_MockCamera_EnabledViaEnv tests mock camera is enabled via env var
@@ -571,9 +519,9 @@ func TestConfig_MockCamera_EnabledViaEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		if tt.env != "" {
-			_ = os.Setenv("MOCK_CAMERA", tt.env)
+			t.Setenv("MOCK_CAMERA", tt.env)
 		} else {
-			_ = os.Unsetenv("MOCK_CAMERA")
+			t.Setenv("MOCK_CAMERA", "")
 		}
 
 		cfg := LoadFromEnv()
@@ -581,7 +529,6 @@ func TestConfig_MockCamera_EnabledViaEnv(t *testing.T) {
 			t.Errorf("MockCamera env=%q expected %v, got %v", tt.env, tt.expected, cfg.MockCamera)
 		}
 	}
-	_ = os.Unsetenv("MOCK_CAMERA")
 }
 
 // TestConfig_AddressString tests address string formatting
