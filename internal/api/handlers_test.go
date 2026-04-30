@@ -76,6 +76,34 @@ type countingStreamWriter struct {
 	boundaries int
 }
 
+type frameProbeWriter struct {
+	header     http.Header
+	targetJPEG []byte
+	buf        []byte
+}
+
+func newFrameProbeWriter(targetJPEG []byte) *frameProbeWriter {
+	return &frameProbeWriter{
+		header:     make(http.Header),
+		targetJPEG: targetJPEG,
+	}
+}
+
+func (w *frameProbeWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *frameProbeWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	if len(w.targetJPEG) > 0 && strings.Contains(string(w.buf), string(w.targetJPEG)) {
+		return 0, errStopStream
+	}
+	return len(p), nil
+}
+
+func (w *frameProbeWriter) WriteHeader(_ int) {}
+func (w *frameProbeWriter) Flush()            {}
+
 func newCountingStreamWriter(targetFrames int) *countingStreamWriter {
 	return &countingStreamWriter{
 		header:       make(http.Header),
@@ -961,6 +989,36 @@ func TestFrameManagerGetFrameBurstyAccessKeepsCaptureWarm(t *testing.T) {
 	waitForCaptureState(t, fm, true)
 	time.Sleep(120 * time.Millisecond)
 	waitForCaptureState(t, fm, false)
+}
+
+func TestFrameManagerGetFrameReturnsOwnedCopyForSnapshotAndStream(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 1}
+	cam := &repeatedFrameCamera{}
+	fm := newFrameManager(cam, cfg, 80*time.Millisecond)
+	t.Cleanup(fm.Stop)
+
+	first := fm.GetFrame()
+	if len(first) == 0 {
+		t.Fatal("expected initial snapshot frame")
+	}
+
+	original := append([]byte(nil), first...)
+	first[2] = 0x11 // mutate caller-owned bytes
+
+	second := fm.GetFrame()
+	if len(second) != len(original) {
+		t.Fatalf("snapshot length changed after mutation: got %d want %d", len(second), len(original))
+	}
+	if second[2] != original[2] {
+		t.Fatalf("snapshot was affected by caller mutation: got byte 0x%X want 0x%X", second[2], original[2])
+	}
+
+	writer := newFrameProbeWriter(original)
+	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+	err := fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
+	if !errors.Is(err, errStopStream) {
+		t.Fatalf("expected stream to stop after probing frame, got %v", err)
+	}
 }
 
 func TestScheduleStopCaptureFallbackWhenCleanupQueueSaturated(t *testing.T) {
