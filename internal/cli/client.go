@@ -126,37 +126,58 @@ type StatusResponse struct {
 // GetStatus returns current streaming status
 func (c *Client) GetStatus() (*StatusResponse, error) {
 	var status StatusResponse
-	err := c.getJSON("/api/status", &status)
+	err := c.getJSON("/v1/api/status", &status)
 	return &status, err
 }
 
 // HealthResponse represents the /health endpoint response
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
+	Status            string  `json:"status"`
+	CameraReady       bool    `json:"camera_ready"`
+	Degraded          bool    `json:"degraded"`
+	StreamConnections int     `json:"stream_connections"`
+	FPSCurrent        float64 `json:"fps_current"`
+	UptimeSeconds     int64   `json:"uptime_seconds"`
+	TimestampISO8601  string  `json:"timestamp_iso8601"`
+	APIVersion        string  `json:"api_version"`
 }
 
 // GetHealth returns basic health check
 func (c *Client) GetHealth() (*HealthResponse, error) {
 	var health HealthResponse
-	err := c.getJSON("/health", &health)
+	err := c.getJSON("/v1/health", &health)
 	return &health, err
 }
 
 // HealthDetailedResponse represents the /health/detailed endpoint response
 type HealthDetailedResponse struct {
-	Overall     string `json:"overall"`
-	Memory      string `json:"memory"`
-	Camera      string `json:"camera"`
-	FrameBuffer string `json:"frame_buffer"`
-	LastFrame   string `json:"last_frame"`
-	Timestamp   string `json:"timestamp"`
+	Status                     string  `json:"status"`
+	HealthStatus               string  `json:"health_status"`
+	Message                    string  `json:"message"`
+	CameraReady                bool    `json:"camera_ready"`
+	Degraded                   bool    `json:"degraded"`
+	UptimeSeconds              int64   `json:"uptime_seconds"`
+	FPSCurrent                 float64 `json:"fps_current"`
+	FPSConfigured              int     `json:"fps_configured"`
+	FramesCaptured             int64   `json:"frames_captured"`
+	StreamConnections          int     `json:"stream_connections"`
+	LastFrameAgeSeconds        float64 `json:"last_frame_age_seconds"`
+	Resolution                 string  `json:"resolution"`
+	JPEGQuality                int     `json:"jpeg_quality"`
+	MaxConnections             int     `json:"max_stream_connections"`
+	CaptureFailuresConsecutive int64   `json:"capture_failures_consecutive"`
+	CaptureFailuresTotal       int64   `json:"capture_failures_total"`
+	CaptureRestartCount        int64   `json:"capture_restart_count"`
+	ErrorRatePercent           float64 `json:"error_rate_percent"`
+	FrameSequenceNumber        uint64  `json:"frame_sequence_number"`
+	TimestampISO8601           string  `json:"timestamp_iso8601"`
+	APIVersion                 string  `json:"api_version"`
 }
 
 // GetHealthDetailed returns detailed health information
 func (c *Client) GetHealthDetailed() (*HealthDetailedResponse, error) {
 	var health HealthDetailedResponse
-	err := c.getJSON("/health/detailed", &health)
+	err := c.getJSON("/v1/health/detailed", &health)
 	return &health, err
 }
 
@@ -166,13 +187,13 @@ type ConfigResponse map[string]interface{}
 // GetConfig returns the raw configuration as a map
 func (c *Client) GetConfig() (ConfigResponse, error) {
 	var config ConfigResponse
-	err := c.getJSON("/api/config", &config)
+	err := c.getJSON("/v1/api/config", &config)
 	return config, err
 }
 
 // GetSnapshot captures a single frame and returns JPEG bytes
 func (c *Client) GetSnapshot() ([]byte, error) {
-	return c.getRaw("/snapshot.jpg")
+	return c.getRaw("/v1/snapshot.jpg")
 }
 
 // DiagnosticsResponse represents the /api/diagnostics endpoint response
@@ -190,25 +211,27 @@ type DiagnosticsResponse struct {
 // GetDiagnostics returns diagnostic information
 func (c *Client) GetDiagnostics() (*DiagnosticsResponse, error) {
 	var diag DiagnosticsResponse
-	err := c.getJSON("/api/diagnostics", &diag)
+	err := c.getJSON("/v1/api/diagnostics", &diag)
 	return &diag, err
 }
 
 // MetricsResponse represents the /metrics/live endpoint response
 type MetricsResponse struct {
-	FPS               float64 `json:"fps"`
-	FrameCount        int64   `json:"frame_count"`
-	ActiveConnections int     `json:"active_connections"`
-	MaxConnections    int     `json:"max_connections"`
-	AverageFrameTime  string  `json:"average_frame_time"`
-	LastFrameTime     string  `json:"last_frame_time"`
-	Timestamp         string  `json:"timestamp"`
+	FPSCurrent          float64 `json:"fps_current"`
+	FPSConfigured       int     `json:"fps_configured"`
+	FramesCaptured      int64   `json:"frames_captured"`
+	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds"`
+	UptimeSeconds       int64   `json:"uptime_seconds"`
+	StreamConnections   int     `json:"stream_connections"`
+	FrameSequenceNumber uint64  `json:"frame_sequence_number"`
+	TimestampISO8601    string  `json:"timestamp_iso8601"`
+	APIVersion          string  `json:"api_version"`
 }
 
 // GetMetrics returns real-time performance metrics
 func (c *Client) GetMetrics() (*MetricsResponse, error) {
 	var metrics MetricsResponse
-	err := c.getJSON("/metrics/live", &metrics)
+	err := c.getJSON("/v1/metrics/live", &metrics)
 	return &metrics, err
 }
 
@@ -222,7 +245,7 @@ type settingsEnvelope struct {
 // GetSettings returns all settings or a specific setting by key
 func (c *Client) GetSettings(key string) (interface{}, error) {
 	var envelope settingsEnvelope
-	err := c.getJSON("/api/settings", &envelope)
+	err := c.getJSON("/v1/api/settings", &envelope)
 	if err != nil {
 		return nil, err
 	}
@@ -249,12 +272,12 @@ func (c *Client) SetSetting(key string, value interface{}) error {
 	body := map[string]interface{}{
 		key: value,
 	}
-	return c.postJSON("/api/settings", body, nil)
+	return c.postJSON("/v1/api/settings", body, nil)
 }
 
 // StopStream stops active streams
 func (c *Client) StopStream() error {
-	return c.postJSON("/api/stream/stop", nil, nil)
+	return c.postJSON("/v1/api/stream/stop", nil, nil)
 }
 
 // ReadyResponse represents the /ready endpoint response
