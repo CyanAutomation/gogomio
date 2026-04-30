@@ -33,8 +33,9 @@ func TestFormatStatus(t *testing.T) {
 
 func TestFormatHealth(t *testing.T) {
 	health := &HealthResponse{
-		Status:    "ok",
-		Timestamp: "2026-04-19T16:00:00Z",
+		Status:           "ok",
+		CameraReady:      true,
+		TimestampISO8601: "2026-04-19T16:00:00Z",
 	}
 
 	output := FormatHealth(health)
@@ -46,11 +47,16 @@ func TestFormatHealth(t *testing.T) {
 
 func TestFormatHealthDetailed(t *testing.T) {
 	health := &HealthDetailedResponse{
-		Overall:     "✓ Healthy",
-		Memory:      "245MB / 512MB (47%)",
-		Camera:      "✓ Connected",
-		FrameBuffer: "✓ Operating",
-		LastFrame:   "45ms",
+		Status:               "ok",
+		HealthStatus:         "Excellent",
+		Message:              "Camera is functioning normally",
+		FPSCurrent:           24.5,
+		FPSConfigured:        24,
+		FramesCaptured:       43200,
+		StreamConnections:    1,
+		MaxConnections:       2,
+		LastFrameAgeSeconds:  0.045,
+		CaptureFailuresTotal: 0,
 	}
 
 	output := FormatHealthDetailed(health)
@@ -58,8 +64,8 @@ func TestFormatHealthDetailed(t *testing.T) {
 	if !strings.Contains(output, "System Health:") {
 		t.Errorf("expected 'System Health:' in output, got: %s", output)
 	}
-	if !strings.Contains(output, "Overall:") {
-		t.Errorf("expected 'Overall:' in output, got: %s", output)
+	if !strings.Contains(output, "Status:") {
+		t.Errorf("expected 'Status:' in output, got: %s", output)
 	}
 }
 
@@ -86,13 +92,12 @@ func TestFormatConfig(t *testing.T) {
 
 func TestFormatMetrics(t *testing.T) {
 	metrics := &MetricsResponse{
-		FPS:               24.5,
-		FrameCount:        43200,
-		ActiveConnections: 1,
-		MaxConnections:    2,
-		AverageFrameTime:  "41.7ms",
-		LastFrameTime:     "41.8ms",
-		Timestamp:         "2026-04-19T16:00:00Z",
+		FPSCurrent:        24.5,
+		FPSConfigured:     24,
+		FramesCaptured:    43200,
+		StreamConnections: 1,
+		UptimeSeconds:     120,
+		TimestampISO8601:  "2026-04-19T16:00:00Z",
 	}
 
 	output := FormatMetrics(metrics)
@@ -103,8 +108,8 @@ func TestFormatMetrics(t *testing.T) {
 	if !strings.Contains(output, "24.5") {
 		t.Errorf("expected FPS 24.5 in output, got: %s", output)
 	}
-	if !strings.Contains(output, "1/2") {
-		t.Errorf("expected '1/2' connections, got: %s", output)
+	if !strings.Contains(output, "Active Connections: 1") {
+		t.Errorf("expected active connections in output, got: %s", output)
 	}
 }
 
@@ -167,7 +172,7 @@ func TestFormatJSON(t *testing.T) {
 
 func TestSettingsGetCmd_PrintsAllKeysAndSpecificValue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/settings" {
+		if r.URL.Path != "/v1/api/settings" {
 			t.Errorf("expected path /api/settings, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -226,7 +231,7 @@ func captureStdout(fn func() error) (string, error) {
 // TestStatusCmd tests the status command
 func TestStatusCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/status" {
+		if r.URL.Path != "/v1/api/status" {
 			t.Errorf("expected path /api/status, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -287,7 +292,7 @@ func TestStatusCmd_ServerError(t *testing.T) {
 // TestConfigCmd tests the config command
 func TestConfigCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/config" {
+		if r.URL.Path != "/v1/api/config" {
 			t.Errorf("expected path /api/config, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -381,7 +386,7 @@ func TestConfigGetCmd_InvalidKey(t *testing.T) {
 // TestHealthCheckCmd tests the health check command
 func TestHealthCheckCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/health" {
+		if r.URL.Path != "/v1/health" {
 			t.Errorf("expected path /health, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -412,7 +417,7 @@ func TestHealthCheckCmd(t *testing.T) {
 // TestHealthDetailedCmd tests the health detailed command
 func TestHealthDetailedCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/health/detailed" {
+		if r.URL.Path != "/v1/health/detailed" {
 			t.Errorf("expected path /health/detailed, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -448,7 +453,7 @@ func TestSnapshotCaptureCmd(t *testing.T) {
 	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xD9} // Minimal JPEG
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/snapshot.jpg" {
+		if r.URL.Path != "/v1/snapshot.jpg" {
 			t.Errorf("expected path /snapshot.jpg, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "image/jpeg")
@@ -521,7 +526,7 @@ func TestSnapshotSaveCmd(t *testing.T) {
 // TestDiagnosticsCmd tests the diagnostics command
 func TestDiagnosticsCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/diagnostics" {
+		if r.URL.Path != "/v1/api/diagnostics" {
 			t.Errorf("expected path /api/diagnostics, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -560,18 +565,20 @@ func TestDiagnosticsCmd(t *testing.T) {
 // TestStreamInfoCmd tests the stream info command
 func TestStreamInfoCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/metrics/live" {
+		if r.URL.Path != "/v1/metrics/live" {
 			t.Errorf("expected path /metrics/live, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
-			"fps": 24.5,
-			"frame_count": 43200,
-			"active_connections": 1,
-			"max_connections": 2,
-			"average_frame_time": "41.7ms",
-			"last_frame_time": "41.8ms",
-			"timestamp": "2026-04-19T16:00:00Z"
+			"fps_current": 24.5,
+			"fps_configured": 24,
+			"frames_captured": 43200,
+			"last_frame_age_seconds": 0.04,
+			"uptime_seconds": 120,
+			"stream_connections": 1,
+			"frame_sequence_number": 43201,
+			"timestamp_iso8601": "2026-04-19T16:00:00Z",
+			"api_version": "1"
 		}`))
 	}))
 	defer server.Close()
@@ -599,7 +606,7 @@ func TestStreamInfoCmd(t *testing.T) {
 // TestStreamStopCmd tests the stream stop command
 func TestStreamStopCmd(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/stream/stop" {
+		if r.URL.Path != "/v1/api/stream/stop" {
 			t.Errorf("expected path /api/stream/stop, got %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
