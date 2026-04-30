@@ -11,14 +11,15 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Resolution           [2]int `json:"resolution"`
-	FPS                  int    `json:"fps"`
-	TargetFPS            int    `json:"target_fps"`
-	JPEGQuality          int    `json:"jpeg_quality"`
-	MaxStreamConnections int    `json:"max_stream_connections"`
-	Port                 int    `json:"port"`
-	BindHost             string `json:"bind_host"`
-	MockCamera           bool   `json:"mock_camera"`
+	Resolution           [2]int   `json:"resolution"`
+	FPS                  int      `json:"fps"`
+	TargetFPS            int      `json:"target_fps"`
+	JPEGQuality          int      `json:"jpeg_quality"`
+	MaxStreamConnections int      `json:"max_stream_connections"`
+	Port                 int      `json:"port"`
+	BindHost             string   `json:"bind_host"`
+	MockCamera           bool     `json:"mock_camera"`
+	TrustedProxyCIDRs    []string `json:"trusted_proxy_cidrs"`
 }
 
 // LoadFromEnv loads configuration from environment variables with defaults.
@@ -32,6 +33,7 @@ func LoadFromEnv() *Config {
 		Port:                 8000,
 		BindHost:             "0.0.0.0",
 		MockCamera:           false,
+		TrustedProxyCIDRs:    []string{},
 	}
 
 	// Resolution
@@ -87,6 +89,11 @@ func LoadFromEnv() *Config {
 		cfg.MockCamera = strings.ToLower(mock) == "true" || mock == "1"
 	}
 
+	// Trusted proxy CIDRs
+	if cidrs := os.Getenv("MIO_TRUSTED_PROXY_CIDRS"); cidrs != "" {
+		cfg.TrustedProxyCIDRs = parseCSV(cidrs)
+	}
+
 	return cfg
 }
 
@@ -137,4 +144,16 @@ func (c *Config) FrameTimeout() time.Duration {
 // AddressString returns the full address string for the HTTP server.
 func (c *Config) AddressString() string {
 	return fmt.Sprintf("%s:%d", c.BindHost, c.Port)
+}
+
+func parseCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
