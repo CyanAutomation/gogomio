@@ -209,10 +209,35 @@ func TestConfigTimeouts(t *testing.T) {
 	}
 
 	// Should be roughly 1/24 * 3 = ~125ms at 24 FPS
-	frameIntervalMS := 1000.0 / float64(cfg.TargetFPS)
-	expected := time.Duration(int64(frameIntervalMS*3)) * time.Millisecond
+	expected := (time.Second / time.Duration(cfg.TargetFPS)) * 3
 	if timeout < expected-50*time.Millisecond || timeout > expected+50*time.Millisecond {
 		t.Logf("FrameTimeout is %v (expected ~%v)", timeout, expected)
+	}
+}
+
+func TestFrameTimeout_HighFPSFloor(t *testing.T) {
+	tests := []struct {
+		name string
+		fps  int
+	}{
+		{name: "1000fps", fps: 1000},
+		{name: "5000fps", fps: 5000},
+		{name: "10000fps", fps: 10000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{TargetFPS: tt.fps}
+			timeout := cfg.FrameTimeout()
+
+			if timeout <= 0 {
+				t.Fatalf("FrameTimeout(%d) = %v, want positive non-zero duration", tt.fps, timeout)
+			}
+
+			if timeout < 10*time.Millisecond {
+				t.Fatalf("FrameTimeout(%d) = %v, want timeout floor of at least 10ms", tt.fps, timeout)
+			}
+		})
 	}
 }
 
