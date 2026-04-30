@@ -95,7 +95,7 @@ func FormatConfig(config ConfigResponse) string {
 
 // FormatMetrics formats metrics response for display
 func FormatMetrics(metrics *MetricsResponse) string {
-  return fmt.Sprintf(`Stream Metrics:
+	return fmt.Sprintf(`Stream Metrics:
   FPS: %.1f/%d
   Frame Count: %d
   Active Connections: %d

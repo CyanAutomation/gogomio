@@ -144,7 +144,7 @@ func (w *countingStreamWriter) Write(p []byte) (int, error) {
 }
 
 func (w *countingStreamWriter) WriteHeader(code int) { w.statusCode = code }
-func (w *countingStreamWriter) Flush()            {}
+func (w *countingStreamWriter) Flush()               {}
 
 func (w *countingStreamWriter) BoundaryCount() int {
 	w.mu.Lock()

@@ -239,13 +239,15 @@ Use `gofmt` (most editors do this automatically):
 gofmt -w ./internal/camera
 ```
 
-### Linting (Optional)
+### Linting
 
-Install and run `golangci-lint`:
+Linting is enforced in CI via `golangci-lint`. Run locally before pushing:
 
 ```bash
 golangci-lint run ./...
 ```
+
+The project uses a [`.golangci.yml`](.golangci.yml) config with the default linters (`errcheck`, `govet`, `staticcheck`, `ineffassign`, `unused`) plus `gofmt`/`goimports` formatters. Fix any reported issues — the CI lint job will fail if they are present.
 
 ### Documentation
 
