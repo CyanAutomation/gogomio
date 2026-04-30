@@ -1142,6 +1142,34 @@ func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testin
 	}
 }
 
+
+func TestStreamFrameReturnsPromptlyOnFrameManagerStop(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
+	cam := &captureLoopCountingCamera{}
+	fm := newFrameManager(cam, cfg, 10*time.Millisecond)
+	t.Cleanup(fm.Stop)
+
+	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+	writer := httptest.NewRecorder()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
+	}()
+
+	time.Sleep(25 * time.Millisecond)
+	fm.Stop()
+
+	select {
+	case err := <-errCh:
+		if err == nil || err.Error() != "stream stopped" {
+			t.Fatalf("expected stream stopped error, got %v", err)
+		}
+	case <-time.After(300 * time.Millisecond):
+		t.Fatal("stream did not return promptly after FrameManager.Stop")
+	}
+}
+
 func TestFrameManagerStopRaceWithDisconnectDecrementDoesNotPanic(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
 	cam := &captureLoopCountingCamera{}
