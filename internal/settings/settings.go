@@ -72,7 +72,7 @@ func (m *Manager) Get(key string) interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return m.data[key]
+	return cloneJSONLikeValue(m.data[key])
 }
 
 // GetString retrieves a string value by key with default fallback.
@@ -119,12 +119,36 @@ func (m *Manager) GetAll() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Return a copy to prevent external modification
+	// Return a deep copy to prevent external modification.
 	copy := make(map[string]interface{})
 	for k, v := range m.data {
-		copy[k] = v
+		copy[k] = cloneJSONLikeValue(v)
 	}
 	return copy
+}
+
+// cloneJSONLikeValue deep-copies supported JSON-like values.
+// Supported types: map[string]interface{}, []interface{}, and primitives.
+func cloneJSONLikeValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		cloned := make(map[string]interface{}, len(typed))
+		for key, val := range typed {
+			cloned[key] = cloneJSONLikeValue(val)
+		}
+		return cloned
+	case []interface{}:
+		cloned := make([]interface{}, len(typed))
+		for i, val := range typed {
+			cloned[i] = cloneJSONLikeValue(val)
+		}
+		return cloned
+	case nil, bool, string, float64, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return typed
+	default:
+		// Fallback for unsupported types: preserve existing behavior by returning as-is.
+		return typed
+	}
 }
 
 // Delete removes a key from settings.

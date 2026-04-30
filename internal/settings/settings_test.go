@@ -129,6 +129,71 @@ func TestSettingsGetAll(t *testing.T) {
 	}
 }
 
+func TestSettingsGetReturnsClonedValue(t *testing.T) {
+	m := NewManager("")
+	defer func() { _ = m.Clear() }()
+
+	original := map[string]interface{}{
+		"nested": map[string]interface{}{
+			"flag": true,
+		},
+		"items": []interface{}{map[string]interface{}{"name": "a"}},
+	}
+	_ = m.Set("payload", original)
+
+	got, ok := m.Get("payload").(map[string]interface{})
+	if !ok {
+		t.Fatalf("Get returned unexpected type: %T", m.Get("payload"))
+	}
+
+	got["newKey"] = "mutated"
+	gotNested := got["nested"].(map[string]interface{})
+	gotNested["flag"] = false
+	gotItems := got["items"].([]interface{})
+	gotItems[0].(map[string]interface{})["name"] = "changed"
+
+	current := m.Get("payload").(map[string]interface{})
+	if _, exists := current["newKey"]; exists {
+		t.Fatalf("Get mutation leaked into manager state")
+	}
+	if current["nested"].(map[string]interface{})["flag"] != true {
+		t.Fatalf("nested Get mutation leaked into manager state")
+	}
+	if current["items"].([]interface{})[0].(map[string]interface{})["name"] != "a" {
+		t.Fatalf("slice element mutation leaked into manager state")
+	}
+}
+
+func TestSettingsGetAllReturnsDeepClonedValues(t *testing.T) {
+	m := NewManager("")
+	defer func() { _ = m.Clear() }()
+
+	_ = m.SetMany(map[string]interface{}{
+		"config": map[string]interface{}{
+			"threshold": float64(10),
+		},
+		"list": []interface{}{
+			map[string]interface{}{"id": "x"},
+		},
+	})
+
+	all := m.GetAll()
+	all["extra"] = "mutated"
+	all["config"].(map[string]interface{})["threshold"] = float64(99)
+	all["list"].([]interface{})[0].(map[string]interface{})["id"] = "changed"
+
+	current := m.GetAll()
+	if _, exists := current["extra"]; exists {
+		t.Fatalf("GetAll top-level mutation leaked into manager state")
+	}
+	if current["config"].(map[string]interface{})["threshold"] != float64(10) {
+		t.Fatalf("GetAll nested map mutation leaked into manager state")
+	}
+	if current["list"].([]interface{})[0].(map[string]interface{})["id"] != "x" {
+		t.Fatalf("GetAll nested slice mutation leaked into manager state")
+	}
+}
+
 // TestSettingsPersistence tests that settings survive reload
 func TestSettingsPersistence(t *testing.T) {
 	// Use temp directory for test
