@@ -21,15 +21,20 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/gogomio.git
    cd gogomio
    ```
+
 3. **Add upstream remote**:
+
    ```bash
    git remote add upstream https://github.com/CyanAutomation/gogomio.git
    ```
+
 4. **Create a feature branch**:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -45,23 +50,27 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 ### Local Environment
 
 1. **Install dependencies**:
+
    ```bash
    go mod download
    ```
 
 2. **Set up pre-commit hook** (optional but recommended):
+
    ```bash
    git config core.hooksPath .githooks
    chmod +x .githooks/pre-commit
    ```
 
 3. **Configure environment** (for development):
+
    ```bash
    cp .env.example .env
    # Edit .env if needed; defaults are fine for mock camera mode
    ```
 
 4. **Run tests locally** (before any commits):
+
    ```bash
    go test ./... -v -race -cover
    ```
@@ -111,6 +120,7 @@ func (nf *NewFeature) Do(ctx context.Context) error {
 ```
 
 **Corresponding test** (`internal/camera/new_feature_test.go`):
+
 ```go
 func TestNewFeature(t *testing.T) {
     nf := NewNewFeature()
@@ -149,6 +159,7 @@ func TestNewFeatureRace(t *testing.T) {
 ### Mandatory
 
 1. **All tests must pass**:
+
    ```bash
    go test ./... -v -race -cover
    ```
@@ -158,6 +169,7 @@ func TestNewFeatureRace(t *testing.T) {
    - Critical for `FrameBuffer` and `ConnectionTracker`
 
 3. **Coverage ≥75%**:
+
    ```bash
    go test ./... -coverprofile=coverage.out
    go tool cover -func=coverage.out
@@ -170,6 +182,7 @@ func TestNewFeatureRace(t *testing.T) {
 ### Recommended
 
 1. **Benchmarks for performance-critical code**:
+
    ```bash
    go test -bench=. -benchmem ./internal/camera ./internal/api
    ```
@@ -180,7 +193,8 @@ func TestNewFeatureRace(t *testing.T) {
 - These tests are expected to emit error-level log lines while still **passing**.
 - Expected-path logs in these tests are prefixed with `[expected-failure-path]` to help CI readers distinguish intentional error logs from real regressions.
 
-2. **Table-driven tests** for multiple scenarios:
+1. **Table-driven tests** for multiple scenarios:
+
    ```go
    func TestFrameBuffer(t *testing.T) {
        tests := []struct {
@@ -202,6 +216,7 @@ func TestNewFeatureRace(t *testing.T) {
 ### Pre-Commit Validation
 
 If you set up the pre-commit hook, it runs automatically:
+
 ```bash
 git commit -m "feat: add new feature"
 # → Runs: go test ./... -v -race -cover
@@ -209,6 +224,7 @@ git commit -m "feat: add new feature"
 ```
 
 To bypass (not recommended):
+
 ```bash
 git commit --no-verify
 ```
@@ -218,6 +234,7 @@ git commit --no-verify
 ### Go Format
 
 Use `gofmt` (most editors do this automatically):
+
 ```bash
 gofmt -w ./internal/camera
 ```
@@ -225,6 +242,7 @@ gofmt -w ./internal/camera
 ### Linting (Optional)
 
 Install and run `golangci-lint`:
+
 ```bash
 golangci-lint run ./...
 ```
@@ -232,12 +250,14 @@ golangci-lint run ./...
 ### Documentation
 
 - **Exported functions/types** must have Godoc comments:
+
   ```go
   // FrameBuffer manages thread-safe frame storage for MJPEG clients.
   type FrameBuffer struct { ... }
   ```
 
 - **Complex logic** should have inline comments:
+
   ```go
   // Use atomic CAS to prevent double-close
   if !atomic.CompareAndSwapInt32(&fb.closed, 0, 1) {
@@ -250,12 +270,14 @@ golangci-lint run ./...
 ### Pull Request Process
 
 1. **Update your branch** from upstream:
+
    ```bash
    git fetch upstream
    git rebase upstream/main
    ```
 
 2. **Push to your fork**:
+
    ```bash
    git push origin feature/your-feature-name
    ```
@@ -278,6 +300,7 @@ golangci-lint run ./...
 Use format: `<type>: <description>`
 
 **Types**:
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation
@@ -287,6 +310,7 @@ Use format: `<type>: <description>`
 - `chore`: Build, deps, etc.
 
 **Examples**:
+
 - `feat: add connection timeout configuration`
 - `fix: prevent double-close race condition in FrameBuffer`
 - `docs: update deployment guide for Bullseye`
@@ -306,6 +330,7 @@ Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
 ### Releasing a New Version
 
 1. **Update CHANGELOG.md**:
+
    ```markdown
    ## [0.2.0] - 2026-05-15
    
@@ -321,11 +346,13 @@ Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
    ```
 
 2. **Update version in `go.mod`** (if applicable):
+
    ```bash
    # No version field in go.mod for apps, but mention in git tag
    ```
 
 3. **Create git tag**:
+
    ```bash
    git tag -a v0.2.0 -m "Release version 0.2.0"
    git push origin v0.2.0
