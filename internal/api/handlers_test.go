@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -17,6 +18,18 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/go-chi/chi/v5"
 )
+
+const (
+	testConditionTimeout  = 2 * time.Second
+	testConditionInterval = 5 * time.Millisecond
+)
+
+func testDuration(d time.Duration) time.Duration {
+	if raceFlag := flag.Lookup("test.race"); raceFlag != nil && raceFlag.Value.String() == "true" {
+		return d * 3
+	}
+	return d
+}
 
 type captureLoopCountingCamera struct {
 	activeCaptures int64
@@ -1512,7 +1525,7 @@ func TestHandleSettingsGet_ReturnsSettingsEnvelope(t *testing.T) {
 func waitForCaptureState(t *testing.T, fm *FrameManager, want bool) {
 	t.Helper()
 
-	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
 		fm.captureMu.Lock()
 		started := fm.captureStarted
 		fm.captureMu.Unlock()
@@ -1524,18 +1537,21 @@ func waitForCondition(t *testing.T, timeout, interval time.Duration, condition f
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
+	attempts := 0
 	for time.Now().Before(deadline) {
+		attempts++
 		if condition() {
 			return
 		}
 		time.Sleep(interval)
 	}
+	t.Logf("timeout waiting for condition after %d attempts, timeout=%v interval=%v", attempts, timeout, interval)
 	t.Fatalf(format, args...)
 }
 
 func waitForStreamBoundaries(t *testing.T, w *countingStreamWriter, minCount int) {
 	t.Helper()
-	waitForCondition(t, 2*time.Second, 5*time.Millisecond, func() bool {
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
 		return w.BoundaryCount() >= minCount
 	}, "stream boundary count did not reach %d (got %d)", minCount, w.BoundaryCount())
 }
@@ -1546,6 +1562,7 @@ func waitForDone(t *testing.T, done <-chan struct{}, timeout time.Duration, name
 	case <-done:
 		return
 	case <-time.After(timeout):
+		t.Logf("timeout waiting for %s completion after %v", name, timeout)
 		t.Fatalf("%s did not complete in %v", name, timeout)
 	}
 }
