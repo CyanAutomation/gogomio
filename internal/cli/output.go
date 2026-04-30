@@ -36,25 +36,49 @@ JPEG Quality: %d%%`,
 // FormatHealth formats health response for display
 func FormatHealth(health *HealthResponse) string {
 	return fmt.Sprintf(`Health: %s
+Camera Ready: %t
+Degraded: %t
+Connections: %d
+FPS: %.1f
+Uptime: %ds
 Timestamp: %s`,
 		health.Status,
-		health.Timestamp,
+		health.CameraReady,
+		health.Degraded,
+		health.StreamConnections,
+		health.FPSCurrent,
+		health.UptimeSeconds,
+		health.TimestampISO8601,
 	)
 }
 
 // FormatHealthDetailed formats detailed health response for display
 func FormatHealthDetailed(health *HealthDetailedResponse) string {
 	return fmt.Sprintf(`System Health:
-  Overall: %s
-  Memory: %s
-  Camera: %s
-  Frame Buffer: %s
-  Last Frame: %s ago`,
-		health.Overall,
-		health.Memory,
-		health.Camera,
-		health.FrameBuffer,
-		health.LastFrame,
+  Status: %s (%s)
+  Message: %s
+  Camera Ready: %t
+  FPS: %.1f/%d
+  Frames: %d
+  Connections: %d/%d
+  Last Frame Age: %.3fs
+  Capture Failures: %d consecutive, %d total
+  Error Rate: %.2f%%
+  Uptime: %ds`,
+		health.Status,
+		health.HealthStatus,
+		health.Message,
+		health.CameraReady,
+		health.FPSCurrent,
+		health.FPSConfigured,
+		health.FramesCaptured,
+		health.StreamConnections,
+		health.MaxConnections,
+		health.LastFrameAgeSeconds,
+		health.CaptureFailuresConsecutive,
+		health.CaptureFailuresTotal,
+		health.ErrorRatePercent,
+		health.UptimeSeconds,
 	)
 }
 
@@ -71,20 +95,20 @@ func FormatConfig(config ConfigResponse) string {
 
 // FormatMetrics formats metrics response for display
 func FormatMetrics(metrics *MetricsResponse) string {
-	return fmt.Sprintf(`Stream Metrics:
-  FPS: %.1f
+  return fmt.Sprintf(`Stream Metrics:
+  FPS: %.1f/%d
   Frame Count: %d
-  Active Connections: %d/%d
-  Average Frame Time: %s
-  Last Frame Time: %s
+  Active Connections: %d
+  Last Frame Age: %.3fs
+  Uptime: %ds
   Timestamp: %s`,
-		metrics.FPS,
-		metrics.FrameCount,
-		metrics.ActiveConnections,
-		metrics.MaxConnections,
-		metrics.AverageFrameTime,
-		metrics.LastFrameTime,
-		metrics.Timestamp,
+		metrics.FPSCurrent,
+		metrics.FPSConfigured,
+		metrics.FramesCaptured,
+		metrics.StreamConnections,
+		metrics.LastFrameAgeSeconds,
+		metrics.UptimeSeconds,
+		metrics.TimestampISO8601,
 	)
 }
 

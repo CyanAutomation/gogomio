@@ -16,7 +16,7 @@ func TestClientFromEnv_DefaultURL(t *testing.T) {
 
 func TestGetStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/status" {
+		if r.URL.Path != "/v1/api/status" {
 			t.Errorf("expected path /api/status, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -48,7 +48,7 @@ func TestGetStatus(t *testing.T) {
 
 func TestGetConfig(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/config" {
+		if r.URL.Path != "/v1/api/config" {
 			t.Errorf("expected path /api/config, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -74,13 +74,19 @@ func TestGetConfig(t *testing.T) {
 
 func TestGetHealth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/health" {
+		if r.URL.Path != "/v1/health" {
 			t.Errorf("expected path /health, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{
 			"status": "ok",
-			"timestamp": "2026-04-19T16:00:00Z"
+			"camera_ready": true,
+			"degraded": false,
+			"stream_connections": 1,
+			"fps_current": 23.8,
+			"uptime_seconds": 3600,
+			"timestamp_iso8601": "2026-04-19T16:00:00Z",
+			"api_version": "1"
 		}`)
 	}))
 	defer server.Close()
@@ -94,11 +100,60 @@ func TestGetHealth(t *testing.T) {
 	if health.Status != "ok" {
 		t.Errorf("expected status 'ok', got %s", health.Status)
 	}
+	if !health.CameraReady {
+		t.Errorf("expected camera_ready=true")
+	}
+}
+
+func TestGetHealthDetailed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/health/detailed" {
+			t.Errorf("expected path /v1/health/detailed, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{
+			"status": "ok",
+			"health_status": "Excellent",
+			"message": "Camera is functioning normally",
+			"camera_ready": true,
+			"degraded": false,
+			"uptime_seconds": 3600,
+			"fps_current": 23.8,
+			"fps_configured": 24,
+			"frames_captured": 5712,
+			"stream_connections": 1,
+			"last_frame_age_seconds": 0.042,
+			"resolution": "640x480",
+			"jpeg_quality": 90,
+			"max_stream_connections": 2,
+			"capture_failures_consecutive": 0,
+			"capture_failures_total": 1,
+			"capture_restart_count": 0,
+			"error_rate_percent": 0.01,
+			"frame_sequence_number": 5713,
+			"timestamp_iso8601": "2026-04-19T16:00:00Z",
+			"api_version": "1"
+		}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	health, err := client.GetHealthDetailed()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if health.HealthStatus != "Excellent" {
+		t.Errorf("expected health status Excellent, got %s", health.HealthStatus)
+	}
+	if health.FramesCaptured != 5712 {
+		t.Errorf("expected 5712 frames, got %d", health.FramesCaptured)
+	}
 }
 
 func TestGetSnapshot(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/snapshot.jpg" {
+		if r.URL.Path != "/v1/snapshot.jpg" {
 			t.Errorf("expected path /snapshot.jpg, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "image/jpeg")
@@ -144,7 +199,7 @@ func TestServerError(t *testing.T) {
 
 func TestGetDiagnostics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/diagnostics" {
+		if r.URL.Path != "/v1/api/diagnostics" {
 			t.Errorf("expected path /api/diagnostics, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -176,18 +231,20 @@ func TestGetDiagnostics(t *testing.T) {
 
 func TestGetMetrics(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/metrics/live" {
+		if r.URL.Path != "/v1/metrics/live" {
 			t.Errorf("expected path /metrics/live, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{
-			"fps": 23.8,
-			"frame_count": 5712,
-			"active_connections": 1,
-			"max_connections": 2,
-			"average_frame_time": "41.8ms",
-			"last_frame_time": "42ms",
-			"timestamp": "2026-04-19T16:00:00Z"
+			"fps_current": 23.8,
+			"fps_configured": 24,
+			"frames_captured": 5712,
+			"last_frame_age_seconds": 0.042,
+			"uptime_seconds": 3600,
+			"stream_connections": 1,
+			"frame_sequence_number": 5713,
+			"timestamp_iso8601": "2026-04-19T16:00:00Z",
+			"api_version": "1"
 		}`)
 	}))
 	defer server.Close()
@@ -198,17 +255,17 @@ func TestGetMetrics(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if metrics.FPS != 23.8 {
-		t.Errorf("expected FPS 23.8, got %.1f", metrics.FPS)
+	if metrics.FPSCurrent != 23.8 {
+		t.Errorf("expected FPS 23.8, got %.1f", metrics.FPSCurrent)
 	}
-	if metrics.FrameCount != 5712 {
-		t.Errorf("expected 5712 frames, got %d", metrics.FrameCount)
+	if metrics.FramesCaptured != 5712 {
+		t.Errorf("expected 5712 frames, got %d", metrics.FramesCaptured)
 	}
 }
 
 func TestSetSetting(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/settings" {
+		if r.URL.Path != "/v1/api/settings" {
 			t.Errorf("expected path /api/settings, got %s", r.URL.Path)
 		}
 		if r.Method != "POST" {
@@ -228,7 +285,7 @@ func TestSetSetting(t *testing.T) {
 
 func TestGetSettings_AllAndByKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/settings" {
+		if r.URL.Path != "/v1/api/settings" {
 			t.Errorf("expected path /api/settings, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
