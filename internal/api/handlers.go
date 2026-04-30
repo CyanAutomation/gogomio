@@ -35,8 +35,10 @@ type FrameManager struct {
 	clientCount     int64 // atomic counter for connected clients
 	clientImbalance int64 // atomic counter for decrement calls when clientCount is already 0
 
-	// Channel to signal goroutine to stop
+	// captureDoneCh signals the current capture loop to stop; rotated per capture cycle.
 	doneChan     chan struct{}
+	// shutdownCh signals manager-wide shutdown and is closed exactly once in Stop().
+	shutdownCh   chan struct{}
 	stopChancel  <-chan struct{} // Channel to cancel pending stop
 	stopCancelFn context.CancelFunc
 
@@ -105,6 +107,7 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		connTracker:   camera.NewConnectionTracker(),
 		settingsM:     settings.NewManager("/tmp/gogomio/settings.json"),
 		doneChan:      make(chan struct{}),
+		shutdownCh:    make(chan struct{}),
 		cleanupCh:     make(chan cleanupRequest, 8),
 		cleanupStop:   make(chan struct{}),
 		cleanupDone:   make(chan struct{}),
@@ -321,7 +324,6 @@ func (fm *FrameManager) stopCaptureIfIdle(expectedDone chan struct{}) bool {
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
-	fm.doneChan = nil
 	fm.captureMu.Unlock()
 
 	if done != nil {
@@ -394,7 +396,6 @@ func (fm *FrameManager) stopCapture() {
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
-	fm.doneChan = nil
 	fm.captureMu.Unlock()
 	log.Printf("📊 stopCapture: closing done channel to signal captureLoop to exit")
 	if done != nil {
@@ -479,6 +480,7 @@ func (fm *FrameManager) captureFailureStats() (int64, int64, bool) {
 // Stop stops the frame capture loop and cleanup infrastructure.
 func (fm *FrameManager) Stop() {
 	fm.cleanupStopOnce.Do(func() {
+		close(fm.shutdownCh)
 		close(fm.cleanupStop)
 	})
 
@@ -585,18 +587,12 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	startTime := time.Now()
 
 	for {
-		// Re-check streamDone on each iteration to detect capture restarts
-		// This prevents stale channel reference when capture cycles
-		fm.captureMu.Lock()
-		streamDone := fm.doneChan
-		fm.captureMu.Unlock()
-
 		select {
 		case <-ctx.Done():
 			duration := time.Since(startTime)
 			log.Printf("🔗 Stream client disconnected: %d frames sent in %v (remote: %s)", framesSent, duration, r.RemoteAddr)
 			return ctx.Err()
-		case <-streamDone:
+		case <-fm.shutdownCh:
 			log.Printf("⚠️  Stream stopped for client (frames sent: %d)", framesSent)
 			return fmt.Errorf("stream stopped")
 		default:
@@ -608,7 +604,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 		case <-ctx.Done():
 			log.Printf("🔗 Stream client disconnected during frame wait")
 			return ctx.Err()
-		case <-streamDone:
+		case <-fm.shutdownCh:
 			return fmt.Errorf("stream stopped")
 		default:
 		}
