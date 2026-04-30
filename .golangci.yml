@@ -1,15 +1,11 @@
+version: "2"
+
 run:
   timeout: 5m
   go: '1.23'
 
-linters:
+formatters:
   enable:
-    - govet
-    - staticcheck
-    - errcheck
-    - gosimple
-    - ineffassign
-    - unused
     - gofmt
     - goimports
 
@@ -21,7 +17,3 @@ issues:
         - errcheck
         - unused
         - govet
-    # Allow fmt.Print* in CLI output.go (intentional user-facing output)
-    - path: internal/cli/output\.go
-      linters:
-        - forbidigo
