@@ -1,0 +1,27 @@
+run:
+  timeout: 5m
+  go: '1.23'
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - gosimple
+    - ineffassign
+    - unused
+    - gofmt
+    - goimports
+
+issues:
+  exclude-rules:
+    # Exclude generated Swagger docs from linting
+    - path: ^docs/
+      linters:
+        - errcheck
+        - unused
+        - govet
+    # Allow fmt.Print* in CLI output.go (intentional user-facing output)
+    - path: internal/cli/output\.go
+      linters:
+        - forbidigo
