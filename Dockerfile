@@ -28,8 +28,34 @@ RUN apk add --no-cache gcc musl-dev
 # Copy remaining source code
 COPY . .
 
-# Run tests to validate the build (fail fast if tests fail)
-RUN CGO_ENABLED=1 go test ./... -v -race
+# Run tests to validate the build with structured logs and concise failure summaries
+RUN set -eu;     mkdir -p /tmp/test-logs;     status=0;     for pkg in $(go list ./...); do       safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g');       log_file="/tmp/test-logs/${safe_pkg}.jsonl";       echo "=== Testing package: ${pkg} ===";       if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file"; then         status=1;         echo "--- Failure summary for ${pkg} ---";         awk '
+          BEGIN { pkg = ""; test = ""; msg = "" }
+          /"Action":"fail"/ {
+            if (match($0, /"Package":"[^"]+"/)) {
+              pkg = substr($0, RSTART + 11, RLENGTH - 12)
+            }
+            if (match($0, /"Test":"[^"]+"/)) {
+              test = substr($0, RSTART + 8, RLENGTH - 9)
+            } else {
+              test = "(package)"
+            }
+          }
+          /"Action":"output"/ && /--- FAIL:/ {
+            if (msg == "") {
+              tmp = $0
+              sub(/^.*"Output":"/, "", tmp)
+              sub(/"[[:space:]]*}$/, "", tmp)
+              gsub(/\\n/, "", tmp)
+              msg = tmp
+            }
+          }
+          END {
+            if (pkg == "") pkg = "(unknown package)"
+            if (msg == "") msg = "(failure message not captured; inspect full JSON log)"
+            printf("package=%s test=%s message=%s\n", pkg, test, msg)
+          }
+        ' "$log_file";       fi;     done;     test "$status" -eq 0
 
 # Install swag CLI and generate Swagger docs
 RUN go install github.com/swaggo/swag/cmd/swag@latest && \
