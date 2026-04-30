@@ -54,6 +54,8 @@ steps:
       - DOCKER_BUILDKIT=1
     args:
       - build
+      - --progress
+      - plain
       - --platform
       - linux/amd64
       - --tag
