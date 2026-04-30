@@ -786,6 +786,38 @@ func TestRateLimiterManyUniqueIPsKeepsBehaviorAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestNewRateLimiterClampsNonPositiveMaxReqSec(t *testing.T) {
+	limiter := NewRateLimiter(0, 10*time.Second)
+
+	const ip = "203.0.113.200"
+	for i := 0; i < rateLimiterDefaultMaxReqSec; i++ {
+		if !limiter.Allow(ip) {
+			t.Fatalf("expected request %d to be allowed with clamped max", i+1)
+		}
+	}
+
+	if limiter.Allow(ip) {
+		t.Fatalf("expected request above clamped max (%d) to be denied", rateLimiterDefaultMaxReqSec)
+	}
+}
+
+func TestNewRateLimiterClampsNonPositiveWindow(t *testing.T) {
+	limiter := NewRateLimiter(1, 0)
+
+	const ip = "203.0.113.201"
+	if !limiter.Allow(ip) {
+		t.Fatalf("expected first request to be allowed")
+	}
+	if limiter.Allow(ip) {
+		t.Fatalf("expected second immediate request to be denied within default window")
+	}
+
+	time.Sleep(rateLimiterDefaultWindow + 20*time.Millisecond)
+	if !limiter.Allow(ip) {
+		t.Fatalf("expected request to be allowed after default window elapsed")
+	}
+}
+
 func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}

@@ -786,10 +786,24 @@ type ipRequestTracker struct {
 const (
 	rateLimiterStaleWindowFactor = 3
 	rateLimiterEvictScanLimit    = 64
+	rateLimiterDefaultMaxReqSec  = 100
+	rateLimiterDefaultWindow     = time.Second
 )
 
-// NewRateLimiter creates a new rate limiter (maxReqSec requests per window duration)
+// NewRateLimiter creates a new rate limiter (maxReqSec requests per window duration).
+//
+// Defensive defaults are applied for invalid input to make misconfiguration explicit
+// and safe at runtime:
+//   - maxReqSec <= 0 is clamped to rateLimiterDefaultMaxReqSec.
+//   - window <= 0 is clamped to rateLimiterDefaultWindow.
 func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
+	if maxReqSec <= 0 {
+		maxReqSec = rateLimiterDefaultMaxReqSec
+	}
+	if window <= 0 {
+		window = rateLimiterDefaultWindow
+	}
+
 	now := time.Now()
 	staleTTL := time.Duration(rateLimiterStaleWindowFactor) * window
 	if staleTTL <= 0 {
