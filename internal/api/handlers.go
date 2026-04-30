@@ -36,7 +36,7 @@ type FrameManager struct {
 	clientImbalance int64 // atomic counter for decrement calls when clientCount is already 0
 
 	// captureDoneCh signals the current capture loop to stop; rotated per capture cycle.
-	doneChan     chan struct{}
+	doneChan chan struct{}
 	// shutdownCh signals manager-wide shutdown and is closed exactly once in Stop().
 	shutdownCh   chan struct{}
 	stopChancel  <-chan struct{} // Channel to cancel pending stop
@@ -883,28 +883,12 @@ func (rl *RateLimiter) evictStaleLocked(now time.Time, scanLimit int) {
 }
 
 // rateLimitMiddleware enforces per-IP rate limiting on API endpoints
-func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
+func rateLimitMiddleware(limiter *RateLimiter, trustedProxyCIDRs []string) func(http.Handler) http.Handler {
+	trustedProxyNets := parseTrustedProxyCIDRs(trustedProxyCIDRs)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Get normalized client IP key
-			ip := ""
-			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-				for _, token := range strings.Split(forwarded, ",") {
-					candidate := strings.TrimSpace(token)
-					if candidate != "" {
-						ip = candidate
-						break
-					}
-				}
-			}
-			if ip == "" {
-				host, _, err := net.SplitHostPort(r.RemoteAddr)
-				if err == nil && host != "" {
-					ip = host
-				} else {
-					ip = r.RemoteAddr
-				}
-			}
+			ip := requestIPForRateLimit(r, trustedProxyNets)
 
 			// Check rate limit
 			if !limiter.Allow(ip) {
@@ -922,6 +906,55 @@ func rateLimitMiddleware(limiter *RateLimiter) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func parseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
+	trusted := make([]*net.IPNet, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		_, network, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err != nil {
+			log.Printf("invalid trusted proxy CIDR %q: %v", cidr, err)
+			continue
+		}
+		trusted = append(trusted, network)
+	}
+	return trusted
+}
+
+func requestIPForRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || host == "" {
+		host = r.RemoteAddr
+	}
+
+	remoteIP := net.ParseIP(host)
+	if remoteIP == nil {
+		return host
+	}
+
+	if !isTrustedProxy(remoteIP, trustedProxyNets) {
+		return remoteIP.String()
+	}
+
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		for _, token := range strings.Split(forwarded, ",") {
+			candidate := strings.TrimSpace(token)
+			if candidate != "" {
+				return candidate
+			}
+		}
+	}
+
+	return remoteIP.String()
+}
+
+func isTrustedProxy(ip net.IP, trustedProxyNets []*net.IPNet) bool {
+	for _, network := range trustedProxyNets {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // RegisterHandlers registers all API endpoints with the Chi router.
@@ -945,7 +978,7 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	// Register API routes with versioning
 	router.Route("/v1", func(r chi.Router) {
 		// Apply rate limiting to v1 endpoints
-		r.Use(rateLimitMiddleware(rateLimiter))
+		r.Use(rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs))
 		registerV1Handlers(r, fm, cfg, startTime)
 	})
 
