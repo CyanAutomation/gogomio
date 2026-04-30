@@ -323,17 +323,14 @@ func TestSettingsUpdateErrorHandling(t *testing.T) {
 
 // TestPanicRecoveryLogging ensures panic recovery messages are logged
 func TestPanicRecoveryLogging(t *testing.T) {
-	// Capture log output
 	var logBuffer bytes.Buffer
-	originalOutput := log.Writer()
-	log.SetOutput(&logBuffer)
-	defer log.SetOutput(originalOutput)
+	logger := log.New(&logBuffer, "", 0)
 
 	// Function with panic recovery (mimics goroutine pattern)
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("❌ PANIC recovered: %v", r)
+				logger.Printf("❌ PANIC recovered: %v", r)
 			}
 		}()
 
