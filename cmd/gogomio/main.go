@@ -142,8 +142,17 @@ func initializeCamera(
 	newRealCamera func() camera.Camera,
 	newMockCamera func() camera.Camera,
 ) (camera.Camera, string, error) {
+	return initializeCameraWithLogger(log.Default(), cfg, newRealCamera, newMockCamera)
+}
+
+func initializeCameraWithLogger(
+	logger *log.Logger,
+	cfg *config.Config,
+	newRealCamera func() camera.Camera,
+	newMockCamera func() camera.Camera,
+) (camera.Camera, string, error) {
 	if cfg.MockCamera {
-		log.Println("🎬 Initializing camera backend: mock (development mode)")
+		logger.Println("🎬 Initializing camera backend: mock (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 			return nil, "", err
@@ -152,8 +161,8 @@ func initializeCamera(
 	}
 
 	// Try real camera first if device is available.
-	log.Println("📹 Initializing camera backend: real (Raspberry Pi CSI)")
-	log.Println("   Checking for CSI camera access...")
+	logger.Println("📹 Initializing camera backend: real (Raspberry Pi CSI)")
+	logger.Println("   Checking for CSI camera access...")
 	realCam := newRealCamera()
 	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 		attemptedBackend := "unknown"
@@ -168,26 +177,26 @@ func initializeCamera(
 			}
 		}
 
-		log.Printf("❌ Real camera initialization failed")
-		log.Printf("   Backend attempted: %s", attemptedBackend)
-		log.Printf("   Failure reason: %s", failureReason)
+		logger.Printf("❌ Real camera initialization failed")
+		logger.Printf("   Backend attempted: %s", attemptedBackend)
+		logger.Printf("   Failure reason: %s", failureReason)
 		if !errors.As(err, &initErr) || errors.Unwrap(err) != nil {
-			log.Printf("   Error details: %v", err)
+			logger.Printf("   Error details: %v", err)
 		}
-		log.Println("   Troubleshooting steps:")
-		log.Println("   1. Verify CSI camera is physically connected to the camera port")
-		log.Println("   2. Enable camera in raspi-config: sudo raspi-config → Interface → Camera")
-		log.Println("   3. Check device permissions: ls -la /dev/video*")
-		log.Println("   4. Verify container has device access (see docker-compose.yml devices section)")
-		log.Println("")
-		log.Println("   For optimal performance (native CSI camera support):")
-		log.Println("   - libcamera-vid binary should be available in the container")
-		log.Println("   - Check: docker exec gogomio which libcamera-vid")
-		log.Println("   - If not found, libcamera-apps package may need to be installed from Raspberry Pi repos")
-		log.Println("")
-		log.Println("   Note: RealCamera may internally try FFmpeg/V4L2 as an alternative backend.")
-		log.Println("   Switching runtime camera backend to mock-fallback mode.")
-		log.Println("🎬 Initializing camera backend: mock-fallback (development mode)")
+		logger.Println("   Troubleshooting steps:")
+		logger.Println("   1. Verify CSI camera is physically connected to the camera port")
+		logger.Println("   2. Enable camera in raspi-config: sudo raspi-config → Interface → Camera")
+		logger.Println("   3. Check device permissions: ls -la /dev/video*")
+		logger.Println("   4. Verify container has device access (see docker-compose.yml devices section)")
+		logger.Println("")
+		logger.Println("   For optimal performance (native CSI camera support):")
+		logger.Println("   - libcamera-vid binary should be available in the container")
+		logger.Println("   - Check: docker exec gogomio which libcamera-vid")
+		logger.Println("   - If not found, libcamera-apps package may need to be installed from Raspberry Pi repos")
+		logger.Println("")
+		logger.Println("   Note: RealCamera may internally try FFmpeg/V4L2 as an alternative backend.")
+		logger.Println("   Switching runtime camera backend to mock-fallback mode.")
+		logger.Println("🎬 Initializing camera backend: mock-fallback (development mode)")
 		cam := newMockCamera()
 		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 			return nil, "", err

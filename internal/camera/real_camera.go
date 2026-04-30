@@ -71,6 +71,7 @@ type RealCamera struct {
 	launchFn func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 	runCmdFn func(*exec.Cmd) ([]byte, error)
 	waitFn   func(*exec.Cmd) error
+	logger   *log.Logger
 }
 
 // InitializationError describes why real camera startup failed.
@@ -121,7 +122,16 @@ func NewRealCamera() *RealCamera {
 	rc.waitFn = func(cmd *exec.Cmd) error {
 		return cmd.Wait()
 	}
+	rc.logger = log.Default()
 	return rc
+}
+
+func (rc *RealCamera) SetLogger(logger *log.Logger) {
+	if logger == nil {
+		rc.logger = log.Default()
+		return
+	}
+	rc.logger = logger
 }
 
 // Start initializes camera configuration and starts the long-lived capture process.
@@ -586,14 +596,14 @@ func (rc *RealCamera) probeV4L2CaptureNode() error {
 
 	output, err := rc.runCmdFn(cmd)
 	if err == nil {
-		log.Printf("✓ V4L2 probe succeeded for %s", rc.devicePath)
+		rc.logger.Printf("✓ V4L2 probe succeeded for %s", rc.devicePath)
 		return nil
 	}
 
 	probeOutput := strings.TrimSpace(string(output))
-	log.Printf("❌ V4L2 probe failed for %s: %v", rc.devicePath, err)
+	rc.logger.Printf("❌ V4L2 probe failed for %s: %v", rc.devicePath, err)
 	if probeOutput != "" {
-		log.Printf("   Probe output: %s", probeOutput)
+		rc.logger.Printf("   Probe output: %s", probeOutput)
 	}
 	return rc.mapFFmpegInputError(probeOutput, err)
 }
