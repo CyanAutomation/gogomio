@@ -148,9 +148,11 @@ docker push cyanautomation/gogomio:latest
 ## Troubleshooting
 
 ### ARM64 emulation not available
+
 This dev container only supports amd64 and cannot emulate ARM64. You have three options:
 
 #### ✅ Option 1: Use GitHub Actions (RECOMMENDED)
+
 GitHub Actions provides native multi-architecture builders. Simply push to trigger an automatic build:
 
 ```bash
@@ -163,17 +165,20 @@ git push origin v0.2.0
 ```
 
 **Watch the build:**
-- https://github.com/CyanAutomation/gogomio/actions
+
+- <https://github.com/CyanAutomation/gogomio/actions>
 - Workflow: "Build Multi-Architecture Docker Image"
 - Takes ~10-15 minutes total
 
 **Setup required (one-time):**
 Add Docker Hub credentials to GitHub Secrets:
-1. Go to: https://github.com/CyanAutomation/gogomio/settings/secrets/actions
+
+1. Go to: <https://github.com/CyanAutomation/gogomio/settings/secrets/actions>
 2. Add `DOCKER_USERNAME` (your Docker Hub username)
 3. Add `DOCKER_PASSWORD` (Docker Hub access token or password)
 
 #### ⚠️ Option 2: Build amd64 only (development/testing)
+
 Only recommended for local testing - **breaks Raspberry Pi compatibility**:
 
 ```bash
@@ -181,6 +186,7 @@ docker buildx build --platform linux/amd64 -t cyanautomation/gogomio:latest --pu
 ```
 
 #### ⚠️ Option 3: Run from native ARM64 system
+
 Build on actual Raspberry Pi hardware or a system with proper virtualization:
 
 ```bash
