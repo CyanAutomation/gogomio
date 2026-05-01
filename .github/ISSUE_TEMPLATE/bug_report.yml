@@ -1,0 +1,69 @@
+name: Bug Report
+description: File a bug report
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the fields below to help us diagnose the issue quickly.
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go Version
+      description: Output of `go version`
+      placeholder: "go1.23.0 linux/amd64"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / Platform
+      placeholder: "Raspberry Pi 4B, Raspberry Pi OS Bookworm 64-bit"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: camera-mode
+    attributes:
+      label: Camera Mode
+      options:
+        - Real camera (libcamera / CSI)
+        - Mock camera (MIO_MOCK=true)
+        - Unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Start server with `MIO_MOCK=true go run ./cmd/gogomio`
+        2. Connect 5 clients to /stream.mjpg
+        3. Kill one client
+        4. Observe panic in server logs
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Paste any relevant server or Docker logs here
+      render: text

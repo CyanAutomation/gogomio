@@ -361,8 +361,8 @@ func TestRouterRegistration_AllHandlersPresent(t *testing.T) {
 		recorder := &testResponseRecorder{header: http.Header{}, statusCode: 200}
 		router.ServeHTTP(recorder, req)
 
-		if recorder.statusCode != tc.expected && recorder.statusCode != 404 {
-			// We're just checking that the route exists, not the exact status
+		if recorder.statusCode == http.StatusNotFound {
+			t.Errorf("%s %s: route not registered (got 404)", tc.method, tc.path)
 		}
 	}
 }
