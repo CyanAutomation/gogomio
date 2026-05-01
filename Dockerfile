@@ -29,18 +29,16 @@ RUN apk add --no-cache gcc musl-dev jq
 # Copy remaining source code
 COPY . .
 
-# Run tests to validate the build with structured logs and concise failure summaries
+# Run tests to validate the build (output suppressed in GCB via --progress quiet)
 RUN set -eu; \
     mkdir -p /tmp/test-logs; \
     status=0; \
     for pkg in $(go list ./...); do \
       safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g'); \
       log_file="/tmp/test-logs/${safe_pkg}.jsonl"; \
-      echo "=== Testing package: ${pkg} ==="; \
-      if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file"; then \
+      if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file" > /dev/null; then \
         status=1; \
-        echo "--- Failure summary for ${pkg} ---"; \
-        jq -rs '(map(select(.Action == "fail" and (.Test != null))) | .[0]) as $test_fail | (map(select(.Action == "fail" and (.Test == null))) | .[0]) as $pkg_fail | (map(select(.Action == "output" and (.Output | test("FAIL")))) | .[0]) as $output_fail | "package=\(($test_fail.Package // $pkg_fail.Package // \"(unknown package)\")) test=\(($test_fail.Test // \"(package)\")) message=\(($output_fail.Output // \"(failure message not captured; inspect full JSON log)\") | gsub("[\\n\\r]+"; " ") | gsub("\\s+"; " ") | sub("^\\s+"; "") | sub("\\s+$"; ""))"' "$log_file"; \
+        jq -rs '(map(select(.Action == "fail" and (.Test != null))) | .[0]) as $fail | if $fail then "FAIL: \($fail.Test)" else empty end' "$log_file"; \
       fi; \
     done; \
     test "$status" -eq 0
@@ -77,32 +75,29 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio" \
       org.opencontainers.image.arch="arm64"
 
-# Setup Raspberry Pi repository and install libcamera-apps
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl gnupg wget tzdata; \
+# Setup Raspberry Pi repository and install libcamera-apps (suppress verbose apt output)
+RUN set -eu; \
+    apt-get update --quiet; \
+    apt-get install -y --quiet --no-install-recommends ca-certificates curl gnupg wget tzdata; \
     \
-    echo "Setting up Raspberry Pi repository for libcamera-apps..."; \
     mkdir -p /etc/apt/keyrings; \
     \
     wget -qO - https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
     gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
-    (echo "⚠️  Failed to download Raspberry Pi GPG key; attempting fallback..."; \
-     curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
-     gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
-     echo "⚠️  GPG key fetch failed, continuing without signature verification"); \
+    curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
+    gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
+    echo "WARNING: GPG key unavailable"; \
     \
     printf "Types: deb deb-src\nURIs: http://archive.raspberrypi.org/debian\nSuites: bookworm\nComponents: main\nSigned-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg\n" > /etc/apt/sources.list.d/raspi.sources; \
     \
-    apt-get update 2>/dev/null || echo "⚠️  Raspberry Pi repository update had issues, continuing..."; \
+    apt-get update --quiet 2>/dev/null || true; \
     \
-    echo "Installing camera support packages..."; \
-    apt-get install -y --no-install-recommends ffmpeg || echo "⚠️  ffmpeg install failed"; \
-    apt-get install -y --no-install-recommends libcamera-apps 2>/dev/null || \
-    apt-get install -y --no-install-recommends rpicam-apps 2>/dev/null || \
-    echo "⚠️  libcamera/rpicam packages not found in repository"; \
+    apt-get install -y --quiet --no-install-recommends ffmpeg 2>/dev/null || true; \
+    apt-get install -y --quiet --no-install-recommends libcamera-apps 2>/dev/null || \
+    apt-get install -y --quiet --no-install-recommends rpicam-apps 2>/dev/null || \
+    echo "WARNING: libcamera/rpicam unavailable"; \
     \
-    apt-get purge -y gnupg wget || true; \
+    apt-get purge -y --quiet gnupg wget || true; \
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raspi.sources
 
 # Create non-root user with explicit umask
