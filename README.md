@@ -55,6 +55,15 @@ For the canonical documentation map and archive policy, see [docs/README.md](doc
 
 ## Getting Started
 
+### Quick Start (One-Command Setup)
+
+```bash
+# Run the bootstrap script to set up and start the development environment
+./scripts/bootstrap.sh
+
+# The server will start at http://localhost:8000
+```
+
 ### Development (Mock Camera - No Hardware)
 
 ```bash

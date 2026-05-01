@@ -1,6 +1,96 @@
 # GoGoMio Build Scripts
 
-This directory contains helper scripts for building and managing GoGoMio Docker images.
+This directory contains helper scripts for building, deploying, and managing GoGoMio.
+
+## Quick Start
+
+**Get up and running in one command:**
+
+```bash
+./bootstrap.sh
+```
+
+This script sets up your environment and starts the development server with mock camera.
+
+---
+
+## bootstrap.sh
+
+**Purpose:** One-command development setup and start
+
+**Features:**
+
+- ✅ Automatic `.env` initialization from `.env.example`
+- ✅ Docker and docker-compose availability checks
+- ✅ Helpful output with quick test commands
+- ✅ No arguments needed
+
+### Usage
+
+```bash
+# Initialize environment and show next steps
+./scripts/bootstrap.sh
+
+# Then start the development environment
+docker-compose -f docker-compose.mock.yml up
+```
+
+### What It Does
+
+1. ✅ Checks if `.env` exists; creates from `.env.example` if needed
+2. ✅ Verifies Docker and docker-compose are available
+3. ✅ Displays setup completion message with quick test commands
+
+### Prerequisites
+
+- Docker and docker-compose installed
+- Run from project root directory
+
+---
+
+## setup-labels.sh
+
+**Purpose:** Create standardized GitHub issue/PR labels
+
+**Features:**
+
+- ✅ Creates 7 custom labels for issue organization
+- ✅ Includes descriptions and color codes
+- ✅ Checks for existing labels (no duplicates)
+- ✅ Uses GitHub CLI (`gh`) for automation
+
+### Usage
+
+```bash
+# Requires GitHub CLI and authentication
+gh auth login  # One-time setup
+
+# Create labels
+./scripts/setup-labels.sh
+```
+
+### Labels Created
+
+| Label | Purpose | Color |
+|-------|---------|-------|
+| `bug` | Defect/issue reports | red |
+| `feature` | New feature requests | light blue |
+| `documentation` | Docs improvements | dark blue |
+| `testing` | Test improvements & coverage | gold |
+| `performance` | Performance optimization | purple |
+| `good-first-issue` | Newcomer-friendly tasks | purple-bright |
+| `dependencies` | Dependency updates | dark blue |
+| `ci` | CI/CD pipeline improvements | dark purple |
+
+### Prerequisites
+
+- GitHub CLI: `gh` (<https://cli.github.com>)
+- Authenticated: `gh auth login`
+- Run from project root directory
+
+---
+
+## build-multiarch.sh
 
 ## build-multiarch.sh
 
