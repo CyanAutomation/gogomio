@@ -1,10 +1,6 @@
 name: Test
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: '0 9 * * 1'  # Every Monday at 9 AM UTC
