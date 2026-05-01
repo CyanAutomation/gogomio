@@ -435,6 +435,7 @@ __✅ CI permissions restricted__
 
 __✅ Usage examples present__  
 [README.md](../../README.md) includes:
+
 * Docker Compose command: `docker-compose -f docker-compose.mock.yml up`
 * Local Go: `go run ./cmd/gogomio`
 * cURL examples: `curl http://localhost:8000/snapshot.jpg`, `curl http://localhost:8000/api/config | jq`
@@ -444,6 +445,7 @@ __✅ Config documented__
 
 __✅ Architecture documented__  
 [docs/architecture/](../../docs/architecture/) folder contains deep-dive analyses:
+
 * [RACE_CONDITIONS_ANALYSIS.md](../../docs/architecture/RACE_CONDITIONS_ANALYSIS.md) — concurrency deep-dive
 * [FRAME_BUFFER_GC_ANALYSIS.md](../../docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) — memory/GC design
 * [ARM64_BUILD_ISSUE.md](../../docs/architecture/ARM64_BUILD_ISSUE.md) — cross-compilation notes
@@ -454,6 +456,7 @@ __✅ Troubleshooting guide present__
 
 __✅ Development/deployment guide__  
 [docs/guides/](../../docs/guides/) includes:
+
 * [RASPBERRY_PI_BUILD.md](../../docs/guides/RASPBERRY_PI_BUILD.md) — Pi deployment
 * [DEPLOYMENT_GUIDE.md](../../docs/guides/DEPLOYMENT_GUIDE.md) — Docker/container deployment
 * [MULTI_ARCH_BUILD.md](../../docs/guides/MULTI_ARCH_BUILD.md) — cross-arch Docker builds

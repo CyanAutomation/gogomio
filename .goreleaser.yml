@@ -1,0 +1,90 @@
+version: 2
+project_name: gogomio
+
+env:
+  - GO111MODULE=on
+
+builds:
+  - id: gogomio
+    main: ./cmd/gogomio
+    binary: gogomio
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/CyanAutomation/gogomio/internal.Version={{.Version}}
+      - -X github.com/CyanAutomation/gogomio/internal.Commit={{.Commit}}
+      - -X github.com/CyanAutomation/gogomio/internal.Date={{.CommitDate}}
+
+archives:
+  - id: gogomio
+    builds:
+      - gogomio
+    name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksums:
+  name_template: "{{ .ProjectName }}_v{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+release:
+  draft: false
+  prerelease: false
+  name_template: "Release v{{ .Version }}"
+  header: |
+    ## GoGoMio {{ .Version }}
+
+    A high-performance MJPEG streaming server for Raspberry Pi CSI cameras.
+
+  footer: |
+    ### Installation
+
+    **Docker (recommended):**
+    ```bash
+    docker pull cyanautomation/gogomio:{{ .Version }}
+    docker run -e MOCK_CAMERA=true -p 8000:8000 cyanautomation/gogomio:{{ .Version }}
+    ```
+
+    **Binary (Linux/macOS):**
+    ```bash
+    # Download the appropriate binary for your system
+    tar xzf gogomio_v{{ .Version }}_<OS>_<ARCH>.tar.gz
+    ./gogomio
+    ```
+
+    **Go Install:**
+    ```bash
+    go install github.com/CyanAutomation/gogomio/cmd/gogomio@v{{ .Version }}
+    ```
+
+    ### Documentation
+    - [Getting Started](https://github.com/CyanAutomation/gogomio#getting-started)
+    - [API Documentation](https://github.com/CyanAutomation/gogomio#api-endpoints)
+    - [Raspberry Pi Deployment](https://github.com/CyanAutomation/gogomio/blob/main/docs/guides/RASPBERRY_PI_BUILD.md)
+
+  disable: false
+
+nfpms:
+  - id: gogomio
+    package_name: gogomio
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}.{{ .ConventionalFileName }}"
+    builds:
+      - gogomio
+    homepage: https://github.com/CyanAutomation/gogomio
+    description: High-performance MJPEG streaming server for Raspberry Pi CSI cameras
+    maintainer: CyanAutomation <dev@cyan.ai>
+    license: BSD-3-Clause
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin

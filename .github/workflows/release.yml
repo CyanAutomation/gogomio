@@ -1,0 +1,54 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG=${{ github.ref_name }}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          # Extract section from CHANGELOG.md for this version
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            # Extract from version header until next version header or end
+            awk "/## \[$VERSION\]/,/## \[/{if (/## \[/ && !/## \[$VERSION\]/) exit; print}" CHANGELOG.md | \
+            sed '1d;$d' > /tmp/release_notes.txt
+          else
+            # Fallback: use commit message
+            git log -1 --pretty=format:"%B" > /tmp/release_notes.txt
+          fi
+          cat /tmp/release_notes.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ steps.version.outputs.version }}"
+          body_path: /tmp/release_notes.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
