@@ -30,14 +30,20 @@ RUN apk add --no-cache gcc musl-dev jq
 COPY . .
 
 # Run tests to validate the build with structured logs and concise failure summaries
-RUN set -eu;     mkdir -p /tmp/test-logs;     status=0;     for pkg in $(go list ./...); do       safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g');       log_file="/tmp/test-logs/${safe_pkg}.jsonl";       echo "=== Testing package: ${pkg} ===";       if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file"; then         status=1;         echo "--- Failure summary for ${pkg} ---";         jq -rs '
-          (map(select(.Action == "fail" and (.Test != null))) | .[0]) as $test_fail
-          | (map(select(.Action == "fail" and (.Test == null))) | .[0]) as $pkg_fail
-          | (map(select(.Action == "output" and (.Output | test("FAIL")))) | .[0]) as $output_fail
-          | "package=\(($test_fail.Package // $pkg_fail.Package // \"(unknown package)\")) "
-            + "test=\(($test_fail.Test // \"(package)\")) "
-            + "message=\(($output_fail.Output // \"(failure message not captured; inspect full JSON log)\") | gsub(\"[\\n\\r]+\"; \" \") | gsub(\"\\s+\"; \" \") | sub(\"^\\s+\"; \"\") | sub(\"\\s+$\"; \"\"))"
-        ' "$log_file";       fi;     done;     test "$status" -eq 0
+RUN set -eu; \
+    mkdir -p /tmp/test-logs; \
+    status=0; \
+    for pkg in $(go list ./...); do \
+      safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g'); \
+      log_file="/tmp/test-logs/${safe_pkg}.jsonl"; \
+      echo "=== Testing package: ${pkg} ==="; \
+      if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file"; then \
+        status=1; \
+        echo "--- Failure summary for ${pkg} ---"; \
+        jq -rs '(map(select(.Action == "fail" and (.Test != null))) | .[0]) as $test_fail | (map(select(.Action == "fail" and (.Test == null))) | .[0]) as $pkg_fail | (map(select(.Action == "output" and (.Output | test("FAIL")))) | .[0]) as $output_fail | "package=\(($test_fail.Package // $pkg_fail.Package // \"(unknown package)\")) test=\(($test_fail.Test // \"(package)\")) message=\(($output_fail.Output // \"(failure message not captured; inspect full JSON log)\") | gsub("[\\n\\r]+"; " ") | gsub("\\s+"; " ") | sub("^\\s+"; "") | sub("\\s+$"; ""))"' "$log_file"; \
+      fi; \
+    done; \
+    test "$status" -eq 0
 
 # Install swag CLI and generate Swagger docs
 RUN go install github.com/swaggo/swag/cmd/swag@latest && \
