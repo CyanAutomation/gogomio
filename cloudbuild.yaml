@@ -55,7 +55,7 @@ steps:
     args:
       - build
       - --progress
-      - quiet
+      - auto
       - --platform
       - linux/amd64
       - --tag
