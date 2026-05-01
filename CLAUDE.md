@@ -37,6 +37,7 @@ docker-compose -f docker-compose.mock.yml up --build
 ```
 
 **Performance Baselines** (April 2026):
+
 - **FrameBuffer.Write()**: ~150ns per frame (optimal; lock-free atomic operation)
 - **MJPEG Handler throughput**: ~10,000 concurrent frames/sec on single core
 - **GC Impact**: <1ms pause per request (see [FRAME_BUFFER_GC_ANALYSIS.md](docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md))
@@ -44,7 +45,7 @@ docker-compose -f docker-compose.mock.yml up --build
 
 Benchmark regression detection runs weekly via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml). See [docs/repo-maturity.md](docs/repo-maturity.md#phase-3-benchmark-tracking--regression-detection-15-hours) for benchmark tracking roadmap.
 
-**CI/CD Note**: Tests run automatically on every push/PR via [.github/workflows/test.yml](.github/workflows/test.yml). All tests must pass and coverage must be ≥75% to merge to `main`. Coverage is tracked on [Codecov](https://codecov.io/gh/CyanAutomation/gogomio). Benchmarks tracked via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml).
+**CI/CD Note**: Tests run automatically on every push/PR via [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml). All tests must pass and coverage must be ≥75% to merge to `main`. Coverage is tracked on [Codecov](https://codecov.io/gh/CyanAutomation/gogomio). Benchmarks tracked via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml).
 
 There is no Makefile. The repo uses standard Go tooling and GitHub Actions for multi-arch Docker builds via `./scripts/build-multiarch.sh`.
 

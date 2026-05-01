@@ -1,6 +1,142 @@
 # Race Conditions and Concurrency Analysis - GoGoMio
 
+> **Last reviewed: April 2026**  
+> `go test ./... -race -count=2` — **all packages pass** (verified April 2026)
+
+## Status Summary
+
+| Issue | Severity (original) | Current Status | Resolution |
+|-------|---------------------|----------------|------------|
+| #1 Send on closed `cleanupCh` | CRITICAL | ✅ **RESOLVED** | `tryEnqueueCleanupRequest` + `cleanupAccept` mutex guard; `cleanupChOnce` protects close |
+| #2 Double-close of `cleanupCh` | CRITICAL | ✅ **RESOLVED** | `cleanupChOnce sync.Once` on every close path |
+| #3 Stale `stopChancel` reference | HIGH | ✅ **RESOLVED** | `rotateStopCancelLocked()` + `context.WithCancel`; stale ref harmlessly closes early |
+| #4 Stale `streamDone` in `StreamFrame()` | HIGH | ✅ **RESOLVED** | `StreamFrame` now uses `fm.shutdownCh` (long-lived) + `ctx.Done()` — no `doneChan` usage |
+| #5 Fragile `captureStarted` logic | MODERATE | ✅ **RESOLVED** | All accesses under `captureMu`; defer guard `doneChan == done` still in place |
+| #6 `isReady` TOCTOU in `RealCamera` | MODERATE | ✅ **ACCEPTED** | `atomic.Bool` + `isStopping` flag; window is negligible in practice |
+| #7 `FrameBuffer` throttle silent drops | LOW | ✅ **ACCEPTED** | By design; throttling behaviour is intentional |
+| #8 `StreamStats` FPS cache race | LOW | ✅ **ACCEPTED** | `RWMutex` prevents corruption; duplicate work only |
+
+---
+
 ## Codebase Summary
+
+**GoGoMio** is a Raspberry Pi CSI camera streaming server written in Go. It:
+
+- Captures MJPEG frames from a camera via a long-lived subprocess
+- Serves frames via HTTP endpoints (`/stream.mjpg`, `/snapshot.jpg`, `/api/*`)
+- Implements lazy capture startup/shutdown based on client connections
+- Provides health monitoring and diagnostics endpoints
+- Uses goroutines for frame capture, HTTP streaming, and cleanup orchestration
+
+**Key Components:**
+
+- `cmd/gogomio/main.go` - Entry point, HTTP server setup, signal handling
+- `internal/api/handlers.go` - HTTP handler management, `FrameManager` (complex concurrent state)
+- `internal/camera/frame_buffer.go` - Thread-safe latest-frame buffer
+- `internal/camera/stream_stats.go` - Frame statistics with RWMutex
+- `internal/camera/connection_tracker.go` - Connection count tracking
+- `internal/camera/real_camera.go` - Camera process management
+- `internal/settings/settings.go` - Persistent settings storage
+
+---
+
+## Issue Details
+
+### 1. ✅ RESOLVED — Send on Closed Channel in scheduleStopCapture()
+
+**Original Severity:** CRITICAL  
+**Resolution date:** ~March 2026 (PR #89, #93, #96)
+
+The original risk was a send on a closed `cleanupCh` during shutdown. This is now prevented by a layered defence:
+
+1. `cleanupSendMu` mutex + `cleanupAccept` bool: the send gate is locked before any send attempt. `Stop()` drains pending senders and sets `cleanupAccept = false` before closing the channel.
+2. `tryEnqueueCleanupRequest()` checks `cleanupAccept` under the mutex; if false, it returns `cleanupEnqueueSkipped` without touching the channel.
+3. `cleanupChOnce sync.Once` ensures the channel is closed exactly once.
+
+**Relevant code:** `internal/api/handlers.go` — `tryEnqueueCleanupRequest()`, `Stop()`, `cleanupChOnce`
+
+---
+
+### 2. ✅ RESOLVED — Double-Close of cleanupCh
+
+**Original Severity:** CRITICAL  
+**Resolution date:** ~March 2026
+
+`cleanupChOnce sync.Once` wraps every `close(fm.cleanupCh)` call. The `Stop()` function also uses `cleanupStopOnce` to protect `close(fm.cleanupStop)`.
+
+**Relevant code:** `internal/api/handlers.go` L50–51 (`cleanupStopOnce`, `cleanupChOnce`), L497–498
+
+---
+
+### 3. ✅ RESOLVED — Stale stopChancel Reference
+
+**Original Severity:** HIGH  
+**Resolution date:** ~March 2026 (PR #89)
+
+`rotateStopCancelLocked()` uses `context.WithCancel` to generate a new `stopChancel` (`<-chan struct{}`) per capture cycle. Stale references captured by `scheduleStopCapture` point to a cancelled context, causing early cancellation of outdated stop requests — which is the correct behaviour.
+
+---
+
+### 4. ✅ RESOLVED — Stale streamDone in StreamFrame()
+
+**Original Severity:** HIGH  
+**Resolution date:** ~March 2026 (PR #96)
+
+`StreamFrame()` no longer uses `fm.doneChan` at all. It selects on:
+- `ctx.Done()` — the HTTP request context (client disconnect)
+- `fm.shutdownCh` — a single long-lived channel closed exactly once in `Stop()`
+
+Neither reference can become stale during a stream session.
+
+---
+
+### 5. ✅ RESOLVED — Fragile captureStarted Logic
+
+**Original Severity:** MODERATE
+
+All reads and writes to `captureStarted` are under `captureMu`. The `captureLoop` defer uses the identity guard `fm.doneChan == done` to ensure only the currently active loop clears the flag. Pattern is documented in code.
+
+---
+
+### 6. ✅ ACCEPTED — isReady TOCTOU in RealCamera
+
+**Original Severity:** MODERATE  
+**Decision:** Accept — risk is negligible
+
+`isReady` uses `atomic.Bool`. The window between the check and `frameMutex.Lock()` is extremely narrow and `isStopping.Load()` provides a second guard. In the worst case, `CaptureFrame()` returns an error for one frame, which the caller handles by retrying. No crash or data corruption is possible.
+
+---
+
+### 7. ✅ ACCEPTED — FrameBuffer Throttle Silent Drops
+
+**Original Severity:** LOW  
+**Decision:** Accept — intentional design
+
+When frames arrive faster than `targetFrameInterval`, excess frames are dropped without notifying waiters. Waiters time out and retry at the next frame. This is the throttling mechanism by design. Behaviour is documented in `frame_buffer.go`.
+
+---
+
+### 8. ✅ ACCEPTED — StreamStats FPS Cache Race
+
+**Original Severity:** LOW  
+**Decision:** Accept — no correctness risk
+
+`RWMutex` prevents data races. Multiple concurrent `Snapshot()` calls may each independently recalculate FPS when `fpsStale` is true — resulting in duplicate work only, not incorrect values.
+
+---
+
+## Testing
+
+```bash
+# Race detector (passes cleanly as of April 2026)
+go test ./... -race -count=2
+
+# With halt-on-error for stricter detection
+GORACE='halt_on_error=1' go test ./... -race -count=2
+```
+
+All packages pass with no race reports.
+
 
 **GoGoMio** is a Raspberry Pi CSI camera streaming server written in Go. It:
 
