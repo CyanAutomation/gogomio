@@ -4,66 +4,72 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/CyanAutomation/gogomio/internal/config"
+	"github.com/go-chi/chi/v5"
 )
 
-// TestDiagnosticsErrorRateCalculation tests error rate calculation
-func TestDiagnosticsErrorRateCalculation(t *testing.T) {
+// TestDiagnosticsErrorRateFromHandler verifies error_rate_percent via routed /api/diagnostics handler
+func TestDiagnosticsErrorRateFromHandler(t *testing.T) {
 	tests := []struct {
-		name         string
-		frameCount   int64
-		failureCount int64
-		expectedRate float64
+		name              string
+		frameCount        int64
+		failureCount      int64
+		expectedErrorRate float64
 	}{
-		{
-			name:         "No frames",
-			frameCount:   0,
-			failureCount: 0,
-			expectedRate: 0,
-		},
-		{
-			name:         "No failures",
-			frameCount:   1000,
-			failureCount: 0,
-			expectedRate: 0,
-		},
-		{
-			name:         "1% failure rate",
-			frameCount:   990,
-			failureCount: 10,
-			expectedRate: 1.0,
-		},
-		{
-			name:         "5% failure rate",
-			frameCount:   950,
-			failureCount: 50,
-			expectedRate: 5.0,
-		},
-		{
-			name:         "50% failure rate",
-			frameCount:   500,
-			failureCount: 500,
-			expectedRate: 50.0,
-		},
-		{
-			name:         "100% failure rate",
-			frameCount:   0,
-			failureCount: 100,
-			expectedRate: 100.0,
-		},
+		{name: "No frames or failures", frameCount: 0, failureCount: 0, expectedErrorRate: 0},
+		{name: "No failures", frameCount: 1000, failureCount: 0, expectedErrorRate: 0},
+		{name: "One percent failures", frameCount: 990, failureCount: 10, expectedErrorRate: 1.0},
+		{name: "Half failures", frameCount: 500, failureCount: 500, expectedErrorRate: 50.0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Calculate error rate using same formula as handleDiagnostics
-			var errorRate float64
-			if tt.frameCount+tt.failureCount > 0 {
-				errorRate = (float64(tt.failureCount) / float64(tt.frameCount+tt.failureCount)) * 100
+			cam := &readinessCamera{ready: true}
+			fm := NewFrameManager(cam, &config.Config{Resolution: [2]int{640, 480}, JPEGQuality: 80, MaxStreamConnections: 2})
+			t.Cleanup(fm.Stop)
+
+			for i := int64(0); i < tt.frameCount; i++ {
+				fm.streamStats.RecordFrame(time.Now().Add(time.Duration(i) * time.Millisecond).UnixNano())
+			}
+			atomic.StoreInt64(&fm.captureFailureTotal, tt.failureCount)
+			atomic.StoreInt64(&fm.consecutiveCaptureFailures, 0)
+
+			router := chi.NewRouter()
+			RegisterHandlers(router, fm, fm.cfg)
+
+			req, err := http.NewRequest(http.MethodGet, "/api/diagnostics", nil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status code: got %d, want %d", rr.Code, http.StatusOK)
+			}
+			if got := rr.Header().Get("Content-Type"); got != "application/json" {
+				t.Fatalf("content type: got %q, want %q", got, "application/json")
 			}
 
-			if errorRate != tt.expectedRate {
-				t.Errorf("Error rate calculation: got %f, want %f", errorRate, tt.expectedRate)
+			var response DetailedHealthResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Failed to decode response JSON: %v", err)
+			}
+			if response.FramesCaptured != tt.frameCount {
+				t.Fatalf("frames_captured: got %d, want %d", response.FramesCaptured, tt.frameCount)
+			}
+			if response.CaptureFailuresTotal != tt.failureCount {
+				t.Fatalf("capture_failures_total: got %d, want %d", response.CaptureFailuresTotal, tt.failureCount)
+			}
+			if math.Abs(response.ErrorRatePercent-tt.expectedErrorRate) > 0.001 {
+				t.Fatalf("error_rate_percent: got %f, want %f", response.ErrorRatePercent, tt.expectedErrorRate)
 			}
 		})
 	}
