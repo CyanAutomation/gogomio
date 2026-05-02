@@ -210,7 +210,6 @@ func TestFormatTable(t *testing.T) {
 	headerLine := lines[0]
 	sepLine := lines[1]
 	firstRow := lines[2]
-	secondRow := lines[3]
 
 	if strings.TrimSpace(headerLine) != "Name       | Value" {
 		t.Errorf("unexpected header placement/format: %q", headerLine)
@@ -235,6 +234,21 @@ func TestFormatTable(t *testing.T) {
 		}
 		if len(parts[1]) != len("640x480") {
 			t.Errorf("line %d second column width mismatch, got %d want %d: %q", i, len(parts[1]), len("640x480"), line)
+		}
+	}
+	if !strings.Contains(headerLine, "Name") || !strings.Contains(headerLine, "Value") {
+		t.Errorf("expected header labels to be present, got: %q", headerLine)
+	}
+	if strings.Count(sepLine, "+") != 1 || !strings.Contains(sepLine, "-+-") {
+		t.Errorf("unexpected separator/delimiter structure: %q", sepLine)
+	}
+	sepParts := strings.Split(sepLine, "+")
+	if len(sepParts) != 2 {
+		t.Fatalf("expected separator to contain exactly two column segments, got %d: %q", len(sepParts), sepLine)
+	}
+	for i, part := range sepParts {
+		if strings.Trim(part, "-") != "" {
+			t.Errorf("separator segment %d should contain only dashes, got %q", i, part)
 		}
 	}
 
