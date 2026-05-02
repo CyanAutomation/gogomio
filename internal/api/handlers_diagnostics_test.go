@@ -75,77 +75,56 @@ func TestDiagnosticsErrorRateFromHandler(t *testing.T) {
 	}
 }
 
-// TestDiagnosticsHealthStatusThresholds tests health status categorization
+// TestDiagnosticsHealthStatusThresholds verifies health status via the diagnostics handler response JSON.
 func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 	tests := []struct {
 		name                string
-		errorRate           float64
+		frameCount          int64
+		failureCount        int64
 		consecutiveFailures int64
 		expectedStatus      string
 	}{
-		{
-			name:                "Excellent - low error rate",
-			errorRate:           0.5,
-			consecutiveFailures: 0,
-			expectedStatus:      "Excellent",
-		},
-		{
-			name:                "Excellent - borderline low",
-			errorRate:           5.0,
-			consecutiveFailures: 0,
-			expectedStatus:      "Excellent",
-		},
-		{
-			name:                "Degraded - borderline high",
-			errorRate:           5.1,
-			consecutiveFailures: 0,
-			expectedStatus:      "Degraded",
-		},
-		{
-			name:                "Degraded - mid range",
-			errorRate:           10.0,
-			consecutiveFailures: 0,
-			expectedStatus:      "Degraded",
-		},
-		{
-			name:                "Degraded - high error rate",
-			errorRate:           19.9,
-			consecutiveFailures: 0,
-			expectedStatus:      "Degraded",
-		},
-		{
-			name:                "Poor - high error rate",
-			errorRate:           20.1,
-			consecutiveFailures: 0,
-			expectedStatus:      "Poor",
-		},
-		{
-			name:                "Poor - many consecutive failures",
-			errorRate:           1.0,
-			consecutiveFailures: 6,
-			expectedStatus:      "Poor",
-		},
-		{
-			name:                "Excellent - few consecutive failures",
-			errorRate:           1.0,
-			consecutiveFailures: 3,
-			expectedStatus:      "Excellent",
-		},
+		{name: "Excellent - boundary 5.0", frameCount: 95, failureCount: 5, consecutiveFailures: 0, expectedStatus: "Excellent"},
+		{name: "Degraded - boundary 5.1", frameCount: 949, failureCount: 51, consecutiveFailures: 0, expectedStatus: "Degraded"},
+		{name: "Degraded - boundary 20.0", frameCount: 80, failureCount: 20, consecutiveFailures: 0, expectedStatus: "Degraded"},
+		{name: "Poor - boundary 20.1", frameCount: 799, failureCount: 201, consecutiveFailures: 0, expectedStatus: "Poor"},
+		{name: "Poor - consecutive failures > 5", frameCount: 99, failureCount: 1, consecutiveFailures: 6, expectedStatus: "Poor"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Replicate health status logic from handleDiagnostics
-			healthStatus := "Excellent"
-			if tt.errorRate > 5 {
-				healthStatus = "Degraded"
+			cam := &readinessCamera{ready: true}
+			fm := NewFrameManager(cam, &config.Config{Resolution: [2]int{640, 480}, JPEGQuality: 80, MaxStreamConnections: 2})
+			t.Cleanup(fm.Stop)
+
+			for i := int64(0); i < tt.frameCount; i++ {
+				fm.streamStats.RecordFrame(time.Now().Add(time.Duration(i) * time.Millisecond).UnixNano())
 			}
-			if tt.errorRate > 20 || tt.consecutiveFailures > 5 {
-				healthStatus = "Poor"
+			atomic.StoreInt64(&fm.captureFailureTotal, tt.failureCount)
+			atomic.StoreInt64(&fm.consecutiveCaptureFailures, tt.consecutiveFailures)
+
+			router := chi.NewRouter()
+			RegisterHandlers(router, fm, fm.cfg)
+
+			req, err := http.NewRequest(http.MethodGet, "/api/diagnostics", nil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
 			}
 
-			if healthStatus != tt.expectedStatus {
-				t.Errorf("Health status: got %s, want %s", healthStatus, tt.expectedStatus)
+			rr := httptest.NewRecorder()
+			router.ServeHTTP(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status code: got %d, want %d", rr.Code, http.StatusOK)
+			}
+
+			var response DetailedHealthResponse
+			if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+				t.Fatalf("Failed to decode response JSON: %v", err)
+			}
+
+			if response.HealthStatus != tt.expectedStatus {
+				t.Fatalf("health_status: got %q, want %q", response.HealthStatus, tt.expectedStatus)
 			}
 		})
 	}
