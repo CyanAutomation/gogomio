@@ -50,7 +50,7 @@ func TestClientFromEnv(t *testing.T) {
 			if tc.setEnv {
 				t.Setenv(envKey, tc.envValue)
 			} else {
-				_ = os.Unsetenv(envKey)
+			os.Unsetenv(envKey)
 			}
 
 			client := ClientFromEnv()
