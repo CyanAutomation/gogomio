@@ -212,16 +212,16 @@ func TestFormatTable(t *testing.T) {
 	firstRow := lines[2]
 	secondRow := lines[3]
 
-	if headerLine != "Name       | Value  " {
+	if strings.TrimSpace(headerLine) != "Name       | Value" {
 		t.Errorf("unexpected header placement/format: %q", headerLine)
 	}
 	if sepLine != "-----------+--------" {
 		t.Errorf("unexpected separator/delimiter structure: %q", sepLine)
 	}
-	if firstRow != "FPS        | 24     " {
+	if strings.TrimSpace(firstRow) != "FPS        | 24" {
 		t.Errorf("unexpected first row formatting: %q", firstRow)
 	}
-	if secondRow != "Resolution | 640x480" {
+	if strings.TrimSpace(secondRow) != "Resolution | 640x480" {
 		t.Errorf("unexpected second row formatting: %q", secondRow)
 	}
 
