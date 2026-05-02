@@ -46,7 +46,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	publicRoutes := []string{
 		`"/api/config"`,
 		`"/api/stream/stop"`,
-		`'/api/diagnostics'`,
+		`"/api/diagnostics"`,
 	}
 	for _, route := range publicRoutes {
 		if !strings.Contains(body, route) {
