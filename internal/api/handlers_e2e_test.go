@@ -261,54 +261,110 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterHandlers(router, fm, testConfig)
 
-	const numClients = 3 // Test with 3 concurrent clients (within typical limits)
-	var wg sync.WaitGroup
-	results := make(chan string, numClients)
-	defer close(results)
+	const numClients = 3
+	type clientResult struct {
+		clientID      int
+		status        int
+		bytesRead     int
+		boundaryFound bool
+		err           error
+	}
 
-	// Start multiple concurrent stream clients
+	var wg sync.WaitGroup
+	results := make(chan clientResult, numClients)
+
 	for i := 0; i < numClients; i++ {
 		wg.Add(1)
 		go func(clientID int) {
 			defer wg.Done()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			writer := newStreamCapturingWriter(50 * 1024) // 50KB per client
+			writer := newStreamCapturingWriter(50 * 1024)
 			req := httptest.NewRequest("GET", "/stream.mjpg", nil)
 			req = req.WithContext(ctx)
 
-			router.ServeHTTP(writer, req)
+			done := make(chan struct{})
+			go func() {
+				router.ServeHTTP(writer, req)
+				close(done)
+			}()
+
+			timeout := time.NewTimer(800 * time.Millisecond)
+			defer timeout.Stop()
+			ticker := time.NewTicker(2 * time.Millisecond)
+			defer ticker.Stop()
+
+			completed := false
+			for !completed {
+				select {
+				case <-done:
+					completed = true
+				case <-timeout.C:
+					cancel()
+					completed = true
+				case <-ticker.C:
+					content := writer.GetContent()
+					if strings.Contains(string(content), "--frame") {
+						cancel()
+						completed = true
+					}
+				}
+			}
+
+			select {
+			case <-done:
+			case <-time.After(300 * time.Millisecond):
+				results <- clientResult{
+					clientID: clientID,
+					status:   writer.GetStatusCode(),
+					err:      fmt.Errorf("stream handler did not stop after cancellation"),
+				}
+				return
+			}
 
 			content := writer.GetContent()
-			if len(content) > 0 && writer.statusCode == http.StatusOK {
-				results <- fmt.Sprintf("client-%d: OK (%d bytes)", clientID, len(content))
-			} else {
-				results <- fmt.Sprintf("client-%d: status=%d, len=%d", clientID, writer.statusCode, len(content))
+			status := writer.GetStatusCode()
+			boundaryFound := strings.Contains(string(content), "--frame")
+
+			var resultErr error
+			if status != http.StatusOK {
+				resultErr = fmt.Errorf("invalid status %d", status)
+			} else if !strings.Contains(writer.GetHeader("Content-Type"), "multipart/x-mixed-replace") {
+				resultErr = fmt.Errorf("invalid content type %q", writer.GetHeader("Content-Type"))
+			} else if !boundaryFound {
+				resultErr = fmt.Errorf("frame boundary not found")
+			}
+
+			if resultErr == nil && ctx.Err() != nil && ctx.Err() != context.Canceled {
+				resultErr = fmt.Errorf("unexpected context error: %v", ctx.Err())
+			}
+
+			results <- clientResult{
+				clientID:      clientID,
+				status:        status,
+				bytesRead:     len(content),
+				boundaryFound: boundaryFound,
+				err:           resultErr,
 			}
 		}(i)
 	}
 
-	// Collect results
-	go func() {
-		wg.Wait()
-	}()
+	wg.Wait()
+	close(results)
 
-	successCount := 0
-	for i := 0; i < numClients; i++ {
-		result := <-results
-		t.Logf("  %s", result)
-		if strings.Contains(result, "OK") {
-			successCount++
+	for result := range results {
+		t.Logf("  client-%d: status=%d bytes=%d boundary=%t err=%v", result.clientID, result.status, result.bytesRead, result.boundaryFound, result.err)
+		if result.err != nil {
+			t.Fatalf("client-%d failed validation: %v", result.clientID, result.err)
+		}
+		if result.bytesRead == 0 {
+			t.Fatalf("client-%d failed validation: no data read", result.clientID)
 		}
 	}
 
-	if successCount < numClients {
-		t.Logf("⚠️  Note: Only %d of %d clients succeeded (connection limiting may be active)", successCount, numClients)
-	}
-
-	t.Logf("✓ Concurrent clients validated: %d client results collected", numClients)
+	t.Logf("✓ Concurrent clients validated with structured result checks: %d clients", numClients)
 }
 
 // TestE2E_HealthEndpoints validates health check endpoints
