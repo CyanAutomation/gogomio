@@ -201,15 +201,71 @@ func TestFormatTable(t *testing.T) {
 	}
 
 	output := FormatTable(headers, rows)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 
-	if !strings.Contains(output, "Name") {
-		t.Errorf("expected 'Name' header, got: %s", output)
+	if len(lines) != len(rows)+2 {
+		t.Fatalf("expected %d lines (header + separator + rows), got %d: %q", len(rows)+2, len(lines), output)
 	}
-	if !strings.Contains(output, "FPS") {
-		t.Errorf("expected 'FPS' row, got: %s", output)
+
+	headerLine := lines[0]
+	sepLine := lines[1]
+	firstRow := lines[2]
+	secondRow := lines[3]
+
+	if headerLine != "Name       | Value  " {
+		t.Errorf("unexpected header placement/format: %q", headerLine)
 	}
-	if !strings.Contains(output, "640x480") {
-		t.Errorf("expected 'Resolution' value, got: %s", output)
+	if sepLine != "-----------+--------" {
+		t.Errorf("unexpected separator/delimiter structure: %q", sepLine)
+	}
+	if firstRow != "FPS        | 24     " {
+		t.Errorf("unexpected first row formatting: %q", firstRow)
+	}
+	if secondRow != "Resolution | 640x480" {
+		t.Errorf("unexpected second row formatting: %q", secondRow)
+	}
+
+	for i, line := range []string{headerLine, firstRow, secondRow} {
+		parts := strings.Split(line, " | ")
+		if len(parts) != 2 {
+			t.Fatalf("line %d expected exactly one column delimiter, got %d parts: %q", i, len(parts), line)
+		}
+		if len(parts[0]) != len("Resolution") {
+			t.Errorf("line %d first column width mismatch, got %d want %d: %q", i, len(parts[0]), len("Resolution"), line)
+		}
+		if len(parts[1]) != len("640x480") {
+			t.Errorf("line %d second column width mismatch, got %d want %d: %q", i, len(parts[1]), len("640x480"), line)
+		}
+	}
+
+	// Uneven-width cells should still align to the max width of each column.
+	unevenHeaders := []string{"Key", "Description"}
+	unevenRows := [][]string{
+		{"A", "short"},
+		{"LongerKey", "x"},
+		{"Mid", "a much longer value"},
+	}
+	unevenOutput := FormatTable(unevenHeaders, unevenRows)
+	unevenLines := strings.Split(strings.TrimSpace(unevenOutput), "\n")
+
+	if len(unevenLines) != len(unevenRows)+2 {
+		t.Fatalf("uneven table expected %d lines, got %d: %q", len(unevenRows)+2, len(unevenLines), unevenOutput)
+	}
+
+	for i, line := range append([]string{unevenLines[0]}, unevenLines[2:]...) {
+		parts := strings.Split(line, " | ")
+		if len(parts) != 2 {
+			t.Fatalf("uneven line %d expected exactly one delimiter, got %d: %q", i, len(parts), line)
+		}
+		if len(parts[0]) != len("LongerKey") {
+			t.Errorf("uneven line %d key column width mismatch, got %d want %d: %q", i, len(parts[0]), len("LongerKey"), line)
+		}
+		if len(parts[1]) != len("a much longer value") {
+			t.Errorf("uneven line %d value column width mismatch, got %d want %d: %q", i, len(parts[1]), len("a much longer value"), line)
+		}
+	}
+	if strings.Count(unevenLines[1], "+") != 1 || !strings.Contains(unevenLines[1], "-+-") {
+		t.Errorf("unexpected uneven separator formatting: %q", unevenLines[1])
 	}
 }
 
