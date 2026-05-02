@@ -187,32 +187,32 @@ func TestInitializeCamera_MockStartFailure(t *testing.T) {
 	}
 }
 
-// TestLogGoroutineStats verifies the goroutine stats logger doesn't panic
-func TestLogGoroutineStats(t *testing.T) {
-	// This test verifies that logGoroutineStats doesn't panic
-	// We can't easily test the logging output since it uses a 10-second ticker
-	// Just verify the function can be called without panicking
+func TestLogGoroutineStatsWithDeps_LogsOneTickAndStops(t *testing.T) {
+	var logBuffer bytes.Buffer
+	logger := log.New(&logBuffer, "", 0)
+	tickerCh := make(chan time.Time)
+	stopCh := make(chan struct{})
+	exited := make(chan struct{})
 
-	done := make(chan struct{})
 	go func() {
-		defer close(done)
-		defer func() {
-			if r := recover(); r != nil {
-				t.Errorf("logGoroutineStats panicked: %v", r)
-			}
-		}()
-
-		// We can't block forever, so we'll just verify the function starts
-		// The actual ticker-based logging is tested indirectly through integration tests
-		logGoroutineStats()
+		defer close(exited)
+		logGoroutineStatsWithDeps(tickerCh, logger, stopCh)
 	}()
 
-	// Give a small timeout - the function will block on the ticker
-	select {
-	case <-done:
-		// Function exited (shouldn't happen, but that's OK for this test)
-	case <-time.After(50 * time.Millisecond):
-		// Expected - function is still running in goroutine
+	tickerCh <- time.Now()
+	close(stopCh)
+	<-exited
+
+	logs := strings.TrimSpace(logBuffer.String())
+	if logs == "" {
+		t.Fatalf("expected one goroutine stats log line, got empty logs")
+	}
+	lines := strings.Split(logs, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected exactly one goroutine stats log line, got %d: %q", len(lines), logs)
+	}
+	if !strings.Contains(lines[0], "📊 Goroutines:") {
+		t.Fatalf("expected log line to contain goroutine stats prefix, got %q", lines[0])
 	}
 }
 
