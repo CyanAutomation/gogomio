@@ -313,9 +313,13 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 				}
 			}
 
+			handlerStopDeadline := time.NewTimer(300 * time.Millisecond)
+			defer handlerStopDeadline.Stop()
+
 			select {
 			case <-done:
-			case <-time.After(300 * time.Millisecond):
+				// Handler stopped successfully
+			case <-handlerStopDeadline.C:
 				results <- clientResult{
 					clientID: clientID,
 					status:   writer.GetStatusCode(),
