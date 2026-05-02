@@ -9,9 +9,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// TestWebUIServingRoot verifies the root-serving contract: HTML semantics plus
-// runtime control hooks that the in-page StreamController depends on.
-func TestWebUIServingRoot(t *testing.T) {
+// TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes verifies stable,
+// user-observable root-page requirements without pinning exact JS source text.
+func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterStaticFiles(router)
 
@@ -42,10 +42,25 @@ func TestWebUIServingRoot(t *testing.T) {
 		}
 	}
 
-	// Optional smoke assertion: keep one lightweight product marker to catch
-	// accidental non-index responses without coupling to broader marketing copy.
-	if !strings.Contains(body, "Motion In Ocean") {
-		t.Log("smoke marker \"Motion In Ocean\" not found; runtime hooks still validate root contract")
+	// Validate references to public API routes consumed by the UI.
+	publicRoutes := []string{
+		`"/api/config"`,
+		`"/api/stream/stop"`,
+		`'/api/diagnostics'`,
+	}
+	for _, route := range publicRoutes {
+		if !strings.Contains(body, route) {
+			t.Errorf("missing public route reference %q in root HTML", route)
+		}
+	}
+
+	// Keep bootstrap verification stable: require a script tag and at least one
+	// element-to-action linkage instead of asserting exact bootstrap source text.
+	if !strings.Contains(body, "<script>") {
+		t.Error("expected inline script tag in root HTML")
+	}
+	if !strings.Contains(body, `id="diagnostics-btn" onclick="openDiagnosticsModal()"`) {
+		t.Error("missing stable element-to-action linkage for diagnostics button")
 	}
 }
 
