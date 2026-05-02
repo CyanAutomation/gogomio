@@ -90,6 +90,8 @@ func (w *streamCapturingWriter) GetContent() []byte {
 
 // TestE2E_StreamEndpointBasic validates basic MJPEG stream structure
 func TestE2E_StreamEndpointBasic(t *testing.T) {
+	t.Helper()
+
 	fm := NewFrameManager(newStableFrameCamera(nil), &config.Config{
 		TargetFPS:            10,
 		MaxStreamConnections: 10,
@@ -101,11 +103,14 @@ func TestE2E_StreamEndpointBasic(t *testing.T) {
 		MaxStreamConnections: 10,
 	})
 
-	// Use a short timeout for the test
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	const maxStreamBytes = 50 * 1024
+
+	// Deterministic cancellation: stop once a first frame delimiter appears,
+	// or after a safety timeout/max byte threshold.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	writer := newStreamCapturingWriter(50 * 1024) // 50KB limit
+	writer := newStreamCapturingWriter(maxStreamBytes)
 	req := httptest.NewRequest("GET", "/stream.mjpg", nil)
 	req = req.WithContext(ctx)
 
@@ -116,33 +121,62 @@ func TestE2E_StreamEndpointBasic(t *testing.T) {
 		close(done)
 	}()
 
-	// Wait for handler to complete
+	boundarySeen := false
+	pollTicker := time.NewTicker(2 * time.Millisecond)
+	defer pollTicker.Stop()
+
+	hardTimeout := time.NewTimer(750 * time.Millisecond)
+	defer hardTimeout.Stop()
+
+	// Cancel once we observe a multipart frame boundary or hit capture limits.
+	for {
+		select {
+		case <-done:
+			goto VERIFY
+		case <-hardTimeout.C:
+			cancel()
+			goto WAIT_DONE
+		case <-pollTicker.C:
+			content := writer.GetContent()
+			if strings.Contains(string(content), "--frame") {
+				boundarySeen = true
+				cancel()
+				goto WAIT_DONE
+			}
+			if len(content) >= maxStreamBytes {
+				cancel()
+				goto WAIT_DONE
+			}
+		}
+	}
+
+WAIT_DONE:
+	// Wait for the handler to exit after cancellation.
 	select {
 	case <-done:
-	case <-time.After(1 * time.Second):
-		t.Log("⚠️  Stream test handler timeout (expected for streaming)")
+	case <-time.After(250 * time.Millisecond):
+		t.Fatalf("stream handler did not stop after deterministic cancellation")
 	}
+
+VERIFY:
 
 	// Verify stream response
 	if writer.statusCode != http.StatusOK {
-		t.Logf("expected status 200, got %d", writer.statusCode)
+		t.Fatalf("expected status 200, got %d", writer.statusCode)
 	}
 
 	contentType := writer.header.Get("Content-Type")
 	if !strings.Contains(contentType, "multipart/x-mixed-replace") {
-		t.Logf("expected multipart content type, got %s", contentType)
+		t.Fatalf("expected multipart content type, got %s", contentType)
 	}
 
 	content := writer.GetContent()
-	if len(content) > 0 {
-		// Verify multipart boundary structure
-		if strings.Contains(string(content), "--frame") {
-			t.Log("✓ Stream endpoint basic structure validated: multipart boundaries found")
-		} else {
-			t.Log("⚠️  No multipart boundaries found, but stream received data")
-		}
-	} else {
-		t.Log("⚠️  Stream empty, may indicate connection limit or timing issue")
+	if len(content) == 0 {
+		t.Fatalf("expected non-empty stream payload")
+	}
+
+	if !boundarySeen && !strings.Contains(string(content), "--frame") {
+		t.Errorf("expected at least one multipart frame boundary marker in payload")
 	}
 }
 
