@@ -201,6 +201,11 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 	rc.devicePath = "/dev/null"
 	rc.captureWaitTimeout = 75 * time.Millisecond
 
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready before Start")
+	}
+
+	releaseStream := make(chan struct{})
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
@@ -211,20 +216,21 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 		go func() {
 			defer func() { _ = stderrW.Close() }()
 			defer func() { _ = stdoutW.Close() }()
-			time.Sleep(2 * time.Second)
+			<-releaseStream
 		}()
 		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
 	}
 
 	err := rc.Start(640, 480, 24, 80)
+	close(releaseStream)
 	if err == nil {
 		t.Fatal("expected Start() timeout error")
 	}
-	if !strings.Contains(err.Error(), "timed out waiting") {
-		t.Fatalf("expected startup timeout, got %v", err)
+	if !errors.Is(err, ErrFirstFrameTimeout) {
+		t.Fatalf("expected ErrFirstFrameTimeout, got %v", err)
 	}
 	if rc.IsReady() {
-		t.Fatal("camera should not be ready when startup times out")
+		t.Fatal("camera should not be ready after startup timeout")
 	}
 }
 

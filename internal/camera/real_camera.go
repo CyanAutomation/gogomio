@@ -28,6 +28,9 @@ const (
 	jpegQualityMax            = 100
 )
 
+
+var ErrFirstFrameTimeout = errors.New("camera first frame timeout")
+
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
 // process that emits an MJPEG byte stream.
 type RealCamera struct {
@@ -257,6 +260,7 @@ func (rc *RealCamera) waitForFirstFrame() error {
 			return &InitializationError{
 				Backend: rc.getBackendAttempted(),
 				Reason:  fmt.Sprintf("timed out waiting %s for first JPEG frame (fps=%d)", timeout.Round(10*time.Millisecond), rc.fps),
+				Cause:   ErrFirstFrameTimeout,
 			}
 		}
 
