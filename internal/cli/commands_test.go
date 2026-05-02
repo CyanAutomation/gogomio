@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -165,8 +166,16 @@ func TestFormatJSON(t *testing.T) {
 
 	output := FormatJSON(data)
 
-	if !strings.Contains(output, "fps") {
-		t.Errorf("expected 'fps' in JSON output, got: %s", output)
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		t.Fatalf("expected valid JSON output, got parse error: %v; output=%q", err, output)
+	}
+
+	if got, ok := parsed["status"].(string); !ok || got != "ok" {
+		t.Errorf("expected status=ok, got: %#v", parsed["status"])
+	}
+	if got, ok := parsed["fps"].(float64); !ok || got != 24 {
+		t.Errorf("expected fps=24, got: %#v", parsed["fps"])
 	}
 }
 
