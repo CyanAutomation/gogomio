@@ -91,11 +91,37 @@ func TestFormatHealthDetailed(t *testing.T) {
 
 	output := FormatHealthDetailed(health)
 
-	if !strings.Contains(output, "System Health:") {
-		t.Errorf("expected 'System Health:' in output, got: %s", output)
+	// Representative status and numeric fields should be surfaced.
+	if !strings.Contains(output, "Status: ok (Excellent)") {
+		t.Errorf("expected status with health text in output, got: %q", output)
 	}
-	if !strings.Contains(output, "Status:") {
-		t.Errorf("expected 'Status:' in output, got: %s", output)
+	if !strings.Contains(output, "FPS: 24.5/24") {
+		t.Errorf("expected current/configured FPS in output, got: %q", output)
+	}
+	if !strings.Contains(output, "Connections: 1/2") {
+		t.Errorf("expected connection usage/max in output, got: %q", output)
+	}
+
+	// Edge behavior: degraded/non-zero failures should be shown clearly.
+	degraded := &HealthDetailedResponse{
+		Status:               "degraded",
+		HealthStatus:         "Warning",
+		Message:              "Intermittent capture errors",
+		FPSCurrent:           18.75,
+		FPSConfigured:        24,
+		FramesCaptured:       43100,
+		StreamConnections:    1,
+		MaxConnections:       2,
+		LastFrameAgeSeconds:  0.120,
+		CaptureFailuresTotal: 3,
+	}
+
+	degradedOutput := FormatHealthDetailed(degraded)
+	if !strings.Contains(degradedOutput, "Status: degraded (Warning)") {
+		t.Errorf("expected degraded status text in output, got: %q", degradedOutput)
+	}
+	if !strings.Contains(degradedOutput, "Capture Failures: 0 consecutive, 3 total") {
+		t.Errorf("expected non-zero failure total in output, got: %q", degradedOutput)
 	}
 }
 
