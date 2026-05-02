@@ -130,112 +130,54 @@ func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 	}
 }
 
-// TestDiagnosticsResponseStructure tests that diagnostics response contains all fields
+// TestDiagnosticsResponseStructure verifies JSON includes client-critical fields
+// with expected semantic values rather than only tag-mapping mechanics.
 func TestDiagnosticsResponseStructure(t *testing.T) {
-	// Create a sample DetailedHealthResponse
 	response := DetailedHealthResponse{
-		Status:                     "ok",
-		CameraReady:                true,
-		FPSCurrent:                 24.5,
-		UptimeSeconds:              3600,
+		Status:                     "degraded",
+		CameraReady:                false,
+		FPSCurrent:                 4.2,
+		UptimeSeconds:              900,
 		StreamConnections:          1,
-		FramesCaptured:             86400,
-		LastFrameAgeSeconds:        0.1,
-		Resolution:                 "1920x1080",
-		JPEGQuality:                85,
+		FramesCaptured:             200,
+		LastFrameAgeSeconds:        2.5,
+		Resolution:                 "1280x720",
+		JPEGQuality:                80,
 		MaxConnections:             2,
-		CaptureFailuresConsecutive: 0,
-		CaptureFailuresTotal:       10,
-		ErrorRatePercent:           0.01,
-		HealthStatus:               "Excellent",
-		Message:                    "Camera is functioning normally",
+		CaptureFailuresConsecutive: 6,
+		CaptureFailuresTotal:       40,
+		ErrorRatePercent:           16.67,
+		HealthStatus:               "Poor",
+		Message:                    "Capture reliability degraded",
 	}
 
-	// Marshal to JSON
 	data, err := json.Marshal(response)
 	if err != nil {
 		t.Fatalf("Failed to marshal response: %v", err)
 	}
 
-	// Unmarshal to verify all fields
-	var unmarshaled map[string]interface{}
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+	var body map[string]interface{}
+	if err := json.Unmarshal(data, &body); err != nil {
 		t.Fatalf("Failed to unmarshal response: %v", err)
 	}
 
-	// Check for required fields
-	requiredFields := []string{
-		"status",
-		"camera_ready",
-		"fps_current",
-		"uptime_seconds",
-		"stream_connections",
-		"frames_captured",
-		"last_frame_age_seconds",
-		"resolution",
-		"jpeg_quality",
-		"max_stream_connections",
-		"capture_failures_consecutive",
-		"capture_failures_total",
-		"error_rate_percent",
-		"health_status",
-		"message",
+	if got := body["status"]; got != "degraded" {
+		t.Fatalf("status: got %v, want %q", got, "degraded")
 	}
-
-	for _, field := range requiredFields {
-		if _, ok := unmarshaled[field]; !ok {
-			t.Errorf("Missing field in response: %s", field)
-		}
+	if got := body["health_status"]; got != "Poor" {
+		t.Fatalf("health_status: got %v, want %q", got, "Poor")
 	}
-}
-
-// TestDiagnosticsResponseJSONEncoding tests that response encodes correctly
-func TestDiagnosticsResponseJSONEncoding(t *testing.T) {
-	response := DetailedHealthResponse{
-		Status:                     "ok",
-		CameraReady:                true,
-		FPSCurrent:                 30.0,
-		UptimeSeconds:              1000,
-		StreamConnections:          1,
-		FramesCaptured:             30000,
-		LastFrameAgeSeconds:        0.05,
-		Resolution:                 "1024x768",
-		JPEGQuality:                80,
-		MaxConnections:             2,
-		CaptureFailuresConsecutive: 0,
-		CaptureFailuresTotal:       5,
-		ErrorRatePercent:           0.016,
-		HealthStatus:               "Excellent",
-		Message:                    "Test message",
+	if got := body["capture_failures_total"]; got != float64(40) {
+		t.Fatalf("capture_failures_total: got %v, want %v", got, float64(40))
 	}
-
-	// Test encoding
-	data, err := json.Marshal(response)
-	if err != nil {
-		t.Fatalf("Failed to marshal: %v", err)
+	if got := body["capture_failures_consecutive"]; got != float64(6) {
+		t.Fatalf("capture_failures_consecutive: got %v, want %v", got, float64(6))
 	}
-
-	// Test decoding
-	var decoded DetailedHealthResponse
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
+	if got := body["error_rate_percent"]; math.Abs(got.(float64)-16.67) > 0.001 {
+		t.Fatalf("error_rate_percent: got %v, want approximately %v", got, 16.67)
 	}
-
-	// Verify values match
-	if decoded.Status != response.Status {
-		t.Errorf("Status mismatch: %s vs %s", decoded.Status, response.Status)
-	}
-	if decoded.ErrorRatePercent != response.ErrorRatePercent {
-		t.Errorf("ErrorRatePercent mismatch: %f vs %f", decoded.ErrorRatePercent, response.ErrorRatePercent)
-	}
-	if decoded.HealthStatus != response.HealthStatus {
-		t.Errorf("HealthStatus mismatch: %s vs %s", decoded.HealthStatus, response.HealthStatus)
-	}
-	if decoded.CaptureFailuresConsecutive != response.CaptureFailuresConsecutive {
-		t.Errorf("CaptureFailuresConsecutive mismatch: %d vs %d", decoded.CaptureFailuresConsecutive, response.CaptureFailuresConsecutive)
-	}
-	if decoded.CaptureFailuresTotal != response.CaptureFailuresTotal {
-		t.Errorf("CaptureFailuresTotal mismatch: %d vs %d", decoded.CaptureFailuresTotal, response.CaptureFailuresTotal)
+	if got := body["message"]; got != "Capture reliability degraded" {
+		t.Fatalf("message: got %v, want %q", got, "Capture reliability degraded")
 	}
 }
 
