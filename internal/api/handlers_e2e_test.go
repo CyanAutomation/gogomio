@@ -104,6 +104,12 @@ func (w *streamCapturingWriter) GetHeader(key string) string {
 	return w.header.Get(key)
 }
 
+func (w *streamCapturingWriter) GetBytesWritten() int64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.bytesWritten
+}
+
 // TestE2E_StreamEndpointBasic validates basic MJPEG stream structure
 func TestE2E_StreamEndpointBasic(t *testing.T) {
 	t.Helper()
@@ -387,11 +393,11 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	}
 
 	// Verify some data was streamed before disconnect
-	if writer.bytesWritten == 0 {
+	if writer.GetBytesWritten() == 0 {
 		t.Error("expected some data to be streamed before disconnect")
 	}
 
-	t.Logf("✓ Client disconnection handled cleanly: %d bytes streamed before disconnect", writer.bytesWritten)
+	t.Logf("✓ Client disconnection handled cleanly: %d bytes streamed before disconnect", writer.GetBytesWritten())
 }
 
 // TestE2E_ConfigEndpoint validates /api/config endpoint
