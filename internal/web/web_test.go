@@ -78,22 +78,61 @@ func TestWebUINotFoundPath(t *testing.T) {
 	}
 }
 
-// TestWebUICacheHeaders tests that caching headers are present
+// TestWebUICacheHeaders verifies root page and static assets have expected cache policy directives and TTLs.
 func TestWebUICacheHeaders(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterStaticFiles(router)
 
-	req, _ := http.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	cacheControl := w.Header().Get("Cache-Control")
-	if cacheControl == "" {
-		t.Error("Cache-Control header missing")
+	tests := []struct {
+		name             string
+		path             string
+		wantMaxAge       string
+		wantDirective    string
+		forbidDirective  string
+	}{
+		{
+			name:            "root_html",
+			path:            "/",
+			wantMaxAge:      "max-age=3600",
+			wantDirective:   "public",
+			forbidDirective: "no-cache",
+		},
+		{
+			name:            "mio_asset",
+			path:            "/static/mio/mio_pose_idle.png",
+			wantMaxAge:      "max-age=86400",
+			wantDirective:   "public",
+			forbidDirective: "no-cache",
+		},
 	}
 
-	if !strings.Contains(cacheControl, "max-age") {
-		t.Errorf("Cache-Control missing max-age: got %q", cacheControl)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", tc.path, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("%s status code: got %d, want 200", tc.path, w.Code)
+			}
+
+			cacheControl := w.Header().Get("Cache-Control")
+			if cacheControl == "" {
+				t.Fatalf("%s Cache-Control header missing", tc.path)
+			}
+
+			if !strings.Contains(cacheControl, tc.wantMaxAge) {
+				t.Errorf("%s cache-control: got %q, want directive %q", tc.path, cacheControl, tc.wantMaxAge)
+			}
+
+			if !strings.Contains(cacheControl, tc.wantDirective) {
+				t.Errorf("%s cache-control: got %q, missing directive %q", tc.path, cacheControl, tc.wantDirective)
+			}
+
+			if tc.forbidDirective != "" && strings.Contains(cacheControl, tc.forbidDirective) {
+				t.Errorf("%s cache-control: got %q, should not include %q", tc.path, cacheControl, tc.forbidDirective)
+			}
+		})
 	}
 }
 
@@ -118,10 +157,6 @@ func TestMioStaticAssetsAreServed(t *testing.T) {
 			t.Errorf("asset %q status code: got %d, want 200", asset, w.Code)
 		}
 
-		cacheControl := w.Header().Get("Cache-Control")
-		if !strings.Contains(cacheControl, "max-age=86400") {
-			t.Errorf("asset %q cache-control: got %q, expected max-age=86400", asset, cacheControl)
-		}
 	}
 }
 
