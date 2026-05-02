@@ -41,8 +41,37 @@ func TestFormatHealth(t *testing.T) {
 
 	output := FormatHealth(health)
 
-	if !strings.Contains(output, "Health: ok") {
-		t.Errorf("expected 'Health: ok', got: %s", output)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	fields := make(map[string]string, len(lines))
+	for _, line := range lines {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		label := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		fields[label] = value
+	}
+
+	if got := fields["Health"]; got != "ok" {
+		t.Errorf("expected Health=ok, got: %q (output=%q)", got, output)
+	}
+	if got := fields["Camera Ready"]; got != "true" {
+		t.Errorf("expected Camera Ready=true, got: %q (output=%q)", got, output)
+	}
+	if got := fields["Timestamp"]; got != "2026-04-19T16:00:00Z" {
+		t.Errorf("expected Timestamp=2026-04-19T16:00:00Z, got: %q (output=%q)", got, output)
+	}
+
+	// Negative assertions: key fields should not be malformed or empty.
+	if strings.TrimSpace(fields["Health"]) == "" {
+		t.Errorf("expected non-empty Health value, got: %q (output=%q)", fields["Health"], output)
+	}
+	if strings.TrimSpace(fields["Timestamp"]) == "" {
+		t.Errorf("expected non-empty Timestamp value, got: %q (output=%q)", fields["Timestamp"], output)
+	}
+	if strings.EqualFold(fields["Timestamp"], "null") || strings.EqualFold(fields["Timestamp"], "none") {
+		t.Errorf("expected concrete Timestamp representation, got: %q (output=%q)", fields["Timestamp"], output)
 	}
 }
 
