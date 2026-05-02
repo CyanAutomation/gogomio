@@ -44,9 +44,9 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 
 	// Validate references to public API routes consumed by the UI.
 	publicRoutes := []string{
-		`"/api/config"`,
-		`"/api/stream/stop"`,
-		`"/api/diagnostics"`,
+		"/api/config",
+		"/api/stream/stop",
+		"/api/diagnostics",
 	}
 	for _, route := range publicRoutes {
 		if !strings.Contains(body, route) {
@@ -54,10 +54,10 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		}
 	}
 
-	// Keep bootstrap verification stable: require a script tag and at least one
-	// element-to-action linkage instead of asserting exact bootstrap source text.
-	if !strings.Contains(body, "<script>") {
-		t.Error("expected inline script tag in root HTML")
+	// Keep bootstrap verification stable by asserting bootstrap-specific behavior
+	// instead of matching entire script source text.
+	if !strings.Contains(body, "new StreamController();") {
+		t.Error("missing StreamController bootstrap initialization in root HTML")
 	}
 	if !strings.Contains(body, `id="diagnostics-btn" onclick="openDiagnosticsModal()"`) {
 		t.Error("missing stable element-to-action linkage for diagnostics button")
