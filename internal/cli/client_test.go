@@ -4,13 +4,60 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
-func TestClientFromEnv_DefaultURL(t *testing.T) {
-	client := ClientFromEnv()
-	if client.baseURL != "http://localhost:8000" {
-		t.Errorf("expected default URL http://localhost:8000, got %s", client.baseURL)
+func TestClientFromEnv(t *testing.T) {
+	const envKey = "GOGOMIO_URL"
+	original, hadOriginal := os.LookupEnv(envKey)
+	defer func() {
+		if hadOriginal {
+			_ = os.Setenv(envKey, original)
+			return
+		}
+		_ = os.Unsetenv(envKey)
+	}()
+
+	tests := []struct {
+		name        string
+		envValue    string
+		setEnv      bool
+		expectedURL string
+	}{
+		{
+			name:        "uses default URL when env is unset",
+			setEnv:      false,
+			expectedURL: "http://localhost:8000",
+		},
+		{
+			name:        "uses URL from environment override",
+			envValue:    "https://example.com:9443",
+			setEnv:      true,
+			expectedURL: "https://example.com:9443",
+		},
+		{
+			name:        "preserves malformed URL from environment",
+			envValue:    "://bad-url",
+			setEnv:      true,
+			expectedURL: "://bad-url",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setEnv {
+				t.Setenv(envKey, tc.envValue)
+			} else {
+			os.Unsetenv(envKey)
+			}
+
+			client := ClientFromEnv()
+			if client.baseURL != tc.expectedURL {
+				t.Errorf("expected baseURL %q, got %q", tc.expectedURL, client.baseURL)
+			}
+		})
 	}
 }
 
