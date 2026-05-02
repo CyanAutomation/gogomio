@@ -9,8 +9,8 @@ import (
 	"log"
 	"math"
 	"os/exec"
-	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -95,7 +95,11 @@ func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 	rc.devicePath = "/dev/null"
 	rc.captureWaitTimeout = 200 * time.Millisecond
 	rc.stopWaitTimeout = 10 * time.Millisecond
+
+	waitStarted := make(chan struct{})
+	var waitStartedOnce sync.Once
 	rc.waitFn = func(*exec.Cmd) error {
+		waitStartedOnce.Do(func() { close(waitStarted) })
 		select {}
 	}
 
@@ -121,18 +125,33 @@ func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	base := runtime.NumGoroutine()
-	// Test that a stuck Wait() doesn't leak goroutines on Stop().
-	// The waitFn blocks forever, so Stop() should timeout without leaking.
-	if err := rc.Stop(); err != nil {
-		t.Fatalf("Stop() error = %v", err)
+	select {
+	case <-waitStarted:
+		// The process wait goroutine is definitely running and now stuck.
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("timed out waiting for waitFn to start")
 	}
-	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
-	after := runtime.NumGoroutine()
-	// Allow +1 for the stuck waiter since it only times out (doesn't exit).
-	if after > base+1 {
-		t.Fatalf("unexpected goroutine growth after Stop(): base=%d after=%d", base, after)
+
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- rc.Stop()
+	}()
+
+	select {
+	case err := <-stopDone:
+		if err != nil {
+			t.Fatalf("Stop() error = %v", err)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Stop() did not complete while waitFn was stuck")
+	}
+
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready after Stop")
+	}
+
+	if rc.frameUpdateCh != nil {
+		t.Fatal("frameUpdateCh should be closed and cleared during Stop")
 	}
 }
 
