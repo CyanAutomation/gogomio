@@ -102,8 +102,9 @@ func TestSettingsBackupCreation(t *testing.T) {
 	backupPath := settingsPath + ".bak"
 
 	m := NewManager(settingsPath)
-	_ = m.Set("key1", "value1")
-	_ = m.persist()
+	if err := m.Set("key1", "value1"); err != nil {
+		t.Fatalf("Failed first write: %v", err)
+	}
 
 	// First write should create settings file
 	if _, err := os.Stat(settingsPath); err != nil {
@@ -111,19 +112,35 @@ func TestSettingsBackupCreation(t *testing.T) {
 	}
 
 	// Second write should create backup
-	_ = m.Set("key2", "value2")
-	_ = m.persist()
+	if err := m.Set("key2", "value2"); err != nil {
+		t.Fatalf("Failed second write: %v", err)
+	}
 
-	// Backup may or may not exist depending on implementation details,
-	// but if it does, it should contain valid JSON
-	if _, err := os.Stat(backupPath); err == nil {
-		content, err := os.ReadFile(backupPath)
-		if err != nil {
-			t.Errorf("Failed to read backup: %v", err)
-		}
-		var data map[string]interface{}
-		if err := json.Unmarshal(content, &data); err != nil {
-			t.Errorf("Backup file contains invalid JSON: %v", err)
+	// By design, persist() copies the current settings file to .bak before overwrite,
+	// so after second write the backup must exist and contain the previous state.
+	if _, err := os.Stat(backupPath); err != nil {
+		t.Fatalf("Backup file was not created after second write: %v", err)
+	}
+
+	content, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("Failed to read backup: %v", err)
+	}
+
+	var backupData map[string]interface{}
+	if err := json.Unmarshal(content, &backupData); err != nil {
+		t.Fatalf("Backup file contains invalid JSON: %v", err)
+	}
+
+	expected := map[string]interface{}{
+		"key1": "value1",
+	}
+	if len(backupData) != len(expected) {
+		t.Fatalf("Backup JSON has unexpected number of keys: got %d, want %d (content=%v)", len(backupData), len(expected), backupData)
+	}
+	for k, v := range expected {
+		if backupData[k] != v {
+			t.Fatalf("Backup JSON mismatch for key %q: got %v, want %v (content=%v)", k, backupData[k], v, backupData)
 		}
 	}
 }
