@@ -173,7 +173,12 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 	if got := body["capture_failures_consecutive"]; got != float64(6) {
 		t.Fatalf("capture_failures_consecutive: got %v, want %v", got, float64(6))
 	}
-	if got := body["error_rate_percent"]; math.Abs(got.(float64)-16.67) > 0.001 {
+	errorRate, ok := body["error_rate_percent"].(float64)
+	if !ok {
+		t.Fatalf("error_rate_percent is not a float64: got type %T", body["error_rate_percent"])
+	}
+	if math.Abs(errorRate-16.67) > 0.001 {
+		t.Fatalf("error_rate_percent: got %v, want approximately %v", errorRate, 16.67)
 		t.Fatalf("error_rate_percent: got %v, want approximately %v", got, 16.67)
 	}
 	if got := body["message"]; got != "Capture reliability degraded" {
