@@ -278,7 +278,7 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 		go func(clientID int) {
 			defer wg.Done()
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 1100*time.Millisecond)
 			defer cancel()
 
 			writer := newStreamCapturingWriter(50 * 1024)
@@ -291,42 +291,49 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 				close(done)
 			}()
 
-			timeout := time.NewTimer(800 * time.Millisecond)
-			defer timeout.Stop()
+			observationWindow := time.NewTimer(800 * time.Millisecond)
+			defer observationWindow.Stop()
 			ticker := time.NewTicker(2 * time.Millisecond)
 			defer ticker.Stop()
 
-			completed := false
-			for !completed {
+			needsStopCheck := false
+			for {
 				select {
 				case <-done:
-					completed = true
-				case <-timeout.C:
+					needsStopCheck = false
+					goto evaluateResult
+				case <-observationWindow.C:
 					cancel()
-					completed = true
+					needsStopCheck = true
+					goto evaluateStop
 				case <-ticker.C:
-					content := writer.GetContent()
-					if strings.Contains(string(content), "--frame") {
+					if strings.Contains(string(writer.GetContent()), "--frame") {
 						cancel()
-						completed = true
+						needsStopCheck = true
+						goto evaluateStop
 					}
 				}
 			}
 
-			handlerStopDeadline := time.NewTimer(300 * time.Millisecond)
-			defer handlerStopDeadline.Stop()
+		evaluateStop:
+			if needsStopCheck {
+				handlerStopDeadline := time.NewTimer(300 * time.Millisecond)
+				defer handlerStopDeadline.Stop()
 
-			select {
-			case <-done:
-				// Handler stopped successfully
-			case <-handlerStopDeadline.C:
-				results <- clientResult{
-					clientID: clientID,
-					status:   writer.GetStatusCode(),
-					err:      fmt.Errorf("stream handler did not stop after cancellation"),
+				select {
+				case <-done:
+				case <-handlerStopDeadline.C:
+					<-done
+					results <- clientResult{
+						clientID: clientID,
+						status:   writer.GetStatusCode(),
+						err:      fmt.Errorf("stream handler did not stop within 300ms after cancellation"),
+					}
+					return
 				}
-				return
 			}
+
+		evaluateResult:
 
 			content := writer.GetContent()
 			status := writer.GetStatusCode()
