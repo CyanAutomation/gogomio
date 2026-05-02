@@ -41,12 +41,12 @@ func (c *stableFrameCamera) CaptureFrame() ([]byte, error) {
 
 // streamCapturingWriter captures the full stream response for validation
 type streamCapturingWriter struct {
-	header      http.Header
-	statusCode  int
-	buf         []byte
-	mu          sync.Mutex
-	maxBytes    int64
-	bytesWriten int64
+	header       http.Header
+	statusCode   int
+	buf          []byte
+	mu           sync.Mutex
+	maxBytes     int64
+	bytesWritten int64
 }
 
 func newStreamCapturingWriter(maxBytes int64) *streamCapturingWriter {
@@ -64,13 +64,17 @@ func (w *streamCapturingWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.maxBytes > 0 && w.bytesWriten+int64(len(p)) > w.maxBytes {
+	if w.maxBytes > 0 && w.bytesWritten+int64(len(p)) > w.maxBytes {
 		// Stop writing after maxBytes
 		return 0, io.EOF
 	}
 
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+
 	w.buf = append(w.buf, p...)
-	w.bytesWriten += int64(len(p))
+	w.bytesWritten += int64(len(p))
 	return len(p), nil
 }
 
@@ -85,7 +89,19 @@ func (w *streamCapturingWriter) Flush() {}
 func (w *streamCapturingWriter) GetContent() []byte {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.buf
+	return append([]byte(nil), w.buf...)
+}
+
+func (w *streamCapturingWriter) GetStatusCode() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.statusCode
+}
+
+func (w *streamCapturingWriter) GetHeader(key string) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.header.Get(key)
 }
 
 // TestE2E_StreamEndpointBasic validates basic MJPEG stream structure
@@ -129,28 +145,35 @@ func TestE2E_StreamEndpointBasic(t *testing.T) {
 	defer hardTimeout.Stop()
 
 	// Cancel once we observe a multipart frame boundary or hit capture limits.
-	for {
+	cancelled := false
+	for !cancelled {
 		select {
 		case <-done:
-			goto VERIFY
+			cancelled = true
 		case <-hardTimeout.C:
 			cancel()
-			goto WAIT_DONE
+			cancelled = true
 		case <-pollTicker.C:
 			content := writer.GetContent()
 			if strings.Contains(string(content), "--frame") {
 				boundarySeen = true
 				cancel()
-				goto WAIT_DONE
+				cancelled = true
+				continue
 			}
 			if len(content) >= maxStreamBytes {
 				cancel()
-				goto WAIT_DONE
+				cancelled = true
 			}
+		}
+
+		select {
+		case <-done:
+			cancelled = true
+		default:
 		}
 	}
 
-WAIT_DONE:
 	// Wait for the handler to exit after cancellation.
 	select {
 	case <-done:
@@ -158,14 +181,13 @@ WAIT_DONE:
 		t.Fatalf("stream handler did not stop after deterministic cancellation")
 	}
 
-VERIFY:
-
 	// Verify stream response
-	if writer.statusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", writer.statusCode)
+	statusCode := writer.GetStatusCode()
+	if statusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", statusCode)
 	}
 
-	contentType := writer.header.Get("Content-Type")
+	contentType := writer.GetHeader("Content-Type")
 	if !strings.Contains(contentType, "multipart/x-mixed-replace") {
 		t.Fatalf("expected multipart content type, got %s", contentType)
 	}
@@ -365,11 +387,11 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	}
 
 	// Verify some data was streamed before disconnect
-	if writer.bytesWriten == 0 {
+	if writer.bytesWritten == 0 {
 		t.Error("expected some data to be streamed before disconnect")
 	}
 
-	t.Logf("✓ Client disconnection handled cleanly: %d bytes streamed before disconnect", writer.bytesWriten)
+	t.Logf("✓ Client disconnection handled cleanly: %d bytes streamed before disconnect", writer.bytesWritten)
 }
 
 // TestE2E_ConfigEndpoint validates /api/config endpoint
