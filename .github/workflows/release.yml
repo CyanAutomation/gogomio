@@ -46,7 +46,7 @@ jobs:
           cat /tmp/release_notes.txt
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event.inputs.tag }}
           name: "Release ${{ steps.version.outputs.version }}"
