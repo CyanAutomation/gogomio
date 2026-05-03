@@ -43,7 +43,7 @@ jobs:
 
       - name: Download previous benchmark
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: benchmark-results
           path: ./
@@ -111,7 +111,7 @@ jobs:
 
     steps:
       - name: Download benchmark artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: benchmark-results
 
