@@ -35,7 +35,16 @@ func (c *stableFrameCamera) Start(_, _, _, _ int) error { return nil }
 func (c *stableFrameCamera) Stop() error                { return nil }
 func (c *stableFrameCamera) IsReady() bool              { return true }
 func (c *stableFrameCamera) CaptureFrame() ([]byte, error) {
-	time.Sleep(1 * time.Millisecond) // Minimal delay
+	return c.CaptureFrameWithContext(context.Background())
+}
+func (c *stableFrameCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	timer := time.NewTimer(1 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+	}
 	return c.frame, c.captureErr
 }
 

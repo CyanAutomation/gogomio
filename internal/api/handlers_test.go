@@ -41,6 +41,15 @@ func (c *captureLoopCountingCamera) Stop() error                { return nil }
 func (c *captureLoopCountingCamera) IsReady() bool              { return true }
 
 func (c *captureLoopCountingCamera) CaptureFrame() ([]byte, error) {
+	return c.CaptureFrameWithContext(context.Background())
+}
+
+func (c *captureLoopCountingCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
 	active := atomic.AddInt64(&c.activeCaptures, 1)
 	defer atomic.AddInt64(&c.activeCaptures, -1)
 
@@ -54,7 +63,13 @@ func (c *captureLoopCountingCamera) CaptureFrame() ([]byte, error) {
 		}
 	}
 
-	time.Sleep(4 * time.Millisecond)
+	timer := time.NewTimer(4 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+	}
 	return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil
 }
 
@@ -64,7 +79,16 @@ func (c *repeatedFrameCamera) Start(_, _, _, _ int) error { return nil }
 func (c *repeatedFrameCamera) Stop() error                { return nil }
 func (c *repeatedFrameCamera) IsReady() bool              { return true }
 func (c *repeatedFrameCamera) CaptureFrame() ([]byte, error) {
-	time.Sleep(5 * time.Millisecond)
+	return c.CaptureFrameWithContext(context.Background())
+}
+func (c *repeatedFrameCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	timer := time.NewTimer(5 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+	}
 	return []byte{0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9}, nil
 }
 
@@ -77,6 +101,20 @@ func (c *readinessCamera) Stop() error                { return nil }
 func (c *readinessCamera) IsReady() bool              { return c.ready }
 func (c *readinessCamera) CaptureFrame() ([]byte, error) {
 	return nil, nil
+}
+func (c *readinessCamera) CaptureFrameWithContext(_ context.Context) ([]byte, error) { return nil, nil }
+
+type blockingCaptureCamera struct{}
+
+func (c *blockingCaptureCamera) Start(_, _, _, _ int) error { return nil }
+func (c *blockingCaptureCamera) Stop() error                { return nil }
+func (c *blockingCaptureCamera) IsReady() bool              { return true }
+func (c *blockingCaptureCamera) CaptureFrame() ([]byte, error) {
+	return c.CaptureFrameWithContext(context.Background())
+}
+func (c *blockingCaptureCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 var errStopStream = errors.New("stop stream")
@@ -1643,6 +1681,28 @@ func TestFrameManager_CaptureLoop_RestartAfterStop(t *testing.T) {
 
 	fm.stopCapture()
 	waitForCaptureState(t, fm, false)
+}
+
+func TestFrameManager_Stop_InterruptsBlockingCapture(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	cam := &blockingCaptureCamera{}
+	fm := NewFrameManager(cam, cfg)
+
+	fm.startCapture()
+
+	done := make(chan struct{})
+	go func() {
+		fm.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(testDuration(500 * time.Millisecond)):
+		t.Fatal("Stop() did not interrupt blocking capture loop")
+	}
 }
 
 // TestFrameManager_CaptureLoop_IdempotentStart tests that starting twice is idempotent

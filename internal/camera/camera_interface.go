@@ -1,5 +1,7 @@
 package camera
 
+import "context"
+
 // Camera interface defines the contract for camera implementations (real and mock).
 type Camera interface {
 	// Start initializes and starts the camera capture.
@@ -11,6 +13,7 @@ type Camera interface {
 	// CaptureFrame captures and returns a JPEG-encoded frame.
 	// Should block until a frame is available.
 	CaptureFrame() ([]byte, error)
+	CaptureFrameWithContext(ctx context.Context) ([]byte, error)
 
 	// Stop stops the camera capture.
 	Stop() error
