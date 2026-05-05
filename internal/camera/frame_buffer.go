@@ -22,8 +22,9 @@ type FrameBuffer struct {
 	snapshot              frameSnapshot
 	notifyCh              chan struct{}
 	stats                 *StreamStats
-	lastFrameMonotonic    int64
-	targetFrameIntervalNS int64
+	lastFrameTime         time.Time
+	targetFrameInterval   time.Duration
+	nowFn                 func() time.Time
 }
 
 // NewFrameBuffer creates a new FrameBuffer.
@@ -36,9 +37,10 @@ func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 	fb := &FrameBuffer{
 		notifyCh: make(chan struct{}),
 		stats:    stats,
+		nowFn:    time.Now,
 	}
 	if targetFPS > 0 {
-		fb.targetFrameIntervalNS = 1e9 / int64(targetFPS)
+		fb.targetFrameInterval = time.Second / time.Duration(targetFPS)
 	}
 	return fb
 }
@@ -65,10 +67,10 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) (int, error) {
 	defer fb.mu.Unlock()
 
 	// Check if we should throttle based on target FPS.
-	now := time.Now().UnixNano()
-	if fb.targetFrameIntervalNS > 0 && fb.lastFrameMonotonic > 0 {
-		elapsed := now - fb.lastFrameMonotonic
-		if elapsed < fb.targetFrameIntervalNS {
+	now := fb.nowFn()
+	if fb.targetFrameInterval > 0 && !fb.lastFrameTime.IsZero() {
+		elapsed := now.Sub(fb.lastFrameTime)
+		if elapsed < fb.targetFrameInterval {
 			// Too soon, skip this frame but still notify waiters
 			// to prevent them from stalling during FPS limiting
 			close(fb.notifyCh)
@@ -81,9 +83,9 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) (int, error) {
 		data: buf,
 		seq:  fb.snapshot.seq + 1,
 	}
-	fb.lastFrameMonotonic = now
+	fb.lastFrameTime = now
 	if fb.stats != nil {
-		fb.stats.RecordFrame(now)
+		fb.stats.RecordFrame(now.UnixNano())
 	}
 
 	// Signal all waiting readers with a fresh publish channel.
