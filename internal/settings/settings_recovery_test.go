@@ -242,3 +242,98 @@ func BenchmarkSettingsLoad(b *testing.B) {
 		_ = m.load()
 	}
 }
+
+// TestSettingsRecoveryConcurrentWithWrite ensures recovery writes are serialized with concurrent persist writes.
+func TestSettingsRecoveryConcurrentWithWrite(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gogomio_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+	backupPath := settingsPath + ".bak"
+
+	if err := os.WriteFile(settingsPath, []byte("{corrupt}"), 0644); err != nil {
+		t.Fatalf("failed to write corrupt settings: %v", err)
+	}
+	if err := os.WriteFile(backupPath, []byte(`{"from_backup":"ok"}`), 0644); err != nil {
+		t.Fatalf("failed to write backup settings: %v", err)
+	}
+
+	recoveryMgr := NewManager(settingsPath)
+	writerMgr := NewManager(settingsPath)
+
+	errCh := make(chan error, 2)
+	go func() { errCh <- recoveryMgr.load() }()
+	go func() { errCh <- writerMgr.Set("writer", "won") }()
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("concurrent operation failed: %v", err)
+		}
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read resulting settings file: %v", err)
+	}
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(content, &got); err != nil {
+		t.Fatalf("resulting settings file contains invalid JSON: %v\ncontent=%q", err, string(content))
+	}
+
+	if got["writer"] != "won" {
+		t.Fatalf("writer update missing after concurrent recovery/write: %v", got)
+	}
+}
+
+// TestSettingsArchiveConcurrentWithWrite ensures archive rename is serialized with concurrent writes.
+func TestSettingsArchiveConcurrentWithWrite(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gogomio_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+	if err := os.WriteFile(settingsPath, []byte("{corrupt}"), 0644); err != nil {
+		t.Fatalf("failed to write corrupt settings: %v", err)
+	}
+
+	recoveryMgr := NewManager(settingsPath)
+	writerMgr := NewManager(settingsPath)
+
+	errCh := make(chan error, 2)
+	go func() { errCh <- recoveryMgr.load() }()
+	go func() { errCh <- writerMgr.Set("writer", "won") }()
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("concurrent operation failed: %v", err)
+		}
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("failed to read resulting settings file: %v", err)
+	}
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(content, &got); err != nil {
+		t.Fatalf("resulting settings file contains invalid JSON: %v\ncontent=%q", err, string(content))
+	}
+
+	if got["writer"] != "won" {
+		t.Fatalf("writer update missing after concurrent archive/write: %v", got)
+	}
+
+	archived, err := filepath.Glob(filepath.Join(tmpDir, "settings.json.corrupted.*"))
+	if err != nil {
+		t.Fatalf("failed to glob archive files: %v", err)
+	}
+	if len(archived) == 0 {
+		t.Fatal("expected at least one archived corrupted file")
+	}
+}
