@@ -319,7 +319,6 @@ func (m *Manager) load() error {
 		if backupErr == nil {
 			if backupErr := json.Unmarshal(backupData, &loaded); backupErr == nil {
 				log.Printf("✓ Settings: recovered from backup file")
-				m.data = loaded
 				// Attempt to restore backup over corrupted file
 				if restoreErr := m.withSettingsLock(func() error {
 					return os.WriteFile(m.filePath, backupData, 0644)
@@ -328,6 +327,9 @@ func (m *Manager) load() error {
 				} else {
 					log.Printf("✓ Settings: restored from backup")
 				}
+				m.mu.Lock()
+				m.data = loaded
+				m.mu.Unlock()
 				return nil
 			}
 		}
@@ -353,7 +355,9 @@ func (m *Manager) load() error {
 		loaded = make(map[string]interface{})
 	}
 
+	m.mu.Lock()
 	m.data = loaded
+	m.mu.Unlock()
 	return nil
 }
 
