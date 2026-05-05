@@ -2,6 +2,7 @@ package camera
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -72,6 +73,17 @@ func (mc *MockCamera) Start(width, height, fps, jpegQuality int) error {
 
 // CaptureFrame captures and returns a JPEG frame.
 func (mc *MockCamera) CaptureFrame() ([]byte, error) {
+	return mc.CaptureFrameWithContext(context.Background())
+}
+
+// CaptureFrameWithContext captures and returns a JPEG frame.
+func (mc *MockCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	mc.mu.Lock()
 	if !mc.ready {
 		mc.mu.Unlock()
@@ -100,6 +112,11 @@ func (mc *MockCamera) CaptureFrame() ([]byte, error) {
 	// Sleep and JPEG generation happen outside the lock.
 	if sleepDuration > 0 {
 		mc.sleep(sleepDuration)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 	}
 
 	// Generate a synthetic frame
