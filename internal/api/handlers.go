@@ -41,6 +41,9 @@ type FrameManager struct {
 	shutdownCh   chan struct{}
 	stopChancel  <-chan struct{} // Channel to cancel pending stop
 	stopCancelFn context.CancelFunc
+	captureCtx   context.Context
+	captureCancel context.CancelFunc
+	captureWG    sync.WaitGroup
 
 	// Cleanup infrastructure for idle timeout
 	cleanupCh       chan cleanupRequest
@@ -176,10 +179,12 @@ func (fm *FrameManager) startCapture() {
 	done := make(chan struct{})
 	fm.captureStarted = true
 	fm.doneChan = done
+	fm.captureCtx, fm.captureCancel = context.WithCancel(context.Background())
 	// Create a new stop-cancel signal for this capture cycle.
 	fm.rotateStopCancelLocked()
 	atomic.AddInt64(&fm.captureStarts, 1)
 	fm.captureMu.Unlock()
+	fm.captureWG.Add(1)
 	go fm.captureLoop(done)
 }
 
@@ -324,11 +329,18 @@ func (fm *FrameManager) stopCaptureIfIdle(expectedDone chan struct{}) bool {
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
+	cancel := fm.captureCancel
+	fm.captureCancel = nil
+	fm.captureCtx = nil
 	fm.captureMu.Unlock()
 
+	if cancel != nil {
+		cancel()
+	}
 	if done != nil {
 		close(done)
 	}
+	fm.captureWG.Wait()
 	return true
 }
 
@@ -396,18 +408,25 @@ func (fm *FrameManager) stopCapture() {
 	}
 	fm.captureStarted = false
 	done := fm.doneChan
+	cancel := fm.captureCancel
+	fm.captureCancel = nil
+	fm.captureCtx = nil
 	fm.captureMu.Unlock()
 	log.Printf("📊 stopCapture: closing done channel to signal captureLoop to exit")
+	if cancel != nil {
+		cancel()
+	}
 	if done != nil {
 		close(done)
 	}
-	time.Sleep(50 * time.Millisecond) // Allow goroutine to exit cleanly
+	fm.captureWG.Wait()
 	log.Printf("✓ stopCapture: done channel closed")
 }
 
 // captureLoop continuously captures frames from the camera and writes to the frame buffer.
 func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 	log.Printf("🎬 Capture loop STARTED")
+	defer fm.captureWG.Done()
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("❌ PANIC in captureLoop: %v", r)
@@ -416,10 +435,18 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 		fm.captureMu.Lock()
 		if fm.doneChan == done {
 			fm.captureStarted = false
+			fm.captureCancel = nil
+			fm.captureCtx = nil
 			log.Printf("🎬 Marked captureStarted=false in defer")
 		}
 		fm.captureMu.Unlock()
 	}()
+	fm.captureMu.Lock()
+	captureCtx := fm.captureCtx
+	fm.captureMu.Unlock()
+	if captureCtx == nil {
+		captureCtx = context.Background()
+	}
 
 	retryDelay := initialCaptureRetryDelay
 	captureCount := 0
@@ -435,7 +462,7 @@ func (fm *FrameManager) captureLoop(done <-chan struct{}) {
 		// CaptureFrame blocks until a newer frame sequence is published (or timeout/error),
 		// so this loop tracks upstream frame cadence without CPU spinning.
 		// Add minimal 1ms sleep to prevent tight spinning on error path retries.
-		frame, err := fm.cam.CaptureFrame()
+		frame, err := fm.cam.CaptureFrameWithContext(captureCtx)
 		if err != nil {
 			consecutive := atomic.AddInt64(&fm.consecutiveCaptureFailures, 1)
 			total := atomic.AddInt64(&fm.captureFailureTotal, 1)

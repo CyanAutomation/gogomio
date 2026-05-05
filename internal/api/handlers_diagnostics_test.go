@@ -179,7 +179,6 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 	}
 	if math.Abs(errorRate-16.67) > 0.001 {
 		t.Fatalf("error_rate_percent: got %v, want approximately %v", errorRate, 16.67)
-		t.Fatalf("error_rate_percent: got %v, want approximately %v", got, 16.67)
 	}
 	if got := body["message"]; got != "Capture reliability degraded" {
 		t.Fatalf("message: got %v, want %q", got, "Capture reliability degraded")
