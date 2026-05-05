@@ -312,6 +312,12 @@ func (rc *RealCamera) getBackendAttempted() string {
 //
 // Returned frame bytes are shared and MUST be treated as immutable.
 func (rc *RealCamera) CaptureFrame() ([]byte, error) {
+	return rc.CaptureFrameWithContext(context.Background())
+}
+
+// CaptureFrameWithContext returns a newer buffered frame than the previous call, waiting
+// for frame sequence advancement when necessary.
+func (rc *RealCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
 	if !rc.isReady.Load() {
 		return nil, fmt.Errorf("camera not ready")
 	}
@@ -352,6 +358,9 @@ func (rc *RealCamera) CaptureFrame() ([]byte, error) {
 		select {
 		case <-updateCh:
 			timer.Stop()
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
 		case <-timer.C:
 			return nil, fmt.Errorf("timed out waiting for frame")
 		}
