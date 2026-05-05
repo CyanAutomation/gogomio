@@ -77,7 +77,7 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	}
 
 	// Get timestamp after first write
-	lastTime := fb.lastFrameMonotonic
+	lastTime := fb.lastFrameTime
 
 	// Write second frame immediately (should be throttled)
 	n2, _ := fb.Write(frame2)
@@ -105,8 +105,47 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	}
 
 	// Timestamp should have advanced
-	if fb.lastFrameMonotonic == lastTime {
-		t.Error("lastFrameMonotonic did not advance")
+	if fb.lastFrameTime.Equal(lastTime) {
+		t.Error("lastFrameTime did not advance")
+	}
+}
+
+
+
+func TestFrameBufferFPSThrottlingWithClockJump(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 10)
+
+	base := time.Unix(1700000000, 0)
+	times := []time.Time{
+		base,
+		base.Add(20 * time.Millisecond),
+		base.Add(-1 * time.Hour), // simulated wall-clock jump backwards
+		base.Add(130 * time.Millisecond),
+	}
+	idx := 0
+	fb.nowFn = func() time.Time {
+		v := times[idx]
+		if idx < len(times)-1 {
+			idx++
+		}
+		return v
+	}
+
+	_, _ = fb.Write([]byte{1})
+	_, _ = fb.Write([]byte{2})
+	if got := fb.GetFrame(); !bytes.Equal(got, []byte{1}) {
+		t.Fatalf("second frame should be throttled, got %v", got)
+	}
+
+	_, _ = fb.Write([]byte{3})
+	if got := fb.GetFrame(); !bytes.Equal(got, []byte{1}) {
+		t.Fatalf("clock-jump frame should be throttled, got %v", got)
+	}
+
+	_, _ = fb.Write([]byte{4})
+	if got := fb.GetFrame(); !bytes.Equal(got, []byte{4}) {
+		t.Fatalf("frame after interval should publish, got %v", got)
 	}
 }
 
@@ -265,11 +304,11 @@ func TestFrameBufferConcurrentWrites(t *testing.T) {
 	}
 
 	fb.mu.Lock()
-	lastMonotonic := fb.lastFrameMonotonic
+	lastFrameTime := fb.lastFrameTime
 	fb.mu.Unlock()
 
-	if lastMonotonic <= 0 {
-		t.Fatalf("lastFrameMonotonic is %d, want > 0", lastMonotonic)
+	if lastFrameTime.IsZero() {
+		t.Fatal("lastFrameTime is zero, want non-zero")
 	}
 
 	count, _, _ := stats.Snapshot()
