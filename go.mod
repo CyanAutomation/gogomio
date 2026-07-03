@@ -1,6 +1,6 @@
 module github.com/CyanAutomation/gogomio
 
-go 1.23.0
+go 1.25.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
@@ -21,7 +21,7 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/swaggo/files v1.0.1 // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
