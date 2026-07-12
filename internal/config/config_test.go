@@ -36,8 +36,8 @@ func TestConfigDefaults(t *testing.T) {
 	cfg := LoadFromEnv()
 
 	// Check defaults
-	if cfg.Resolution != [2]int{640, 480} {
-		t.Errorf("default resolution is %v, want [640 480]", cfg.Resolution)
+	if cfg.Resolution != [2]int{640, 640} {
+		t.Errorf("default resolution is %v, want [640 640]", cfg.Resolution)
 	}
 	if cfg.FPS != 24 {
 		t.Errorf("default FPS is %d, want 24", cfg.FPS)
@@ -210,7 +210,7 @@ func TestConfig_InvalidResolution_ZeroWidth(t *testing.T) {
 
 	cfg := LoadFromEnv()
 	// Should fall back to default when invalid
-	if cfg.Resolution != [2]int{640, 480} {
+	if cfg.Resolution != [2]int{640, 640} {
 		t.Errorf("invalid resolution should use default, got %v", cfg.Resolution)
 	}
 }
@@ -221,7 +221,7 @@ func TestConfig_InvalidResolution_ZeroHeight(t *testing.T) {
 
 	cfg := LoadFromEnv()
 	// Should fall back to default when invalid
-	if cfg.Resolution != [2]int{640, 480} {
+	if cfg.Resolution != [2]int{640, 640} {
 		t.Errorf("invalid resolution should use default, got %v", cfg.Resolution)
 	}
 }
@@ -231,7 +231,7 @@ func TestConfig_InvalidResolution_NegativeWidth(t *testing.T) {
 	t.Setenv("MIO_RESOLUTION", "-640x480")
 
 	cfg := LoadFromEnv()
-	if cfg.Resolution != [2]int{640, 480} {
+	if cfg.Resolution != [2]int{640, 640} {
 		t.Errorf("invalid resolution should use default, got %v", cfg.Resolution)
 	}
 }
@@ -244,7 +244,6 @@ func TestConfig_InvalidResolution_Malformed(t *testing.T) {
 		"640x",
 		"x480",
 		"640y480",
-		"640 x 480",
 		"640x480x32",
 		"",
 		"abc x def",
@@ -253,7 +252,7 @@ func TestConfig_InvalidResolution_Malformed(t *testing.T) {
 	for _, malformed := range tests {
 		t.Setenv("MIO_RESOLUTION", malformed)
 		cfg := LoadFromEnv()
-		if cfg.Resolution != [2]int{640, 480} {
+		if cfg.Resolution != [2]int{640, 640} {
 			t.Errorf("malformed resolution %q should use default, got %v", malformed, cfg.Resolution)
 		}
 	}

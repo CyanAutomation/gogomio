@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -36,6 +37,10 @@ func (f *fakeCamera) Start(width, height, fps, jpegQuality int) error {
 
 func (f *fakeCamera) CaptureFrame() ([]byte, error) { return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil }
 
+func (f *fakeCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	return f.CaptureFrame()
+}
+
 func (f *fakeCamera) Stop() error {
 	f.mu.Lock()
 	f.stopCalls++
@@ -47,7 +52,7 @@ func (f *fakeCamera) IsReady() bool { return true }
 
 func testConfig() *config.Config {
 	return &config.Config{
-		Resolution:  [2]int{640, 480},
+		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		JPEGQuality: 90,
 	}
@@ -219,7 +224,7 @@ func TestLogGoroutineStatsWithDeps_LogsOneTickAndStops(t *testing.T) {
 // TestServerInitialization_CameraStartup tests that server initializes camera properly
 func TestServerInitialization_CameraStartup(t *testing.T) {
 	cfg := &config.Config{
-		Resolution:  [2]int{640, 480},
+		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		JPEGQuality: 90,
 		Port:        0, // Use random port
@@ -257,7 +262,7 @@ func TestServerInitialization_CameraStartup(t *testing.T) {
 // TestServerInitialization_ErrorHandling tests graceful error handling during startup
 func TestServerInitialization_ErrorHandling(t *testing.T) {
 	cfg := &config.Config{
-		Resolution:  [2]int{640, 480},
+		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		JPEGQuality: 90,
 	}
@@ -286,7 +291,7 @@ func TestServerInitialization_ErrorHandling(t *testing.T) {
 // TestServerShutdown_CameraCleanup tests camera is properly stopped during shutdown
 func TestServerShutdown_CameraCleanup(t *testing.T) {
 	cfg := &config.Config{
-		Resolution:  [2]int{640, 480},
+		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		JPEGQuality: 90,
 		Port:        0,
@@ -324,7 +329,7 @@ func TestServerShutdown_CameraCleanup(t *testing.T) {
 // TestRouterRegistration_AllHandlersPresent tests that all handlers are registered
 func TestRouterRegistration_AllHandlersPresent(t *testing.T) {
 	cfg := &config.Config{
-		Resolution:  [2]int{640, 480},
+		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		TargetFPS:   24,
 		JPEGQuality: 90,
@@ -389,7 +394,7 @@ func (r *testResponseRecorder) WriteHeader(code int) {
 // TestFrameManagerLifecycle tests FrameManager start/stop doesn't panic
 func TestFrameManagerLifecycle(t *testing.T) {
 	cfg := &config.Config{
-		Resolution:           [2]int{640, 480},
+		Resolution:           [2]int{640, 640},
 		FPS:                  24,
 		TargetFPS:            24,
 		JPEGQuality:          90,
@@ -425,7 +430,7 @@ func TestConcurrentServerInitialization(t *testing.T) {
 			defer wg.Done()
 
 			cfg := &config.Config{
-				Resolution:  [2]int{640, 480},
+				Resolution:  [2]int{640, 640},
 				FPS:         24,
 				JPEGQuality: 90,
 			}
