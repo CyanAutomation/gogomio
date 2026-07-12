@@ -25,7 +25,7 @@ type Config struct {
 // LoadFromEnv loads configuration from environment variables with defaults.
 func LoadFromEnv() *Config {
 	cfg := &Config{
-		Resolution:           [2]int{640, 480},
+		Resolution:           [2]int{640, 640},
 		FPS:                  24,
 		TargetFPS:            24,
 		JPEGQuality:          90,
