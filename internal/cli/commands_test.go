@@ -210,6 +210,7 @@ func TestFormatTable(t *testing.T) {
 	headerLine := lines[0]
 	sepLine := lines[1]
 	firstRow := lines[2]
+	secondRow := lines[3]
 
 	if strings.TrimSpace(headerLine) != "Name       | Value" {
 		t.Errorf("unexpected header placement/format: %q", headerLine)
