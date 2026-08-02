@@ -39,6 +39,9 @@ func TestConfigDefaults(t *testing.T) {
 	if cfg.Resolution != [2]int{640, 640} {
 		t.Errorf("default resolution is %v, want [640 640]", cfg.Resolution)
 	}
+	if cfg.SensorMode != [2]int{} {
+		t.Errorf("default sensor mode is %v, want automatic (zero value)", cfg.SensorMode)
+	}
 	if cfg.FPS != 24 {
 		t.Errorf("default FPS is %d, want 24", cfg.FPS)
 	}
@@ -53,6 +56,25 @@ func TestConfigDefaults(t *testing.T) {
 	}
 	if cfg.BindHost != "0.0.0.0" {
 		t.Errorf("default bind host is %s, want 0.0.0.0", cfg.BindHost)
+	}
+}
+
+func TestConfigSensorMode(t *testing.T) {
+	t.Run("explicit", func(t *testing.T) {
+		t.Setenv("MIO_SENSOR_MODE", " 2304x1296 ")
+		cfg := LoadFromEnv()
+		if cfg.SensorMode != [2]int{2304, 1296} {
+			t.Fatalf("SensorMode = %v, want [2304 1296]", cfg.SensorMode)
+		}
+	})
+
+	for _, value := range []string{"full", "2304", "0x1296", "2304x-1", "2304x1296x10"} {
+		t.Run("invalid_"+value, func(t *testing.T) {
+			t.Setenv("MIO_SENSOR_MODE", value)
+			if got := LoadFromEnv().SensorMode; got != [2]int{} {
+				t.Fatalf("invalid MIO_SENSOR_MODE %q produced %v, want automatic", value, got)
+			}
+		})
 	}
 }
 
