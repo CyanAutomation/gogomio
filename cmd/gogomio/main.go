@@ -164,6 +164,9 @@ func initializeCameraWithLogger(
 	logger.Println("📹 Initializing camera backend: real (Raspberry Pi CSI)")
 	logger.Println("   Checking for CSI camera access...")
 	realCam := newRealCamera()
+	if configurable, ok := realCam.(interface{ SetSensorMode(int, int) }); ok {
+		configurable.SetSensorMode(cfg.SensorMode[0], cfg.SensorMode[1])
+	}
 	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
 		attemptedBackend := "unknown"
 		failureReason := err.Error()
