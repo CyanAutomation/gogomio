@@ -63,6 +63,9 @@ steps:
       - --tag
       - ${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:$SHORT_SHA
       - --build-arg
+      # Keep this explicit override synchronized with the Dockerfile default.
+      - BUILDER_BASE_IMAGE=golang:1.25-alpine3.22
+      - --build-arg
       - VERSION=${_IMAGE_TAG}
       - --build-arg
       - PORT=${_SERVICE_PORT}
