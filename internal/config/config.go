@@ -11,7 +11,12 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Resolution           [2]int   `json:"resolution"`
+	// Resolution is the encoded output size. It does not determine how much of
+	// the sensor is read; SensorMode can independently select that field of view.
+	Resolution [2]int `json:"resolution"`
+	// SensorMode optionally selects the native sensor readout size. A zero value
+	// leaves mode selection to libcamera.
+	SensorMode           [2]int   `json:"sensor_mode,omitempty"`
 	FPS                  int      `json:"fps"`
 	TargetFPS            int      `json:"target_fps"`
 	JPEGQuality          int      `json:"jpeg_quality"`
@@ -40,6 +45,13 @@ func LoadFromEnv() *Config {
 	if res := os.Getenv("MIO_RESOLUTION"); res != "" {
 		if parsed, err := parseResolution(res); err == nil {
 			cfg.Resolution = parsed
+		}
+	}
+
+	// Sensor readout mode (independent of output resolution)
+	if mode := os.Getenv("MIO_SENSOR_MODE"); mode != "" {
+		if parsed, err := parseResolution(mode); err == nil {
+			cfg.SensorMode = parsed
 		}
 	}
 

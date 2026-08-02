@@ -515,6 +515,44 @@ func TestRealCameraBuildLibcameraVidCommandIncludesQualityFlag(t *testing.T) {
 	}
 }
 
+func TestRealCameraNativeCommandsSensorMode(t *testing.T) {
+	tests := []struct {
+		name  string
+		build func(*RealCamera) *exec.Cmd
+	}{
+		{name: "rpicam", build: func(rc *RealCamera) *exec.Cmd { return rc.buildRpiCamVidCommand() }},
+		{name: "libcamera", build: func(rc *RealCamera) *exec.Cmd { return rc.buildLibcameraVidCommand() }},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name+"/automatic", func(t *testing.T) {
+			rc := NewRealCamera()
+			if got := countCommandArgOccurrences(tc.build(rc).Args, "--mode"); got != 0 {
+				t.Fatalf("automatic mode unexpectedly generated --mode")
+			}
+		})
+		t.Run(tc.name+"/explicit", func(t *testing.T) {
+			rc := NewRealCamera()
+			rc.width, rc.height = 1280, 720
+			rc.SetSensorMode(2304, 1296)
+			cmd := tc.build(rc)
+			if got := findCommandArgValue(cmd.Args, "--mode"); got != "2304:1296" {
+				t.Fatalf("--mode = %q, want 2304:1296 (args=%v)", got, cmd.Args)
+			}
+			if got := findCommandArgValue(cmd.Args, "--width"); got != "1280" {
+				t.Fatalf("--width = %q, want independent output width 1280", got)
+			}
+		})
+		t.Run(tc.name+"/invalid", func(t *testing.T) {
+			rc := NewRealCamera()
+			rc.SetSensorMode(2304, 0)
+			if got := countCommandArgOccurrences(tc.build(rc).Args, "--mode"); got != 0 {
+				t.Fatalf("invalid mode generated --mode")
+			}
+		})
+	}
+}
+
 func TestFFmpegMJPEGQuantizerFromQualityMatchesRoundedLinearMapping(t *testing.T) {
 	const (
 		ffmpegQMax = 31
