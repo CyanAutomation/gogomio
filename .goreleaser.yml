@@ -33,7 +33,7 @@ archives:
       - goos: windows
         format: zip
 
-checksums:
+checksum:
   name_template: "{{ .ProjectName }}_v{{ .Version }}_checksums.txt"
   algorithm: sha256
 
