@@ -81,7 +81,7 @@ docker.io/cyanautomation/gogomio:latest
 |----------|-------|
 | Repository | docker.io/cyanautomation/gogomio |
 | Base Image | alpine:3.19 |
-| Go Version | 1.22 (compiled into binary) |
+| Go Version | Compatible with the version declared in `go.mod` (currently 1.25) |
 | Binary Build | Static, CGO disabled, stripped |
 | Binary Size | ~8.9MB |
 | Runtime Size | ~11-12MB per architecture |

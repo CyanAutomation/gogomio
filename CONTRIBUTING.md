@@ -43,7 +43,9 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 ### Prerequisites
 
-- **Go 1.23+** — Install from [golang.org](https://golang.org/dl)
+- **Go toolchain compatible with the version declared in `go.mod`** (currently
+  Go 1.25) — Install from [go.dev](https://go.dev/dl/). The Docker builder and
+  CI must use the same compatible toolchain.
 - **Docker** — For multi-architecture builds and deployment testing
 - **Git** — For version control
 
@@ -344,7 +346,7 @@ Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
    - Race condition in frame buffer cleanup
    
    ### Changed
-   - Dockerfile uses golang:1.24 base image
+   - Synchronize Docker and CI Go toolchain declarations with `go.mod`
    ```
 
 2. **Update version in `go.mod`** (if applicable):

@@ -14,7 +14,6 @@
 ### Build Process
 
 ```bash
-# Fixed go.mod version requirement (1.25.4 → 1.22)
 # Built with both tags:
 docker build -t cyanautomation/gogomio:latest \
              -t cyanautomation/gogomio:0.1.0 \
@@ -83,16 +82,16 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 
 ### Issue: Go Version Mismatch
 
-**Problem**: `go.mod` required Go 1.25.4, but Dockerfile uses golang:1.22-alpine
+[`go.mod`](../../go.mod) is the source of truth for the project's Go version. It
+currently declares Go 1.25, so the Docker builder image and every CI job that
+builds or tests the project must provide a compatible Go 1.25 toolchain.
 
-**Solution**: Updated `go.mod` to require Go 1.22 (matches Dockerfile and available in Alpine)
+When upgrading Go, update `go.mod` first, then synchronize the builder image and
+CI toolchain declarations. Do not lower the module's Go version to accommodate
+an outdated builder; update the builder and CI instead.
 
-**File Changed**: [go.mod](go.mod)
-
-```diff
-- go 1.25.4
-+ go 1.22
-```
+Before building, compare the version in `go.mod` with the Dockerfile's builder
+base image and the Go versions configured in CI.
 
 ## Next Steps for Continuous Deployment
 
@@ -150,7 +149,7 @@ jobs:
 | Platforms Tested | linux/amd64 |
 | Container Test | ✅ Running & responsive |
 | Docker Hub Status | ✅ Available for pull |
-| Version Fixes | ✅ Applied (go.mod) |
+| Go Toolchain Policy | ✅ `go.mod`, Docker builder, and CI synchronized |
 
 **Status**: Ready for deployment! Images available at:
 
