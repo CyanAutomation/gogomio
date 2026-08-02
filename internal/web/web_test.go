@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -64,6 +65,53 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	}
 }
 
+// TestStreamImageFillsContainerWithoutCropping protects the stream presentation
+// from regressions that either leave unused image dimensions or crop camera frames.
+func TestStreamImageFillsContainerWithoutCropping(t *testing.T) {
+	page, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatalf("read embedded index.html: %v", err)
+	}
+	match := regexp.MustCompile(`(?s)#stream-img\s*\{([^}]*)\}`).FindSubmatch(page)
+	if match == nil {
+		t.Fatal("stream image CSS rule is missing")
+	}
+	styles := string(match[1])
+	streamImageStyles := []string{
+		"width: 100%;",
+		"height: 100%;",
+		"object-fit: contain;",
+	}
+
+	for _, style := range streamImageStyles {
+		if !strings.Contains(styles, style) {
+			t.Errorf("stream image CSS missing %q", style)
+		}
+	}
+
+	if strings.Contains(styles, "object-fit: cover;") {
+		t.Error("stream image CSS uses object-fit: cover, which crops frames")
+	}
+}
+
+// TestStreamContainerUsesConfiguredResolution verifies the UI derives the
+// container proportions from camera dimensions instead of assuming widescreen.
+func TestStreamContainerUsesConfiguredResolution(t *testing.T) {
+	pageBytes, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatalf("read embedded index.html: %v", err)
+	}
+	page := string(pageBytes)
+
+	if strings.Contains(page, "aspect-ratio: 16 / 9;") {
+		t.Error("stream container hard-codes a 16:9 aspect ratio")
+	}
+	if !strings.Contains(page, "style.aspectRatio") ||
+		!strings.Contains(page, "`${config.resolution[0]} / ${config.resolution[1]}`") {
+		t.Error("stream container does not derive its aspect ratio from the configured resolution")
+	}
+}
+
 // TestWebUINotFoundPath tests that non-root paths return 404
 func TestWebUINotFoundPath(t *testing.T) {
 	router := chi.NewRouter()
@@ -84,11 +132,11 @@ func TestWebUICacheHeaders(t *testing.T) {
 	RegisterStaticFiles(router)
 
 	tests := []struct {
-		name             string
-		path             string
-		wantMaxAge       string
-		wantDirective    string
-		forbidDirective  string
+		name            string
+		path            string
+		wantMaxAge      string
+		wantDirective   string
+		forbidDirective string
 	}{
 		{
 			name:            "root_html",
