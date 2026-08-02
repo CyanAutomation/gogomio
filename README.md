@@ -341,6 +341,9 @@ Environment variables (with defaults):
 # Resolution (default: 640x480)
 export MIO_RESOLUTION=1280x720
 
+# Optional native sensor readout mode (default: automatic)
+export MIO_SENSOR_MODE=2304x1296
+
 # Framerate (default: 24)
 export MIO_FPS=24
 
@@ -362,6 +365,19 @@ export MIO_BIND_HOST=0.0.0.0
 # Mock camera for development (default: false)
 export MOCK_CAMERA=false
 ```
+
+`MIO_RESOLUTION` controls only the encoded output dimensions; it does **not**
+guarantee a particular sensor field of view. `MIO_SENSOR_MODE` is passed to the
+native `rpicam-vid`/`libcamera-vid` backend as its sensor readout mode and can be
+used to avoid an automatically selected, more-cropped mode. It has no effect on
+the FFmpeg/V4L2 fallback. Available native modes depend on the camera module
+(inspect them with `rpicam-hello --list-cameras` or `libcamera-hello --list-cameras`).
+
+For the full vertical field of view, choose a 4:3 sensor mode and usually a 4:3
+output such as `MIO_RESOLUTION=1280x960`. A 16:9 output such as 1280x720 commonly
+crops the top and bottom; select a wide 16:9 sensor mode when that composition
+and its potentially higher frame rate are desired. A 4:3 sensor mode can still
+feed a 16:9 output, but the backend may crop or scale it to fit.
 
 ### JPEG quality behavior by backend
 

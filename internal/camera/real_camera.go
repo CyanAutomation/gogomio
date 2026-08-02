@@ -28,7 +28,6 @@ const (
 	jpegQualityMax            = 100
 )
 
-
 var ErrFirstFrameTimeout = errors.New("camera first frame timeout")
 
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
@@ -39,6 +38,9 @@ type RealCamera struct {
 	fps         int
 	jpegQuality int
 	devicePath  string
+	// sensorMode selects the sensor readout (and therefore field of view), while
+	// width and height only select the encoded stream's output resolution.
+	sensorMode [2]int
 
 	isReady    atomic.Bool
 	isStopping atomic.Bool
@@ -135,6 +137,16 @@ func (rc *RealCamera) SetLogger(logger *log.Logger) {
 		return
 	}
 	rc.logger = logger
+}
+
+// SetSensorMode selects a native sensor readout size. Passing zero values keeps
+// libcamera's automatic mode selection. This affects field of view, not output size.
+func (rc *RealCamera) SetSensorMode(width, height int) {
+	if width > 0 && height > 0 {
+		rc.sensorMode = [2]int{width, height}
+		return
+	}
+	rc.sensorMode = [2]int{}
 }
 
 // Start initializes camera configuration and starts the long-lived capture process.
@@ -497,17 +509,23 @@ func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
 	// higher number = better image quality (typically more CPU/bandwidth).
 	// Keep app contract fixed at 1-100 and clamp before passing to backend.
 	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
-	return exec.Command(
+	args := []string{
 		"rpicam-vid",
 		"--codec", "mjpeg",
 		"--nopreview",
 		"--timeout", "0",
 		"--width", fmt.Sprintf("%d", rc.width),
 		"--height", fmt.Sprintf("%d", rc.height),
+	}
+	if rc.sensorMode[0] > 0 && rc.sensorMode[1] > 0 {
+		args = append(args, "--mode", fmt.Sprintf("%d:%d", rc.sensorMode[0], rc.sensorMode[1]))
+	}
+	args = append(args,
 		"--framerate", fmt.Sprintf("%d", rc.fps),
 		"--quality", fmt.Sprintf("%d", nativeQuality),
 		"-o", "-",
 	)
+	return exec.Command(args[0], args[1:]...)
 }
 
 func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
@@ -515,17 +533,23 @@ func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
 	// higher number = better image quality (typically more CPU/bandwidth).
 	// Keep app contract fixed at 1-100 and clamp before passing to backend.
 	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
-	return exec.Command(
+	args := []string{
 		"libcamera-vid",
 		"--codec", "mjpeg",
 		"--nopreview",
 		"--timeout", "0",
 		"--width", fmt.Sprintf("%d", rc.width),
 		"--height", fmt.Sprintf("%d", rc.height),
+	}
+	if rc.sensorMode[0] > 0 && rc.sensorMode[1] > 0 {
+		args = append(args, "--mode", fmt.Sprintf("%d:%d", rc.sensorMode[0], rc.sensorMode[1]))
+	}
+	args = append(args,
 		"--framerate", fmt.Sprintf("%d", rc.fps),
 		"--quality", fmt.Sprintf("%d", nativeQuality),
 		"-o", "-",
 	)
+	return exec.Command(args[0], args[1:]...)
 }
 
 func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
