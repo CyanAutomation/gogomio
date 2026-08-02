@@ -1,6 +1,6 @@
 # Motion In Ocean - Go Edition 🌊
 
-[![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-blue)](https://golang.org)
+[![Go version: go.mod](https://img.shields.io/badge/Go-go.mod-blue)](go.mod)
 [![Tests](https://github.com/CyanAutomation/gogomio/actions/workflows/test.yml/badge.svg)](https://github.com/CyanAutomation/gogomio/actions/workflows/test.yml)
 [![Coverage Status](https://codecov.io/gh/CyanAutomation/gogomio/graph/badge.svg)](https://codecov.io/gh/CyanAutomation/gogomio)
 [![Docker](https://img.shields.io/badge/Docker-multi--arch-blue)](./Dockerfile)
@@ -528,7 +528,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 ## Dependencies
 
-- Go 1.22+
+- A Go toolchain compatible with the version declared in `go.mod` (currently Go 1.25)
 - `chi` - HTTP router
 - Runtime camera binaries (arm64 Raspberry Pi):
   - Preferred: `rpicam-vid` via `rpicam-apps`
