@@ -271,7 +271,7 @@ const docTemplate = `{
         },
         "/v1/config/camera": {
             "get": {
-                "description": "Returns static camera configuration (resolution, FPS, quality settings, connection limits). Use this for UI configuration displays or to understand camera capabilities. Does not include runtime metrics; use /v1/metrics/live for current performance data.",
+                "description": "Returns static camera configuration (encoded output resolution, FPS, quality settings, connection limits). Resolution does not describe the sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does not include runtime metrics; use /v1/metrics/live for current performance data.",
                 "consumes": [
                     "application/json"
                 ],
@@ -452,7 +452,7 @@ const docTemplate = `{
     },
     "definitions": {
         "api.CameraConfigResponse": {
-            "description": "Camera configuration, resolution, and streaming performance metrics",
+            "description": "Static camera configuration including encoded output resolution, quality, and limits; resolution does not describe sensor field of view",
             "type": "object",
             "properties": {
                 "api_version": {
@@ -476,7 +476,7 @@ const docTemplate = `{
                     "example": 5
                 },
                 "resolution": {
-                    "description": "Camera resolution in pixels [width, height]",
+                    "description": "Encoded output resolution in pixels [width, height]; does not describe sensor field of view",
                     "type": "array",
                     "items": {
                         "type": "integer"

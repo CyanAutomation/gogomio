@@ -688,13 +688,10 @@ func writeMultipartFrame(w http.ResponseWriter, contentLengthScratch *[]byte, fr
 	return err
 }
 
-// ConfigResponse is the JSON response for /api/config endpoint.
-// ConfigResponse contains camera configuration and streaming statistics
-// @Description Camera configuration, resolution, and streaming performance metrics
 // CameraConfigResponse contains static camera configuration
-// @Description Static camera configuration settings (resolution, quality, limits)
+// @Description Static camera configuration including encoded output resolution, quality, and limits; resolution does not describe sensor field of view
 type CameraConfigResponse struct {
-	// Camera resolution in pixels [width, height]
+	// Encoded output resolution in pixels [width, height]; does not describe sensor field of view
 	Resolution [2]int `json:"resolution"`
 	// Configured frames per second
 	FPS int `json:"fps" example:"30"`
@@ -1189,7 +1186,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 }
 
 // @Summary Get camera configuration
-// @Description Returns static camera configuration (resolution, FPS, quality settings, connection limits). Use this for UI configuration displays or to understand camera capabilities. Does not include runtime metrics; use /v1/metrics/live for current performance data.
+// @Description Returns static camera configuration (encoded output resolution, FPS, quality settings, connection limits). Resolution does not describe the sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does not include runtime metrics; use /v1/metrics/live for current performance data.
 // @Tags Configuration
 // @Accept  json
 // @Produce json

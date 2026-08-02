@@ -338,10 +338,10 @@ curl http://localhost:8000/v1/health/detailed | jq
 Environment variables (with defaults):
 
 ```bash
-# Resolution (default: 640x480)
+# Encoded output resolution (default: 640x480, 4:3)
 export MIO_RESOLUTION=1280x720
 
-# Optional native sensor readout mode (default: automatic)
+# Optional sensor readout mode / field of view (default: automatic)
 export MIO_SENSOR_MODE=2304x1296
 
 # Framerate (default: 24)
