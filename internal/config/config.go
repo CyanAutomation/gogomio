@@ -1,3 +1,5 @@
+// Package config provides configuration management for GoGoMio.
+// It handles environment variable loading, validation, and default values.
 package config
 
 import (
@@ -35,8 +37,8 @@ func LoadFromEnv() *Config {
 		TargetFPS:            24,
 		JPEGQuality:          90,
 		MaxStreamConnections: 2,
-		Port:                 8000,
-		BindHost:             "0.0.0.0",
+		Port:                 DefaultPort,
+		BindHost:             DefaultBindHost,
 		MockCamera:           false,
 		TrustedProxyCIDRs:    []string{},
 	}

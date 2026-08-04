@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/CyanAutomation/gogomio/internal/config"
 )
 
 // Client wraps HTTP requests to the gogomio server API
@@ -20,7 +22,7 @@ type Client struct {
 // If empty, defaults to http://localhost:8000
 func NewClient(baseURL string) *Client {
 	if baseURL == "" {
-		baseURL = "http://localhost:8000"
+		baseURL = config.DefaultServerURL
 	}
 
 	return &Client{
@@ -35,7 +37,7 @@ func NewClient(baseURL string) *Client {
 func ClientFromEnv() *Client {
 	url := os.Getenv("GOGOMIO_URL")
 	if url == "" {
-		url = "http://localhost:8000"
+		url = config.DefaultServerURL
 	}
 	return NewClient(url)
 }

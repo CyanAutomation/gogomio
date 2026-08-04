@@ -90,6 +90,22 @@ var (
 	mjpegTrailerBytes       = []byte("\r\n")
 )
 
+// sanitizeRemoteAddr removes control characters and limits length to prevent log injection attacks.
+func sanitizeRemoteAddr(addr string) string {
+	// Remove control characters (ASCII 0-31 and 127)
+	addr = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return -1
+		}
+		return r
+	}, addr)
+	// Limit length to prevent log flooding
+	if len(addr) > 128 {
+		addr = addr[:128]
+	}
+	return addr
+}
+
 // NewFrameManager creates and initializes a new FrameManager.
 func NewFrameManager(cam camera.Camera, cfg *config.Config) *FrameManager {
 	return newFrameManager(cam, cfg, defaultIdleStopDelay)
@@ -588,7 +604,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	fm.IncrementClients()
 	defer fm.DecrementClients()
 
-	log.Printf("🔗 Stream client connected (total clients: %d, remote: %s)", atomic.LoadInt64(&fm.clientCount), r.RemoteAddr)
+	log.Printf("🔗 Stream client connected (total clients: %d, remote: %s)", atomic.LoadInt64(&fm.clientCount), sanitizeRemoteAddr(r.RemoteAddr))
 
 	// Set MJPEG headers
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
@@ -617,7 +633,7 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 		select {
 		case <-ctx.Done():
 			duration := time.Since(startTime)
-			log.Printf("🔗 Stream client disconnected: %d frames sent in %v (remote: %s)", framesSent, duration, r.RemoteAddr)
+			log.Printf("🔗 Stream client disconnected: %d frames sent in %v (remote: %s)", framesSent, duration, sanitizeRemoteAddr(r.RemoteAddr))
 			return ctx.Err()
 		case <-fm.shutdownCh:
 			log.Printf("⚠️  Stream stopped for client (frames sent: %d)", framesSent)
@@ -916,7 +932,7 @@ func rateLimitMiddleware(limiter *RateLimiter, trustedProxyCIDRs []string) func(
 
 			// Check rate limit
 			if !limiter.Allow(ip) {
-				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Content-Type", ContentTypeJSON)
 				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(http.StatusTooManyRequests)
 				_ = json.NewEncoder(w).Encode(ErrorResponse{
@@ -946,9 +962,9 @@ func parseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
 }
 
 func requestIPForRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	host, _, err := net.SplitHostPort(sanitizeRemoteAddr(r.RemoteAddr))
 	if err != nil || host == "" {
-		host = r.RemoteAddr
+		host = sanitizeRemoteAddr(r.RemoteAddr)
 	}
 
 	remoteIP := net.ParseIP(host)
@@ -1179,7 +1195,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 		APIVersion:        "1",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
@@ -1203,7 +1219,7 @@ func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Conf
 		APIVersion:           "1",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
@@ -1232,7 +1248,7 @@ func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 		APIVersion:          "1",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
@@ -1309,7 +1325,7 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		APIVersion:                 "1",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
@@ -1325,7 +1341,7 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 // @Router /v1/ready [get]
 func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	if !fm.cam.IsReady() {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", ContentTypeJSON)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]string{"status": "initializing"}); err != nil {
 			_ = err
@@ -1333,7 +1349,7 @@ func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
 		_ = err
 	}
@@ -1390,7 +1406,7 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 		"_deprecated":                "use /v1/config/camera and /v1/metrics/live instead",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.Header().Set("Deprecation", "true")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
@@ -1423,7 +1439,7 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, c
 func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	settings := fm.settingsM.GetAll()
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"settings": settings,
 	}); err != nil {
@@ -1488,7 +1504,7 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "ok",
 		"message": fmt.Sprintf("saved %d settings", len(req.Settings)),
@@ -1511,7 +1527,7 @@ func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) 
 	// Also reset client count to ensure cleanup
 	atomic.StoreInt64(&fm.clientCount, 0)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "ok",
 		"message": "stream stopped",
@@ -1521,7 +1537,7 @@ func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) 
 // Middleware
 
 func writeErrorResponse(w http.ResponseWriter, statusCode int, message string, details string) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(statusCode)
 	err := json.NewEncoder(w).Encode(ErrorResponse{
 		Code:    statusCode,

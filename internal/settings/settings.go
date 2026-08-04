@@ -271,7 +271,7 @@ func (m *Manager) persistData(settings map[string]interface{}) error {
 
 func (m *Manager) withSettingsLock(fn func() error) error {
 	lockPath := m.filePath + ".lock"
-	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		log.Printf("❌ Settings: failed to open lock file: %v", err)
 		return fmt.Errorf("failed to open lock file: %w", err)
@@ -321,7 +321,7 @@ func (m *Manager) load() error {
 				log.Printf("✓ Settings: recovered from backup file")
 				// Attempt to restore backup over corrupted file
 				if restoreErr := m.withSettingsLock(func() error {
-					return os.WriteFile(m.filePath, backupData, 0644)
+					return os.WriteFile(m.filePath, backupData, 0600)
 				}); restoreErr != nil {
 					log.Printf("⚠️  Settings: could not restore from backup: %v", restoreErr)
 				} else {
@@ -367,5 +367,5 @@ func (m *Manager) copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, srcData, 0644)
+	return os.WriteFile(dst, srcData, 0600)
 }

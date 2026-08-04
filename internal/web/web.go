@@ -1,3 +1,4 @@
+// Package web provides the embedded web UI for GoGoMio.
 package web
 
 import (

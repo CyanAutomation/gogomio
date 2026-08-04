@@ -50,7 +50,7 @@ func TestClientFromEnv(t *testing.T) {
 			if tc.setEnv {
 				t.Setenv(envKey, tc.envValue)
 			} else {
-				os.Unsetenv(envKey)
+				_ = os.Unsetenv(envKey) // Error ignored: test cleanup best-effort
 			}
 
 			client := ClientFromEnv()

@@ -28,6 +28,8 @@ const (
 	jpegQualityMax            = 100
 )
 
+// ErrFirstFrameTimeout is returned when the camera fails to produce
+// the first frame within the expected timeout period.
 var ErrFirstFrameTimeout = errors.New("camera first frame timeout")
 
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
@@ -114,7 +116,7 @@ func NewRealCamera() *RealCamera {
 		height:             480,
 		fps:                24,
 		jpegQuality:        80,
-		devicePath:         "/dev/video0",
+		devicePath:         DefaultDevicePath,
 		captureWaitTimeout: defaultCaptureWaitTimeout,
 		stopWaitTimeout:    defaultStopWaitTimeout,
 	}
@@ -131,6 +133,8 @@ func NewRealCamera() *RealCamera {
 	return rc
 }
 
+// SetLogger sets a custom logger for the RealCamera instance.
+// This is primarily used for testing and debugging purposes.
 func (rc *RealCamera) SetLogger(logger *log.Logger) {
 	if logger == nil {
 		rc.logger = log.Default()
@@ -289,7 +293,7 @@ func (rc *RealCamera) firstFrameTimeout() time.Duration {
 
 	// rpicam-vid and libcamera-vid need extra time to initialize libcamera daemon,
 	// detect camera, configure ISP pipeline, and produce first frame
-	if rc.backendAttempted == "rpicam-vid" || rc.backendAttempted == "libcamera-vid" {
+	if rc.backendAttempted == BackendRpicam || rc.backendAttempted == BackendLibcamera {
 		minTimeout := 4 * time.Second
 		if timeout < minTimeout {
 			timeout = minTimeout
@@ -456,38 +460,38 @@ func (rc *RealCamera) IsReady() bool {
 }
 
 func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
-	if _, err := rc.lookPath("rpicam-vid"); err == nil {
-		rc.setBackendAttempted("rpicam-vid")
-		log.Printf("✓ Selected camera backend binary: rpicam-vid")
+	if _, err := rc.lookPath(BackendRpicam); err == nil {
+		rc.setBackendAttempted(BackendRpicam)
+		log.Printf("✓ Selected camera backend binary: %s", BackendRpicam)
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := rc.buildRpiCamVidCommand()
-		return rc.startCommand(cmd, "rpicam-vid")
+		return rc.startCommand(cmd, BackendRpicam)
 	}
 
-	if _, err := rc.lookPath("libcamera-vid"); err == nil {
-		rc.setBackendAttempted("libcamera-vid")
-		log.Printf("✓ Selected camera backend binary: libcamera-vid")
+	if _, err := rc.lookPath(BackendLibcamera); err == nil {
+		rc.setBackendAttempted(BackendLibcamera)
+		log.Printf("✓ Selected camera backend binary: %s", BackendLibcamera)
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := rc.buildLibcameraVidCommand()
-		return rc.startCommand(cmd, "libcamera-vid")
+		return rc.startCommand(cmd, BackendLibcamera)
 	}
 
-	if _, err := rc.lookPath("ffmpeg"); err != nil {
+	if _, err := rc.lookPath(BackendFFmpeg); err != nil {
 		rc.setBackendAttempted("none")
-		log.Printf("❌ None of rpicam-vid, libcamera-vid, or ffmpeg were found in PATH")
-		log.Printf("   rpicam-vid/libcamera-vid: Check if libcamera-apps package is installed in container")
-		log.Printf("   ffmpeg: Check if ffmpeg package is installed in container")
-		return nil, nil, nil, nil, fmt.Errorf("none of rpicam-vid, libcamera-vid, or ffmpeg found in PATH")
+		log.Printf("❌ None of %s, %s, or %s were found in PATH", BackendRpicam, BackendLibcamera, BackendFFmpeg)
+		log.Printf("   %s/%s: Check if libcamera-apps package is installed in container", BackendRpicam, BackendLibcamera)
+		log.Printf("   %s: Check if ffmpeg package is installed in container", BackendFFmpeg)
+		return nil, nil, nil, nil, fmt.Errorf("none of %s, %s, or %s found in PATH", BackendRpicam, BackendLibcamera, BackendFFmpeg)
 	}
-	rc.setBackendAttempted("ffmpeg")
+	rc.setBackendAttempted(BackendFFmpeg)
 
 	// Skip V4L2 probe for libcamera CSI cameras without libcamera-vid
 	// These devices require libcamera initialization which FFmpeg can't do
 	// The probe would fail anyway, so we skip it and provide clear guidance
-	if rc.devicePath == "/dev/video0" {
-		log.Printf("ℹ️  CSI camera detected at /dev/video0 without native libcamera tools")
+	if rc.devicePath == DefaultDevicePath {
+		log.Printf("ℹ️  CSI camera detected at %s without native libcamera tools", DefaultDevicePath)
 		log.Printf("⚠️  Attempting FFmpeg fallback (limited compatibility)")
-		log.Printf("✓ For optimal performance, install rpicam-vid/libcamera-vid in the container")
+		log.Printf("✓ For optimal performance, install %s/%s in the container", BackendRpicam, BackendLibcamera)
 	} else {
 		// For other V4L2 devices, probe first to verify they work with FFmpeg
 		if err := rc.probeV4L2CaptureNode(); err != nil {
@@ -495,13 +499,13 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		}
 	}
 
-	log.Printf("✓ Selected camera backend binary: ffmpeg")
-	log.Printf("⚠️  Falling back to ffmpeg (V4L2 mode) because rpicam-vid/libcamera-vid were not found")
+	log.Printf("✓ Selected camera backend binary: %s", BackendFFmpeg)
+	log.Printf("⚠️  Falling back to %s (V4L2 mode) because %s/%s were not found", BackendFFmpeg, BackendRpicam, BackendLibcamera)
 	log.Printf("  Note: native CSI camera tools may not be installed or available in container")
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 
 	cmd := rc.buildFFmpegCommand()
-	return rc.startCommand(cmd, "ffmpeg")
+	return rc.startCommand(cmd, BackendFFmpeg)
 }
 
 func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
@@ -529,12 +533,16 @@ func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
 }
 
 func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
+	// Security note: All parameters (width, height, fps, jpegQuality, sensorMode, devicePath)
+	// come from config.LoadFromEnv() validation at deployment time, not from runtime API requests.
+	// These values are constrained by environment variables and are not user-controllable.
+	// libcamera-vid is invoked with separate arguments (exec.Command), not shell interpolation.
 	// libcamera-vid uses JPEG quality with the same direction as app-level quality:
 	// higher number = better image quality (typically more CPU/bandwidth).
 	// Keep app contract fixed at 1-100 and clamp before passing to backend.
 	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
 	args := []string{
-		"libcamera-vid",
+		BackendLibcamera,
 		"--codec", "mjpeg",
 		"--nopreview",
 		"--timeout", "0",
@@ -553,6 +561,10 @@ func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
 }
 
 func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
+	// Security note: All parameters (width, height, fps, jpegQuality, devicePath)
+	// come from config.LoadFromEnv() validation at deployment time, not from runtime API requests.
+	// These values are constrained by environment variables and are not user-controllable.
+	// FFmpeg is invoked with separate arguments (exec.Command), not shell interpolation.
 	// For libcamera V4L2 devices, avoid strict format constraints
 	// Let FFmpeg auto-detect the device's native format
 	//
@@ -567,7 +579,7 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 	//     1 -> 31  (lowest quality, lightest CPU/bandwidth)
 	ffmpegQ := ffmpegMJPEGQuantizerFromQuality(rc.jpegQuality)
 	return exec.Command(
-		"ffmpeg",
+		BackendFFmpeg,
 		"-f", "video4linux2",
 		"-video_size", fmt.Sprintf("%dx%d", rc.width, rc.height),
 		"-framerate", fmt.Sprintf("%d", rc.fps),
@@ -581,11 +593,6 @@ func (rc *RealCamera) buildFFmpegCommand() *exec.Cmd {
 }
 
 func ffmpegMJPEGQuantizerFromQuality(jpegQuality int) int {
-	const (
-		ffmpegQMax = 31 // lowest visual quality
-		ffmpegQMin = 2  // highest visual quality
-	)
-
 	if jpegQuality < jpegQualityMin {
 		jpegQuality = jpegQualityMin
 	}
@@ -597,10 +604,10 @@ func ffmpegMJPEGQuantizerFromQuality(jpegQuality int) int {
 	// This uses nearest-integer rounding for division by 99:
 	//   round(n/99) == (n + floor(99/2)) / 99 == (n + 49) / 99
 	// because 99 is odd and cannot produce exact .5 ties.
-	span := ffmpegQMax - ffmpegQMin
+	span := FFmpegQMax - FFmpegQMin
 	numerator := (jpegQuality - jpegQualityMin) * span
 	scaled := (numerator + ((jpegQualityMax - jpegQualityMin) / 2)) / (jpegQualityMax - jpegQualityMin)
-	return ffmpegQMax - scaled
+	return FFmpegQMax - scaled
 }
 
 func nativeMJPEGQualityFromQuality(jpegQuality int) int {
@@ -619,7 +626,7 @@ func (rc *RealCamera) probeV4L2CaptureNode() error {
 
 	cmd := exec.CommandContext(
 		ctx,
-		"ffmpeg",
+		BackendFFmpeg,
 		"-hide_banner",
 		"-loglevel", "error",
 		"-f", "video4linux2",
