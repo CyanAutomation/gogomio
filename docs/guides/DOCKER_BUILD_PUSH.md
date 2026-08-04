@@ -142,7 +142,7 @@ jobs:
 ## Summary
 
 | Metric | Result |
-|--------|--------|
+| -------- | -------- |
 | Build Success | ✅ Yes |
 | Push Success | ✅ Yes |
 | Image Size | 19.6 MB |
