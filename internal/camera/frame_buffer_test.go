@@ -110,8 +110,6 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	}
 }
 
-
-
 func TestFrameBufferFPSThrottlingWithClockJump(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 10)
