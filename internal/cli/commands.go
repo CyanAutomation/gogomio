@@ -27,7 +27,7 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show current streaming status",
 	Long:  `Display current streaming status, FPS, resolution, and configuration`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		client := ClientFromEnv()
 		status, err := client.GetStatus()
 		if err != nil {
@@ -43,7 +43,7 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage configuration",
 	Long:  `Get or display configuration settings`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		// Default to 'get' if no subcommand specified
 		client := ClientFromEnv()
 		config, err := client.GetConfig()
@@ -60,7 +60,7 @@ var configGetCmd = &cobra.Command{
 	Use:   "get [key]",
 	Short: "Get a configuration value",
 	Long:  `Get a specific configuration value or all config if no key specified`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		client := ClientFromEnv()
 
 		config, err := client.GetConfig()

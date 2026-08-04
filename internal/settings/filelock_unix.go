@@ -1,5 +1,7 @@
 //go:build !windows
 
+// Package settings provides persistent file-based settings storage
+// with OS-appropriate file locking.
 package settings
 
 import (

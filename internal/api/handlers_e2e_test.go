@@ -309,7 +309,6 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 			for {
 				select {
 				case <-done:
-					needsStopCheck = false
 					goto evaluateResult
 				case <-observationWindow.C:
 					cancel()

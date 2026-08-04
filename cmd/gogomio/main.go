@@ -94,22 +94,30 @@ func startServer() {
 
 	api.RegisterHandlers(router, frameManager, cfg)
 
-	// Start pprof profiling server on separate port
-	go func() {
-		log.Printf("🔍 Profiling server listening on http://localhost:6060/debug/pprof")
-		if err := http.ListenAndServe(":6060", nil); err != nil && err != http.ErrServerClosed {
-			log.Printf("Profiling server error: %v", err)
-		}
-	}()
+	// Start pprof profiling server on separate port (only if explicitly enabled)
+	if os.Getenv("MIO_ENABLE_PPROF") == "true" {
+		go func() {
+			log.Printf("🔍 Profiling server listening on http://localhost:6060/debug/pprof")
+			if err := http.ListenAndServe(":6060", nil); err != nil && err != http.ErrServerClosed {
+				log.Printf("Profiling server error: %v", err)
+			}
+		}()
+	} else {
+		log.Printf("ℹ️  pprof profiling disabled (set MIO_ENABLE_PPROF=true to enable)")
+	}
 
 	// Log goroutine count periodically
 	go logGoroutineStats()
 
-	// Setup HTTP server
+	// Setup HTTP server with security timeouts
 	addr := cfg.AddressString()
 	server := &http.Server{
-		Addr:    addr,
-		Handler: router,
+		Addr:              addr,
+		Handler:           router,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	// Setup graceful shutdown
