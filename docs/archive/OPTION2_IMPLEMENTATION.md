@@ -7,6 +7,7 @@ Successfully implemented **Option 2**: Switched to Raspberry Pi OS-optimized doc
 ## What Changed
 
 ### 1. **Dockerfile Updates**
+
 - Base image: `debian:bookworm` (compatible with Raspberry Pi architecture)
 - Added Raspberry Pi OS repository (`archive.raspberrypi.org/debian`)
 - Automatic installation of `libcamera-apps` or `rpicam-apps` when available
@@ -14,17 +15,20 @@ Successfully implemented **Option 2**: Switched to Raspberry Pi OS-optimized doc
 - Marked as `org.opencontainers.image.arch="arm64"` in labels
 
 ### 2. **Application Logic**
+
 - Skips V4L2 probe for CSI cameras (`/dev/video0`) when `libcamera-vid` unavailable
 - Attempts direct FFmpeg capture for compatibility testing
 - Clear diagnostic messages explaining camera backend selection
 - Graceful fallback to mock camera with detailed troubleshooting guidance
 
 ### 3. **Documentation**
+
 - New: [RASPBERRY_PI_BUILD.md](../guides/RASPBERRY_PI_BUILD.md) - Complete guide
 - Updated: [README.md](../../README.md) - References Pi build documentation
 - Includes: build instructions, troubleshooting, performance notes
 
 ### 4. **Testing**
+
 - Updated test assertions to reflect new FFmpeg command structure
 - All camera package tests pass ✅
 - Application compiles and builds successfully ✅
@@ -34,6 +38,7 @@ Successfully implemented **Option 2**: Switched to Raspberry Pi OS-optimized doc
 ### When Running on Raspberry Pi Hardware (arm64)
 
 **With libcamera-apps installed:**
+
 ```
 ✓ Selected camera backend binary: libcamera-vid
 ✓ Camera backend initialized: real
@@ -42,6 +47,7 @@ Successfully implemented **Option 2**: Switched to Raspberry Pi OS-optimized doc
 ```
 
 **Without libcamera-apps (falls back gracefully):**
+
 ```
 ⚠️  Attempting FFmpeg fallback (limited compatibility)
 ✓ Selected camera backend binary: ffmpeg
@@ -59,12 +65,14 @@ Successfully implemented **Option 2**: Switched to Raspberry Pi OS-optimized doc
 ## Build Instructions
 
 ### On Raspberry Pi (Recommended)
+
 ```bash
 docker-compose build --no-cache
 docker-compose up -d
 ```
 
 ### From x86/amd64 with Cross-Compilation
+
 ```bash
 docker buildx build --platform linux/arm64 -t cyanautomation/gogomio:pi-latest --push .
 ```
@@ -80,16 +88,19 @@ docker buildx build --platform linux/arm64 -t cyanautomation/gogomio:pi-latest -
 ## Architecture Decision: arm64-Only Build
 
 ### Why arm64-only?
+
 - libcamera-apps is specific to ARM architecture
 - Cross-arch builds would be heavyweight (20-30min)
 - Raspberry Pi CSI cameras are arm64-only devices
 
 ### Development Impact
+
 - Multi-architecture (amd64 + arm64) builds no longer supported from this Dockerfile
 - For amd64 development: use docker-compose.mock.yml with mock camera
 - For Pi deployment: use this optimized Dockerfile
 
 ### Options if Multi-Arch Needed
+
 1. Create separate Dockerfile.multi-arch for generic builds
 2. Use conditional build system (e.g., GitHub Actions with matrix)
 3. Keep amd64 image for development, use Pi image for production
@@ -111,7 +122,7 @@ docker buildx build --platform linux/arm64 -t cyanautomation/gogomio:pi-latest -
 ## Performance Expectations
 
 | Metric | libcamera-vid (native) | FFmpeg V4L2 (fallback) |
-|--------|----------------------|----------------------|
+| -------- | ---------------------- | ---------------------- |
 | Startup | ~500ms | ~2s |
 | FPS | 60+ | 15-30 |
 | Latency | <50ms | 100-500ms |

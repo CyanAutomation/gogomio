@@ -10,6 +10,7 @@
 ## Current Implementation Overview
 
 ### Architecture
+
 ```
 frameSnapshot {
     data []byte  // Shared reference to frame JPEG bytes
@@ -27,6 +28,7 @@ FrameBuffer {
 ```
 
 ### Data Flow
+
 ```
 Capture Source (rpicam-vid)
     ↓
@@ -52,6 +54,7 @@ GetFrame Endpoint (if used)
 ### Pressure Points Identified
 
 #### 1. **Write() Method Cloning** ⚠️ PRIMARY
+
 - **Location**: Line 47-50 in frame_buffer.go
 - **Operation**: `frameData := make([]byte, size); copy(frameData, buf)`
 - **Frequency**: Every frame received from camera
@@ -59,29 +62,34 @@ GetFrame Endpoint (if used)
 - **GC Impact**: HIGH - Creates garbage every frame interval
 
 **Details:**
+
 - At 30 FPS with 100 KB frames: ~3 MB/sec of garbage created
 - Go's GC runs when heap allocation reaches threshold
 - Frequent large allocations can trigger more frequent GC pauses
 - Current latency overhead: Unmeasured (potential: 1-5ms pause per GC cycle)
 
 #### 2. **GetFrame() Method Cloning** ⚠️ SECONDARY
+
 - **Location**: Line 88-96 in frame_buffer.go
 - **Operation**: `frameCopy := make([]byte, len(fb.snapshot.data)); copy(frameCopy, fb.snapshot.data)`
 - **Frequency**: Only when `/api/snapshot` endpoint called (typically <1 Hz)
 - **GC Impact**: LOW - Infrequent, not on hot path
 
 **Details:**
+
 - Defensive copy necessary for API endpoint (callers might mutate)
 - Not called from MJPEG stream loop (uses WaitFrame instead)
 - Low frequency means low overall GC impact
 
 #### 3. **Channel Creation in WriteImmutable()** ⚠️ MINOR
+
 - **Location**: Line 73 in frame_buffer.go
 - **Operation**: `close(fb.notifyCh); fb.notifyCh = make(chan struct{})`
 - **Frequency**: Every frame published
 - **GC Impact**: LOW - Small allocations, but frequent
 
 **Details:**
+
 - Channel overhead is minimal compared to frame cloning
 - Channels are small (header only, no data)
 - Still creates garbage: 1-2 bytes per frame
@@ -93,7 +101,7 @@ GetFrame Endpoint (if used)
 ### Current Behavior
 
 | Metric | Value | Notes |
-|--------|-------|-------|
+| -------- | ------- | ------- |
 | **Copy Overhead** | ~3 MB/sec @ 30fps | Varies with resolution |
 | **Mutex Contention** | Low | Write lock held <1ms |
 | **Memory Usage** | Bounded | Only 2 frame buffers max |
@@ -104,6 +112,7 @@ GetFrame Endpoint (if used)
 #### Suggested Benchmarks to Run
 
 **1. Frame Copy Microbenchmark**
+
 ```go
 // File: internal/camera/frame_buffer_benchmark_test.go
 func BenchmarkFrameBufferWrite(b *testing.B) {
@@ -120,6 +129,7 @@ func BenchmarkFrameBufferWrite(b *testing.B) {
 ```
 
 **2. GC Frequency Under Load**
+
 ```go
 func TestFrameBufferGCFrequency(t *testing.T) {
     runtime.GC()  // Force initial GC
@@ -146,6 +156,7 @@ func TestFrameBufferGCFrequency(t *testing.T) {
 ```
 
 **3. Contention Analysis**
+
 ```bash
 # Use Go's CPU profiling
 go tool pprof -http=:6060 http://localhost:6060/debug/pprof/profile?seconds=30
@@ -172,15 +183,18 @@ go test -bench=. -benchmem ./internal/camera | grep -i frame
 ## Potential Optimization Strategies
 
 ### Strategy 1: Object Pool (Ring Buffer) ⭐⭐⭐
+
 **Implementation**: Maintain 2-3 pre-allocated frame buffers, reuse them
 
 **Pros:**
+
 - Eliminates allocation overhead
 - GC pressure drops to near-zero
 - Predictable memory usage
 - Implementation complexity: Medium
 
 **Cons:**
+
 - Must ensure frames not accessed after rotation
 - Requires careful synchronization
 - API change needed (return copies or references?)
@@ -188,6 +202,7 @@ go test -bench=. -benchmem ./internal/camera | grep -i frame
 **Estimated Impact:** 90% GC reduction, 0.5ms latency improvement
 
 **Code Sketch:**
+
 ```go
 type FramePool struct {
     buffers [3][]byte  // Pre-allocated
@@ -205,14 +220,17 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) error {
 ```
 
 ### Strategy 2: Direct Write (Zero Copy) ⭐⭐
+
 **Implementation**: Camera writer directly updates frame buffer (no cloning in Write())
 
 **Pros:**
+
 - Eliminates initial clone in Write()
 - Simplest implementation
 - Works with current architecture
 
 **Cons:**
+
 - Requires careful frame lifecycle management
 - Caller must not mutate after Write() returns
 - API change for clarity
@@ -220,6 +238,7 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) error {
 **Estimated Impact:** 50% GC reduction, 0.2ms latency improvement
 
 **Code Sketch:**
+
 ```go
 // Change Write() to just call WriteImmutable directly
 func (fb *FrameBuffer) Write(buf []byte) (int, error) {
@@ -233,27 +252,33 @@ frameBuffer.WriteImmutable(frameBuf)
 ```
 
 ### Strategy 3: Separate Snapshot Buffer ⭐
+
 **Implementation**: Keep separate small buffer for GetFrame() endpoint
 
 **Pros:**
+
 - Isolates snapshot endpoint from hot path
 - MJPEG stream unaffected
 - Minimal code change
 
 **Cons:**
+
 - Adds complexity
 - GetFrame() still creates copy (but rarely called)
 
 **Estimated Impact:** 5-10% GC reduction (if GetFrame rarely called)
 
 ### Strategy 4: Memory-Mapped Buffer (Advanced) ⭐
+
 **Implementation**: Use shared memory segment for frame data
 
 **Pros:**
+
 - Shared buffer across components
 - Minimal copying
 
 **Cons:**
+
 - High complexity
 - Platform-specific (not portable)
 - Overkill for single-process app
@@ -269,6 +294,7 @@ frameBuffer.WriteImmutable(frameBuf)
 **Unknown** - Requires profiling data to determine
 
 **Current Implementation Trade-offs:**
+
 - ✅ Simple, easy to understand
 - ✅ Safe (defensive copies prevent bugs)
 - ✅ Works well for typical embedded hardware
@@ -292,6 +318,7 @@ Run pprof during sustained 30fps stream capture
 ### Next Steps
 
 1. **Profile Current Implementation** (RECOMMENDED)
+
    ```bash
    # Start app with profiling
    go run ./cmd/gogomio &
@@ -325,12 +352,14 @@ Run pprof during sustained 30fps stream capture
 ### For Strategy 1: Object Pool
 
 **Pros & Cons:**
+
 - ✅ Dramatic GC reduction
 - ✅ Predictable latency
 - ❌ Higher complexity
 - ❌ Requires careful frame lifecycle documentation
 
 **Implementation Checklist:**
+
 ```
 [ ] Create FramePool type with 3 pre-allocated buffers
 [ ] Implement Get() and Release() methods
@@ -343,6 +372,7 @@ Run pprof during sustained 30fps stream capture
 ```
 
 **Risk Level**: Medium
+
 - Must ensure frames aren't used after buffer recycled
 - Race detector is essential for validation
 - Recommended to ship with extra logging during rollout
@@ -350,12 +380,14 @@ Run pprof during sustained 30fps stream capture
 ### For Strategy 2: Direct Write
 
 **Pros & Cons:**
+
 - ✅ Minimal code change
 - ✅ Good middle ground
 - ❌ Caller must be careful not to mutate buf
 - ❌ Requires coordination with real_camera.go
 
 **Implementation Checklist:**
+
 ```
 [ ] Remove clone in Write() method
 [ ] Update real_camera.go readMJPEGStream() to not use Write()
@@ -367,6 +399,7 @@ Run pprof during sustained 30fps stream capture
 ```
 
 **Risk Level**: Low
+
 - Minimal changes
 - Current WriteImmutable() already assumes no mutation
 - Straightforward to revert if issues arise
@@ -385,10 +418,10 @@ If optimization is needed, **Strategy 2 (Direct Write)** offers best risk/reward
 
 ## References
 
-- Go Memory Management: https://golang.org/doc/effective_go#allocation_new
-- Profiling Go: https://go.dev/blog/profiling-go-programs
-- sync.Pool Pattern: https://golang.org/pkg/sync/#Pool
-- Runtime GC Tuning: https://pkg.go.dev/runtime/debug#SetGCPercent
+- Go Memory Management: <https://golang.org/doc/effective_go#allocation_new>
+- Profiling Go: <https://go.dev/blog/profiling-go-programs>
+- sync.Pool Pattern: <https://golang.org/pkg/sync/#Pool>
+- Runtime GC Tuning: <https://pkg.go.dev/runtime/debug#SetGCPercent>
 
 ---
 
@@ -399,7 +432,7 @@ The following baselines are tracked continuously via [.github/workflows/benchmar
 ### Current Baselines (April 2026)
 
 | Metric | Baseline | Threshold | Status |
-|--------|----------|-----------|--------|
+| -------- | ---------- | ----------- | -------- |
 | **FrameBuffer.Write()** | ~150ns per frame | <250ns | ✅ Optimal |
 | **MJPEG Handler throughput** | ~10,000 frames/sec | >5,000 frames/sec | ✅ Excellent |
 | **GC Pause (per request)** | <1ms | <5ms | ✅ Acceptable |
@@ -426,6 +459,7 @@ benchstat baseline.txt current.txt
 ### Regression Detection
 
 Benchmarks are run:
+
 - **Scheduled**: Weekly (every Monday 9 AM UTC)
 - **On-demand**: Via `workflow_dispatch` trigger
 - **On push**: To main branch (optional; can be disabled if too slow)

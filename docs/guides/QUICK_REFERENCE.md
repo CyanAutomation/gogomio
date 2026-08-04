@@ -26,7 +26,7 @@ docker run -p 8000:8000 --device /dev/video0 \
 ## Access Application
 
 | Use Case | URL |
-|----------|-----|
+| ---------- | ----- |
 | Local dev | <http://localhost:8000> |
 | Raspberry Pi | <http://raspberrypi.local:8000> |
 | IP address | <http://192.168.1.50:8000> |
@@ -54,7 +54,7 @@ docker-compose ps
 ## API Endpoints
 
 | Endpoint | Method | Purpose |
-|----------|--------|---------|
+| ---------- | -------- | --------- |
 | `/` | GET | Web UI |
 | `/health` | GET | Health check |
 | `/ready` | GET | Readiness probe |
@@ -147,7 +147,7 @@ MIO_MAX_STREAM_CONNECTIONS: 20
 ## Troubleshooting
 
 | Issue | Solution |
-|-------|----------|
+| ------- | ---------- |
 | Container won't start | Check logs: `docker-compose logs -f` |
 | Port already in use | Change port in docker-compose.yml |
 | Camera not detected | Verify `/dev/video0` exists |
@@ -185,7 +185,7 @@ docker stats
 ## Repository Information
 
 | Item | Value |
-|------|-------|
+| ------ | ------- |
 | **Repository** | docker.io/cyanautomation/gogomio |
 | **GitHub** | <https://github.com/CyanAutomation/gogomio> |
 | **Docker Hub** | <https://hub.docker.com/r/cyanautomation/gogomio> |
@@ -214,7 +214,7 @@ docker exec gogomio-gogomio-1 cat /tmp/gogomio/settings.json > settings.json
 ## Performance Metrics
 
 | Metric | Value |
-|--------|-------|
+| -------- | ------- |
 | **Image pull** | 30-60 seconds |
 | **Container start** | <2 seconds |
 | **App startup** | <1 second |
@@ -226,7 +226,7 @@ docker exec gogomio-gogomio-1 cat /tmp/gogomio/settings.json > settings.json
 ## Web UI Features
 
 | Feature | Description |
-|---------|-------------|
+| --------- | ------------- |
 | **Live Stream** | Real-time MJPEG display with auto-reconnect |
 | **Brightness** | 0-200% slider with real-time display |
 | **Contrast** | 0-200% slider with real-time display |

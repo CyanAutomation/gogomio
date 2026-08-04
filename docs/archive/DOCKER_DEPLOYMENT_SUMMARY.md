@@ -44,7 +44,7 @@
 ### Repository Information
 
 | Property | Value |
-|----------|-------|
+| ---------- | ------- |
 | **Repository** | docker.io/cyanautomation/gogomio |
 | **Visibility** | Public |
 | **URL** | <https://hub.docker.com/r/cyanautomation/gogomio> |
@@ -115,7 +115,7 @@ docker pull docker.io/cyanautomation/gogomio:latest
 ### Code Metrics
 
 | Metric | Count |
-|--------|-------|
+| -------- | ------- |
 | **Total Tests** | 81 |
 | **Tests Passing** | 81 (100%) |
 | **Race Detection** | ✅ All pass |
@@ -126,7 +126,7 @@ docker pull docker.io/cyanautomation/gogomio:latest
 ### Phase Breakdown
 
 | Phase | Status | Tests | Features |
-|-------|--------|-------|----------|
+| ------- | -------- | ------- | ---------- |
 | Phase 1 | ✅ | 44 | Core framework, HTTP API, mock camera |
 | Phase 2.1 | ✅ | 2 | MJPEG streaming optimization |
 | Phase 2.2 | ✅ | 9 | Settings persistence API |

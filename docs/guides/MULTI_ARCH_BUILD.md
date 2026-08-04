@@ -7,7 +7,7 @@ Built and pushed multi-architecture images for both Raspberry Pi (arm64) and dev
 ### Build Details
 
 | Metric | Details |
-|--------|---------|
+| -------- | --------- |
 | **Build Date** | 2026-04-14 |
 | **Builder Tool** | Docker buildx |
 | **Platforms** | linux/amd64, linux/arm64 |
@@ -37,7 +37,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ### Build Timeline
 
 | Platform | Event | Duration |
-|----------|-------|----------|
+| ---------- | ------- | ---------- |
 | linux/amd64 | Build golang compilation | ~18.6s |
 | linux/amd64 | Export & manifest | ~4.2s |
 | linux/arm64 | Build golang compilation | **275.5s** |
@@ -269,7 +269,7 @@ docker inspect $(docker images -q cyanautomation/gogomio) | grep -A2 Architectur
 ## Summary
 
 | Item | Status |
-|------|--------|
+| ------ | -------- |
 | Multi-arch build setup | ✅ Complete |
 | amd64 image | ✅ Built & pushed |
 | arm64 image | ✅ Built & pushed |

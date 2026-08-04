@@ -78,7 +78,7 @@ docker.io/cyanautomation/gogomio:latest
 ### Image Details
 
 | Property | Value |
-|----------|-------|
+| ---------- | ------- |
 | Repository | docker.io/cyanautomation/gogomio |
 | Base Image | alpine:3.19 |
 | Go Version | Compatible with the version declared in `go.mod` (currently 1.25) |

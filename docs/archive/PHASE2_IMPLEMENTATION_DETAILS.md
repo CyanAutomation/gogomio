@@ -14,6 +14,7 @@ Phase 2 introduced four critical reliability improvements to the gogomio camera 
 ## 1. Panic Recovery in Goroutines
 
 ### Problem Solved
+
 Critical goroutines were missing panic recovery. An unhandled panic in any goroutine would silently crash that goroutine without being logged, potentially leaving the application in an inconsistent state.
 
 ### Solution Implemented
@@ -21,12 +22,14 @@ Critical goroutines were missing panic recovery. An unhandled panic in any gorou
 Added deferred panic recovery to all critical long-running goroutines:
 
 #### Locations Updated
+
 - `internal/api/handlers.go` - `captureLoop()`
 - `internal/api/handlers.go` - `cleanupLoop()`
 - `internal/camera/real_camera.go` - `readMJPEGStream()`
 - `internal/camera/real_camera.go` - `drainStderr()`
 
 #### Implementation Pattern
+
 ```go
 func criticalGoroutine() {
     defer func() {
@@ -40,11 +43,13 @@ func criticalGoroutine() {
 ```
 
 ### Benefits
+
 - **Observability**: All panics are logged with timestamps and stack context
 - **Stability**: Panic in one goroutine doesn't cascade to others
 - **Debuggability**: Clear error messages in logs identify which component failed
 
 ### Testing Recommendations
+
 - Add intentional panic tests for each goroutine to verify recovery logging
 - Verify panic logs appear in stderr/logs on panic occurrence
 - Race detector continues to pass: `go test -race ./...`
@@ -54,6 +59,7 @@ func criticalGoroutine() {
 ## 2. Settings Persistence Hardening
 
 ### Problem Solved
+
 Settings stored in `/tmp/gogomio/settings.json` could become corrupted. If the JSON file was malformed (truncation, partial write), the application would fail to load settings without recovery mechanism or clear error reporting.
 
 ### Solution Implemented
@@ -63,21 +69,25 @@ Enhanced `internal/settings/settings.go` with multi-layer error handling:
 #### Features Added
 
 **A. Automatic Backup Creation**
+
 - Before writing settings, the system creates a `.bak` backup file
 - If primary file write fails, backup remains intact for recovery
 - Backups are atomic (rename after flush)
 
 **B. JSON Corruption Detection & Recovery**
+
 - On load failure, the system attempts to load the `.bak` file instead
 - If backup is valid, it's restored over the corrupted primary file
 - Corrupted files are archived with timestamp: `.corrupted.UNIX_TIMESTAMP`
 
 **C. Comprehensive Logging**
+
 - All operations logged at info/warning/error levels
 - Includes timestamps and operation context
 - Enables debugging of persistence issues
 
 #### Error Recovery Flow
+
 ```
 Load primary settings.json
     ↓
@@ -93,6 +103,7 @@ Load primary settings.json
 #### Code Changes
 
 **persist() method enhancement:**
+
 ```go
 // Create backup before atomic write
 if err := copyFile(s.filePath, s.filePath+".bak"); err != nil {
@@ -108,6 +119,7 @@ if err := os.Rename(tmpFile, s.filePath); err != nil {
 ```
 
 **load() method enhancement:**
+
 ```go
 // Try primary file first
 data, err := ioutil.ReadFile(s.filePath)
@@ -132,18 +144,21 @@ s.data = make(map[string]interface{})
 ```
 
 ### Benefits
+
 - **Fault Tolerance**: Survives corrupted JSON files without data loss
 - **Auditability**: Corrupted files are preserved for forensic analysis
 - **Transparency**: All operations logged for debugging
 - **Backward Compatible**: Existing valid settings.json files work unchanged
 
 ### Testing Recommendations
+
 - Test with intentionally corrupted settings.json
 - Verify backup recovery works correctly
 - Verify corrupted file archiving preserves files for analysis
 - Test concurrent writes from multiple goroutines (use race detector)
 
 ### Storage Structure
+
 ```
 /tmp/gogomio/
 ├── settings.json           # Primary settings file
@@ -156,6 +171,7 @@ s.data = make(map[string]interface{})
 ## 3. Subprocess Health Monitoring
 
 ### Problem Solved
+
 The real camera subprocess (`rpicam-vid` or `libcamera-vid`) could crash, hang, or stall without the application detecting it immediately. Failures would only be noticed when clients tried to fetch frames and got old data.
 
 ### Solution Implemented
@@ -165,17 +181,20 @@ Added background `healthMonitor()` goroutine to `internal/camera/real_camera.go`
 #### Features
 
 **A. Periodic Process Status Checks**
+
 - Runs on a 10-second interval (configurable)
 - Checks if subprocess PID is still alive
 - Logs process status changes
 
 **B. Frame Progress Detection**
+
 - Tracks frame sequence numbers to detect if capture is progressing
 - Logs warnings if frames haven't advanced in >10 seconds
 - Logs errors if frames haven't advanced in >30 seconds
 - Indicates "stalled" capture state
 
 **C. Reader Error Detection**
+
 - Monitors stderr output for process errors
 - Logs reader errors when detected
 
@@ -220,6 +239,7 @@ func (rc *RealCamera) healthMonitor() {
 #### Integration
 
 The monitor is started as a separate goroutine when the camera starts:
+
 ```go
 func (rc *RealCamera) Start(ctx context.Context) error {
     // Start read/drain goroutines
@@ -234,12 +254,14 @@ func (rc *RealCamera) Start(ctx context.Context) error {
 ```
 
 ### Benefits
+
 - **Early Detection**: Stalls detected within 10-30 seconds
 - **Observable**: All issues logged with timestamps
 - **Non-Blocking**: Monitor runs independently, doesn't interfere with streaming
 - **Graceful Degradation**: Serves old frames while alerting operators
 
 ### Testing Recommendations
+
 - Simulate process stall: send SIGSTOP to camera subprocess
 - Verify health monitor logs stall detection within expected timeframe
 - Verify process restart: SIGKILL and verify detection
@@ -250,6 +272,7 @@ func (rc *RealCamera) Start(ctx context.Context) error {
 ## 4. Enhanced Diagnostics Metrics
 
 ### Problem Solved
+
 The diagnostics endpoint (`/api/diagnostics`) provided basic metrics but lacked visibility into error rates and health status. Operators couldn't quickly assess system health.
 
 ### Solution Implemented
@@ -257,6 +280,7 @@ The diagnostics endpoint (`/api/diagnostics`) provided basic metrics but lacked 
 #### Backend Changes (`internal/api/handlers.go`)
 
 **DiagnosticsResponse struct extension:**
+
 ```go
 type DiagnosticsResponse struct {
     // ... existing fields ...
@@ -268,6 +292,7 @@ type DiagnosticsResponse struct {
 ```
 
 **handleDiagnostics() calculation logic:**
+
 ```go
 // Get current failure counts
 consecutiveFailures := fm.captureFailureStats().consecutive
@@ -317,6 +342,7 @@ if errorRate > 20 || consecutiveFailures > 5 {
 #### Calculation Details
 
 **Error Rate Formula:**
+
 ```
 Error Rate % = (Total Failures / (Total Failures + Total Frames)) × 100
 
@@ -327,6 +353,7 @@ Example:
 ```
 
 **Health Status Logic:**
+
 ```
 IF error_rate ≤ 5% AND consecutive_failures ≤ 5
     → "Excellent" (green)
@@ -339,12 +366,14 @@ IF error_rate > 20% OR consecutive_failures > 5
 ```
 
 ### Benefits
+
 - **Operator Clarity**: At-a-glance health assessment without needing to understand details
 - **Trend Analysis**: Error rate reveals degradation patterns
 - **Actionable**: Consecutive failure count helps identify timing of recent issues
 - **Self-Healing**: Alert operators to resource constraints or hardware issues
 
 ### Testing Recommendations
+
 - Inject frame capture failures and verify error rate calculation
 - Verify health status transitions at threshold boundaries
 - Test with zero frames captured (edge case)
@@ -355,12 +384,14 @@ IF error_rate > 20% OR consecutive_failures > 5
 ## Integration & Deployment
 
 ### Backward Compatibility
+
 - All changes are additive; no breaking API changes
 - Existing clients ignore new diagnostics fields
 - Settings persist in same location with enhanced recovery
 - Panic recovery is transparent to application logic
 
 ### Deployment Checklist
+
 - [ ] Verify panic recovery logs appear in application output
 - [ ] Check settings backup mechanism with intentional corruption test
 - [ ] Monitor health monitor logs for false positives
@@ -368,6 +399,7 @@ IF error_rate > 20% OR consecutive_failures > 5
 - [ ] Test with 2 simultaneous connections (hardcoded max) under normal and stress conditions
 
 ### Performance Impact
+
 - Panic recovery: Negligible (deferred function only on panic)
 - Settings persistence: ~1-2ms added per save (atomic write)
 - Health monitoring: ~1-2ms per 10-second tick (non-blocking)
@@ -380,21 +412,25 @@ IF error_rate > 20% OR consecutive_failures > 5
 ### Common Issues & Resolution
 
 **Issue: Panic recovery logging not appearing**
+
 - Ensure log output is captured (stdout/stderr)
 - Verify defer blocks are placed before critical code sections
 - Check that log.Printf calls are using appropriate format strings
 
 **Issue: Settings corruption detected repeatedly**
+
 - Check file system permissions on `/tmp/gogomio/`
 - Verify disk space is available for write operations
 - Check for concurrent write conflicts (should be serialized via Settings.mu)
 
 **Issue: Health monitor reports frequent stalls**
+
 - Check CPU load on system (camera process may be starved)
 - Verify camera hardware is functioning (USB/CSI connection)
 - Check for process resource limits (ulimit -n for open files)
 
 **Issue: Error rate not changing despite frame loss**
+
 - Verify frame count is being incremented (stream is actually flowing)
 - Check if failure count atomic operations are working (race detector: `go test -race`)
 - Ensure clock is synchronized (affects time-based calculations)
@@ -404,6 +440,7 @@ IF error_rate > 20% OR consecutive_failures > 5
 ## Future Enhancements
 
 ### Planned Improvements
+
 1. **Configurable Health Thresholds** - Allow operators to adjust error rate thresholds
 2. **Historical Metrics** - Store hourly/daily failure trends for analysis
 3. **Automatic Recovery** - Restart camera process on extended stall detection
@@ -411,6 +448,7 @@ IF error_rate > 20% OR consecutive_failures > 5
 5. **Structured Logging** - Upgrade from fmt.Printf to structured logger (slog or similar)
 
 ### Monitoring Integration
+
 ```
 # Prometheus compatible metrics endpoint (future)
 /metrics
@@ -426,7 +464,7 @@ gogomio_health_status
 
 ## References
 
-- Go panic recovery: https://golang.org/doc/effective_go#defer
-- Atomic operations: https://pkg.go.dev/sync/atomic
-- File I/O patterns: https://golang.org/doc/effective_go#files_and_programs
-- Goroutine best practices: https://www.ardanlabs.com/blog/2018/09/goroutines-under-the-hood.html
+- Go panic recovery: <https://golang.org/doc/effective_go#defer>
+- Atomic operations: <https://pkg.go.dev/sync/atomic>
+- File I/O patterns: <https://golang.org/doc/effective_go#files_and_programs>
+- Goroutine best practices: <https://www.ardanlabs.com/blog/2018/09/goroutines-under-the-hood.html>
