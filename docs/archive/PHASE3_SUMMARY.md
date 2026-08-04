@@ -128,7 +128,7 @@ Test time: ~5 seconds
 ## Features Summary
 
 | Feature | Status | Details |
-|---------|--------|---------|
+| --------- | -------- | --------- |
 | MJPEG Streaming | ✅ | Real-time video display with auto-reconnect |
 | Settings Control | ✅ | Brightness, Contrast, Saturation sliders |
 | Live Statistics | ✅ | FPS, Resolution, Quality, Connections |

@@ -282,7 +282,7 @@ GoGoMio is an __Excellent Product (100/100)__ — a production-ready, high-perfo
 ### Quick Reference Scorecard
 
 | Category | Signals Met | Weight | Contribution | Status |
-|----------|-------------|--------|--------------|--------|
+| ---------- | ------------- | -------- | -------------- | -------- |
 | 1. Repository Completeness | 5/5 | 10 | +10 | ✅ |
 | 2. Setup & Reproducibility | 5/5 | 15 | +15 | ✅ |
 | 3. Runtime Operability | 5/5 | 15 | +15 | ✅ |
@@ -491,7 +491,7 @@ Recent commits, active development. Latest release: v0.1.0 (May 1, 2026). Marked
 #### App/Product Modifiers — __+4 points__ ✅
 
 | Signal | Status | Evidence |
-|--------|--------|----------|
+| -------- | -------- | ---------- |
 | UI or demo interface exists | ✅ | Web UI at `/` with live MJPEG stream preview ([internal/web/index.html](../../internal/web/index.html)) |
 | Persistent storage strategy exists | ✅ | Settings persisted to file with OS-appropriate locking ([internal/settings/settings.go](../../internal/settings/settings.go)) |
 | Config system exists | ✅ | Comprehensive env var config ([internal/config/config.go](../../internal/config/config.go)) and persistent settings |
@@ -500,7 +500,7 @@ Recent commits, active development. Latest release: v0.1.0 (May 1, 2026). Marked
 #### Hardware-Integrated Modifiers — __+3 points__ ✅
 
 | Signal | Status | Evidence |
-|--------|--------|----------|
+| -------- | -------- | ---------- |
 | Hardware assumptions documented | ✅ | [docs/guides/RASPBERRY_PI_BUILD.md](../../docs/guides/RASPBERRY_PI_BUILD.md) documents Pi 3B+/4/5 arm64 requirement, CSI camera, libcamera/rpicam-apps packages |
 | Device mapping documented | ✅ | [README.md](../../README.md) specifies arm64 build, camera package options (rpicam-apps preferred, libcamera fallback) |
 | Fallback/mock mode exists | ✅ | MockCamera as fallback; real camera auto-detects libcamera-vid vs. ffmpeg ([internal/camera/real_camera.go](../../internal/camera/real_camera.go)) |
@@ -512,7 +512,7 @@ __Total Modifiers: +7 points__
 ### Penalties Analysis
 
 | Penalty Category | Triggered | Explanation |
-|------------------|-----------|-------------|
+| ------------------ | ----------- | ------------- |
 | __Critical (-10)__ | ❌ None | Project runs successfully from documented commands; no secrets detected in repo |
 | __Medium (-5)__ | ❌ None | CI tests pass; install/run commands fully documented |
 | __Minor (-2 to -3)__ | ❌ None | No broken dependencies; LICENSE present; active development; no generated artifacts committed |
@@ -551,7 +551,7 @@ Classification: Excellent Product (Maximum Maturity)
 The following gaps identified in earlier assessments have been __completed__:
 
 | Gap | Status | Implementation | Score Impact | Completion Date |
-|-----|--------|--|-----------|-------|
+| ----- | -------- | -- | ----------- | ------- |
 | One-command bootstrap | ✅ Complete | [scripts/bootstrap.sh](../../scripts/bootstrap.sh) automates `.env` setup and Docker start | +1 → Setup: 4→5/5 | May 1, 2026 |
 | E2E testing | ✅ Complete | [handlers_e2e_test.go](../../internal/api/handlers_e2e_test.go) with 8+ E2E test functions | +1 → Testing: 4→5/5 | May 1, 2026 |
 | GoReleaser workflow | ✅ Complete | [.goreleaser.yml](.goreleaser.yml) + [.github/workflows/goreleaser.yml](.github/workflows/goreleaser.yml) (manual dispatch) | +2 → CI/CD: 3→5/5 | May 1, 2026 |
@@ -566,7 +566,7 @@ __Total Score Impact__: +7 points (base 86 → 100, final 93 → 100/100)
 #### Lower-Priority Enhancements (Estimated +1–2 points each)
 
 | Enhancement | Current State | Recommended Action | Score Impact | Effort |
-|-----|---------------|--------------------|--|--------|
+| ----- | --------------- | -------------------- | -- | -------- |
 | __Smoke tests__ | E2E tests exist; quick startup tests missing | Add fast startup verification tests | +1 | ⭐ Low |
 | __Prometheus metrics__ | Live metrics via JSON API only | Add Prometheus `/metrics` endpoint for monitoring integration | +1 | ⭐⭐ Medium |
 | __Published Go package docs__ | Code documented; pkg.go.dev not integrated | Add module documentation badge and pkg.go.dev integration | +0.5 | ⭐ Low |

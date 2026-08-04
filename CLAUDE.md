@@ -34,7 +34,15 @@ go test -bench=. -benchmem -benchtime=2s ./internal/camera ./internal/api
 
 # Development with mock camera (no hardware needed)
 docker-compose -f docker-compose.mock.yml up --build
+
+# Code quality analysis (golangci-lint)
+golangci-lint run ./...
+
+# Comprehensive analysis with multiple linters
+golangci-lint run --enable=gosec,gocritic,goconst,revive,errcheck ./...
 ```
+
+**Code Quality**: golangci-lint is installed and configured for static analysis. See the [golangci-lint-analysis skill](.github/skills/golangci-lint-analysis/SKILL.md) for comprehensive guidance on running analysis, interpreting results, and implementing fixes. The skill includes priority-based triage (P0 security → P3 style), fix patterns, and CI integration examples.
 
 **Performance Baselines** (April 2026):
 

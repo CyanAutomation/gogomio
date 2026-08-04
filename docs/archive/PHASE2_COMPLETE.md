@@ -302,7 +302,7 @@ curl http://localhost:8000/api/settings
 ## Summary Statistics
 
 | Metric | Phase 1 | Phase 2 | Total |
-|--------|---------|---------|-------|
+| -------- | --------- | --------- | ------- |
 | Lines of Code | 2,432 | +245 | 2,677 |
 | Test Cases | 44 | +13 | 57 |
 | Packages | 4 | +1 | 5 |

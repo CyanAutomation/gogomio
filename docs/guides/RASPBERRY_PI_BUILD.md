@@ -109,7 +109,7 @@ Access the web UI diagnostics at `http://<pi-ip>:8000` and click the **📊 Diag
 ## Performance Notes
 
 | Metric | libcamera-vid | FFmpeg V4L2 | Mock Mode |
-|--------|---------------|------------|-----------|
+| -------- | --------------- | ------------ | ----------- |
 | Startup | ~500ms | ~2s | <100ms |
 | Frame Rate | 60+ FPS possible | Varies | 24 FPS (synthetic) |
 | CPU Usage | Low (hardware ISP) | Medium | Very Low |

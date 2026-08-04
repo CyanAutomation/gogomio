@@ -6,7 +6,7 @@
 ## Status Summary
 
 | Issue | Severity (original) | Current Status | Resolution |
-|-------|---------------------|----------------|------------|
+| ------- | --------------------- | ---------------- | ------------ |
 | #1 Send on closed `cleanupCh` | CRITICAL | ✅ **RESOLVED** | `tryEnqueueCleanupRequest` + `cleanupAccept` mutex guard; `cleanupChOnce` protects close |
 | #2 Double-close of `cleanupCh` | CRITICAL | ✅ **RESOLVED** | `cleanupChOnce sync.Once` on every close path |
 | #3 Stale `stopChancel` reference | HIGH | ✅ **RESOLVED** | `rotateStopCancelLocked()` + `context.WithCancel`; stale ref harmlessly closes early |
@@ -83,6 +83,7 @@ The original risk was a send on a closed `cleanupCh` during shutdown. This is no
 **Resolution date:** ~March 2026 (PR #96)
 
 `StreamFrame()` no longer uses `fm.doneChan` at all. It selects on:
+
 - `ctx.Done()` — the HTTP request context (client disconnect)
 - `fm.shutdownCh` — a single long-lived channel closed exactly once in `Stop()`
 
@@ -136,7 +137,6 @@ GORACE='halt_on_error=1' go test ./... -race -count=2
 ```
 
 All packages pass with no race reports.
-
 
 **GoGoMio** is a Raspberry Pi CSI camera streaming server written in Go. It:
 
@@ -464,7 +464,7 @@ This is not a crash or data corruption, just potential duplicate calculation. Th
 ## Summary Table
 
 | Issue | File | Lines | Severity | Type | Impact |
-|-------|------|-------|----------|------|--------|
+| ------- | ------ | ------- | ---------- | ------ | -------- |
 | Send on closed channel | handlers.go | 224, 312 | **CRITICAL** | Race | CRASH during shutdown |
 | Double-close of cleanupCh | handlers.go | 312 | **CRITICAL** | Logic | CRASH on multiple Stop() |
 | Stale stopChancel reference | handlers.go | 118-120, 165-175 | HIGH | Race | Timing/reference issues |
