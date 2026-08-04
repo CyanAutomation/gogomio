@@ -18,13 +18,13 @@ type frameSnapshot struct {
 // FrameBuffer is a thread-safe latest-frame store for JPEG frames.
 // It implements io.Writer interface for use with Picamera2-style encoders.
 type FrameBuffer struct {
-	mu                    sync.Mutex
-	snapshot              frameSnapshot
-	notifyCh              chan struct{}
-	stats                 *StreamStats
-	lastFrameTime         time.Time
-	targetFrameInterval   time.Duration
-	nowFn                 func() time.Time
+	mu                  sync.Mutex
+	snapshot            frameSnapshot
+	notifyCh            chan struct{}
+	stats               *StreamStats
+	lastFrameTime       time.Time
+	targetFrameInterval time.Duration
+	nowFn               func() time.Time
 }
 
 // NewFrameBuffer creates a new FrameBuffer.
