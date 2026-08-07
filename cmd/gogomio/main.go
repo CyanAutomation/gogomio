@@ -27,6 +27,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -123,9 +124,13 @@ func startServer() {
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	shutdownCtx, cancelShutdown := newShutdownContext(context.Background(), sigChan)
+	defer cancelShutdown()
 
 	go func() {
-		<-sigChan
+		<-shutdownCtx.Done()
 		log.Println("Shutdown signal received, stopping server...")
 		if err := server.Close(); err != nil {
 			log.Printf("Error closing server: %v", err)
@@ -143,6 +148,19 @@ func startServer() {
 	}
 
 	log.Println("Server stopped")
+}
+
+func newShutdownContext(parent context.Context, signalSource <-chan os.Signal) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		select {
+		case <-signalSource:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	return ctx, cancel
 }
 
 func initializeCamera(
