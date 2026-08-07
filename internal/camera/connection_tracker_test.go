@@ -2,6 +2,7 @@ package camera
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -135,31 +136,47 @@ func TestConnectionTrackerTryIncrementAfterDecrement(t *testing.T) {
 	}
 }
 
-// TestConnectionTrackerConcurrentOperations tests thread-safety
+// TestConnectionTrackerConcurrentOperations verifies the connection-limit requirement:
+// concurrent callers must never admit more than maxConnections clients.
 func TestConnectionTrackerConcurrentOperations(t *testing.T) {
 	tracker := NewConnectionTracker()
 	maxConnections := 50
 	numGoroutines := 100
 
-	var wg sync.WaitGroup
+	var ready sync.WaitGroup
+	var workers sync.WaitGroup
+	var succeeded atomic.Int64
+	var failed atomic.Int64
+	start := make(chan struct{})
+	ready.Add(numGoroutines)
+	workers.Add(numGoroutines)
 
-	// Launch concurrent incrementers
 	for g := 0; g < numGoroutines; g++ {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
-			// Try to increment; some will succeed, some will fail
-			tracker.TryIncrement(maxConnections)
+			defer workers.Done()
+			ready.Done()
+			<-start
+
+			if tracker.TryIncrement(maxConnections) {
+				succeeded.Add(1)
+			} else {
+				failed.Add(1)
+			}
 		}()
 	}
 
-	wg.Wait()
+	ready.Wait()
+	close(start)
+	workers.Wait()
 
-	finalCount := tracker.Count()
-
-	// Count should not exceed max
-	if finalCount > maxConnections {
-		t.Errorf("count is %d, exceeds max of %d", finalCount, maxConnections)
+	if got := succeeded.Load(); got != int64(maxConnections) {
+		t.Errorf("successful TryIncrement calls = %d, want %d", got, maxConnections)
+	}
+	if got, want := failed.Load(), int64(numGoroutines-maxConnections); got != want {
+		t.Errorf("failed TryIncrement calls = %d, want %d", got, want)
+	}
+	if got := tracker.Count(); got != maxConnections {
+		t.Errorf("count is %d, want %d", got, maxConnections)
 	}
 }
 
