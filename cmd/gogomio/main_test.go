@@ -460,7 +460,11 @@ func TestNewShutdownContext_SignalCancelsApplicationContext(t *testing.T) {
 	t.Cleanup(cancel)
 
 	testSigChan <- syscall.SIGINT
-	<-appCtx.Done()
+	select {
+	case <-appCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for application context cancellation")
+	}
 
 	if !errors.Is(appCtx.Err(), context.Canceled) {
 		t.Fatalf("expected application context to be cancelled, got %v", appCtx.Err())
