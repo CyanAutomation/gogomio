@@ -93,74 +93,113 @@ func TestStreamStatsWindowSliding(t *testing.T) {
 	}
 }
 
-// TestStreamStatsThreadSafety tests concurrent RecordFrame calls
+// TestStreamStatsThreadSafety tests concurrent RecordFrame calls and consistent snapshots.
 func TestStreamStatsThreadSafety(t *testing.T) {
 	stats := NewStreamStats()
 
 	baseTime := time.Now().UnixNano()
 	numGoroutines := 10
 	framesPerGoroutine := 100
+	numReaders := 5
+	expectedCount := int64(numGoroutines * framesPerGoroutine)
 
-	var wg sync.WaitGroup
+	type snapshot struct {
+		frameCount int64
+		lastTime   *int64
+		fps        float64
+	}
+
+	start := make(chan struct{})
+	writersDone := make(chan struct{})
+	readerReady := make(chan struct{}, numReaders)
+	snapshots := make(chan []snapshot, numReaders)
+
+	var writerWG sync.WaitGroup
 
 	// Launch concurrent writers
 	for g := 0; g < numGoroutines; g++ {
-		wg.Add(1)
+		writerWG.Add(1)
 		go func(id int) {
-			defer wg.Done()
+			defer writerWG.Done()
+			<-start
 			for i := 0; i < framesPerGoroutine; i++ {
-				ts := baseTime + int64(g*10000000+i*1000000) // Spread timestamps
+				ts := baseTime + int64(id*framesPerGoroutine+i)*1_000_000
 				stats.RecordFrame(ts)
 			}
 		}(g)
 	}
 
-	// Concurrent readers
-	for r := 0; r < 5; r++ {
-		wg.Add(1)
+	// Readers start with the writers and keep taking snapshots until every record
+	// has completed. Each reader owns its result slice, so collecting the results
+	// does not add synchronization around Snapshot itself.
+	for r := 0; r < numReaders; r++ {
 		go func() {
-			defer wg.Done()
-			for i := 0; i < 100; i++ {
-				stats.Snapshot()
-				time.Sleep(1 * time.Millisecond)
+			readerReady <- struct{}{}
+			<-start
+
+			var results []snapshot
+			for {
+				frameCount, lastTime, fps := stats.Snapshot()
+				results = append(results, snapshot{frameCount, lastTime, fps})
+
+				select {
+				case <-writersDone:
+					snapshots <- results
+					return
+				default:
+				}
 			}
 		}()
 	}
 
-	wg.Wait()
+	// Do not release the writers until all readers are waiting at the same start
+	// barrier. writersDone is the corresponding completion barrier.
+	for r := 0; r < numReaders; r++ {
+		<-readerReady
+	}
+	close(start)
+	writerWG.Wait()
+	close(writersDone)
+
+	for r := 0; r < numReaders; r++ {
+		var previousCount int64
+		for _, result := range <-snapshots {
+			if result.frameCount < previousCount {
+				t.Errorf("snapshot frame count decreased from %d to %d", previousCount, result.frameCount)
+			}
+			if result.frameCount > expectedCount {
+				t.Errorf("snapshot frame count is %d, exceeds %d completed records", result.frameCount, expectedCount)
+			}
+
+			if result.frameCount == 0 {
+				if result.lastTime != nil {
+					t.Errorf("snapshot with no frames has last frame time %d, want nil", *result.lastTime)
+				}
+				if result.fps != 0 {
+					t.Errorf("snapshot with no frames has FPS %v, want 0", result.fps)
+				}
+			} else {
+				if result.lastTime == nil {
+					t.Errorf("snapshot with %d frames has nil last frame time", result.frameCount)
+				} else if *result.lastTime < baseTime || *result.lastTime >= baseTime+expectedCount*1_000_000 {
+					t.Errorf("snapshot last frame time %d is outside the recorded range", *result.lastTime)
+				}
+				if result.frameCount == 1 && result.fps != 0 {
+					t.Errorf("snapshot with one frame has FPS %v, want 0", result.fps)
+				}
+				if result.frameCount > 1 && (math.IsNaN(result.fps) || math.IsInf(result.fps, 0) || result.fps <= 0) {
+					t.Errorf("snapshot with %d frames has invalid FPS %v", result.frameCount, result.fps)
+				}
+			}
+
+			previousCount = result.frameCount
+		}
+	}
 
 	frameCount, _, _ := stats.Snapshot()
-	expectedCount := int64(numGoroutines * framesPerGoroutine)
 
 	if frameCount != expectedCount {
 		t.Errorf("frame count is %d, want %d", frameCount, expectedCount)
-	}
-}
-
-// TestStreamStatsSnapshotConsistency tests that Snapshot is atomic
-func TestStreamStatsSnapshotConsistency(t *testing.T) {
-	stats := NewStreamStats()
-
-	baseTime := time.Now().UnixNano()
-
-	// Record several frames at specific intervals
-	timestamps := []int64{
-		baseTime,
-		baseTime + 1000000, // 1ms
-		baseTime + 2000000, // 2ms
-		baseTime + 3000000, // 3ms
-	}
-
-	for _, ts := range timestamps {
-		stats.RecordFrame(ts)
-	}
-
-	frameCount1, lastTime1, fps1 := stats.Snapshot()
-	frameCount2, lastTime2, fps2 := stats.Snapshot()
-
-	if frameCount1 != frameCount2 || *lastTime1 != *lastTime2 || fps1 != fps2 {
-		t.Errorf("consecutive snapshots differ: (%d,%d,%v) vs (%d,%d,%v)",
-			frameCount1, frameCount2, fps1, lastTime1, lastTime2, fps2)
 	}
 }
 
