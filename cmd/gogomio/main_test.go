@@ -455,7 +455,7 @@ func TestConcurrentServerInitialization(t *testing.T) {
 
 // TestNewShutdownContext_SignalCancelsApplicationContext covers REQ-GRACEFUL-SHUTDOWN.
 func TestNewShutdownContext_SignalCancelsApplicationContext(t *testing.T) {
-	testSigChan := make(chan os.Signal)
+	testSigChan := make(chan os.Signal, 1)
 	appCtx, cancel := newShutdownContext(context.Background(), testSigChan)
 	t.Cleanup(cancel)
 
