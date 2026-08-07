@@ -383,6 +383,7 @@ func TestSettingsAtomicWrite(t *testing.T) {
 
 // TestSettingsConcurrentWritersSamePath ensures concurrent writers to the same file path
 // never leave truncated/invalid JSON on disk.
+// Requirement: settings-concurrency.
 func TestSettingsConcurrentWritersSamePath(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "shared_settings.json")
@@ -390,13 +391,41 @@ func TestSettingsConcurrentWritersSamePath(t *testing.T) {
 	const writers = 8
 	const writesPerWriter = 25
 
-	var wg sync.WaitGroup
-	errCh := make(chan error, writers*writesPerWriter)
+	// Seed the file so the disk reader can distinguish an invalid read from setup.
+	if err := NewManager(settingsPath).Set("seed", "value"); err != nil {
+		t.Fatalf("failed seeding settings file: %v", err)
+	}
+
+	var writerWG sync.WaitGroup
+	var readerWG sync.WaitGroup
+	errCh := make(chan error, writers*writesPerWriter+1)
+	var stopReader int32
+
+	readerWG.Add(1)
+	go func() {
+		defer readerWG.Done()
+		for atomic.LoadInt32(&stopReader) == 0 {
+			data, err := os.ReadFile(settingsPath)
+			if err != nil {
+				errCh <- fmt.Errorf("concurrent disk read failed: %w", err)
+				return
+			}
+			if len(data) == 0 {
+				errCh <- fmt.Errorf("concurrent disk read observed an empty file")
+				return
+			}
+			var payload map[string]interface{}
+			if err := json.Unmarshal(data, &payload); err != nil {
+				errCh <- fmt.Errorf("concurrent disk read observed invalid JSON: %w; payload=%q", err, string(data))
+				return
+			}
+		}
+	}()
 
 	for i := 0; i < writers; i++ {
-		wg.Add(1)
+		writerWG.Add(1)
 		go func(id int) {
-			defer wg.Done()
+			defer writerWG.Done()
 
 			m := NewManager(settingsPath)
 			for j := 0; j < writesPerWriter; j++ {
@@ -410,7 +439,9 @@ func TestSettingsConcurrentWritersSamePath(t *testing.T) {
 		}(i)
 	}
 
-	wg.Wait()
+	writerWG.Wait()
+	atomic.StoreInt32(&stopReader, 1)
+	readerWG.Wait()
 	close(errCh)
 
 	for err := range errCh {
@@ -431,52 +462,76 @@ func TestSettingsConcurrentWritersSamePath(t *testing.T) {
 	}
 }
 
-// TestSettingsConcurrency tests concurrent access
+// TestSettingsConcurrency tests the in-memory Manager concurrency contract.
+// Requirement: settings-concurrency.
 func TestSettingsConcurrency(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
 
-	done := make(chan bool)
-	errors := make(chan error, 10)
+	const writers = 5
+	const writesPerWriter = 10
+	const readers = 5
+	const readsPerReader = 20
+
+	var wg sync.WaitGroup
+	// Every operation can report one error without blocking completion of the group.
+	errors := make(chan error, writers*writesPerWriter+readers*readsPerReader)
 
 	// Writer goroutines
-	for i := 0; i < 5; i++ {
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
 		go func(id int) {
-			for j := 0; j < 10; j++ {
+			defer wg.Done()
+			for j := 0; j < writesPerWriter; j++ {
 				key := fmt.Sprintf("key_%d_%d", id, j)
 				if err := m.Set(key, j*100); err != nil {
-					errors <- err
+					errors <- fmt.Errorf("Set(%q) failed: %w", key, err)
 				}
 			}
-			done <- true
 		}(i)
 	}
 
 	// Reader goroutines
-	for i := 0; i < 5; i++ {
-		go func() {
-			for j := 0; j < 20; j++ {
-				_ = m.GetAll()
+	for i := 0; i < readers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < readsPerReader; j++ {
+				got := m.GetAll()
+				for key, value := range got {
+					if _, ok := value.(int); !ok {
+						errors <- fmt.Errorf("reader %d got unusable entry %q=%v (%T)", id, key, value, value)
+						continue
+					}
+					_ = got[key]
+				}
+
+				aliasKey := fmt.Sprintf("reader_alias_%d_%d", id, j)
+				got[aliasKey] = "must not leak"
+				if _, leaked := m.GetAll()[aliasKey]; leaked {
+					errors <- fmt.Errorf("reader %d mutation of GetAll result leaked into manager", id)
+				}
 			}
-			done <- true
-		}()
+		}(i)
 	}
 
-	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
-		<-done
+	wg.Wait()
+	close(errors)
+	for err := range errors {
+		t.Error(err)
 	}
 
-	// Check for errors
-	select {
-	case err := <-errors:
-		t.Fatalf("Concurrent access error: %v", err)
-	default:
+	all := m.GetAll()
+	if len(all) != writers*writesPerWriter {
+		t.Errorf("GetAll returned %d settings, want %d", len(all), writers*writesPerWriter)
 	}
-
-	// Verify we have settings
-	if len(m.GetAll()) == 0 {
-		t.Error("no settings after concurrent operations")
+	for i := 0; i < writers; i++ {
+		for j := 0; j < writesPerWriter; j++ {
+			key := fmt.Sprintf("key_%d_%d", i, j)
+			want := j * 100
+			if got, exists := all[key]; !exists || got != want {
+				t.Errorf("GetAll[%q] = %v (exists=%t), want %d", key, got, exists, want)
+			}
+		}
 	}
 }
 
