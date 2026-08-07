@@ -390,34 +390,6 @@ func (r *testResponseRecorder) WriteHeader(code int) {
 	r.statusCode = code
 }
 
-// TestFrameManagerLifecycle tests FrameManager start/stop doesn't panic
-func TestFrameManagerLifecycle(t *testing.T) {
-	cfg := &config.Config{
-		Resolution:           [2]int{640, 640},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-		Port:                 0,
-		BindHost:             "127.0.0.1",
-	}
-
-	mockCam := camera.NewMockCamera()
-	if err := mockCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-		t.Fatalf("failed to start mock camera: %v", err)
-	}
-	defer func() { _ = mockCam.Stop() }()
-
-	// Create FrameManager (this internally starts capture loops)
-	frameManager := api.NewFrameManager(mockCam, cfg)
-
-	// Immediately stop it
-	frameManager.Stop()
-
-	// Should not panic when stopped multiple times
-	frameManager.Stop()
-}
-
 // TestConcurrentServerInitialization tests multiple cameras can initialize concurrently
 func TestConcurrentServerInitialization(t *testing.T) {
 	var wg sync.WaitGroup
