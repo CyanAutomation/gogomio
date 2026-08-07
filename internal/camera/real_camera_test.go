@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -17,16 +18,51 @@ import (
 )
 
 func TestRealCameraInitialization(t *testing.T) {
-	rc := NewRealCamera()
+	const (
+		defaultWidth       = 640
+		defaultHeight      = 480
+		defaultFPS         = 24
+		defaultJPEGQuality = 80
+	)
+	backendStartErr := errors.New("backend start intercepted")
 
-	if rc.width != 640 || rc.height != 480 {
-		t.Errorf("default resolution incorrect: %dx%d", rc.width, rc.height)
+	rc := NewRealCamera()
+	rc.statFn = func(path string) (os.FileInfo, error) {
+		if path != DefaultDevicePath {
+			t.Fatalf("camera device = %q, want default %q", path, DefaultDevicePath)
+		}
+		return nil, nil
 	}
-	if rc.fps != 24 {
-		t.Errorf("default FPS: got %d, want 24", rc.fps)
+	rc.lookPath = func(name string) (string, error) {
+		if name == BackendFFmpeg {
+			return "/usr/bin/ffmpeg", nil
+		}
+		return "", exec.ErrNotFound
 	}
-	if rc.devicePath == "" {
-		t.Error("device path not set")
+	var backendCmd *exec.Cmd
+	rc.startCommandFn = func(cmd *exec.Cmd, backend string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		if backend != BackendFFmpeg {
+			t.Fatalf("backend = %q, want %q", backend, BackendFFmpeg)
+		}
+		backendCmd = cmd
+		return nil, nil, nil, nil, backendStartErr
+	}
+
+	err := rc.Start(defaultWidth, defaultHeight, defaultFPS, defaultJPEGQuality)
+	if !errors.Is(err, backendStartErr) {
+		t.Fatalf("Start() error = %v, want injected backend error", err)
+	}
+	if backendCmd == nil {
+		t.Fatal("Start() did not invoke the camera backend")
+	}
+	if got := findCommandArgValue(backendCmd.Args, "-video_size"); got != "640x480" {
+		t.Errorf("backend resolution = %q, want 640x480 (args=%v)", got, backendCmd.Args)
+	}
+	if got := findCommandArgValue(backendCmd.Args, "-framerate"); got != "24" {
+		t.Errorf("backend FPS = %q, want 24 (args=%v)", got, backendCmd.Args)
+	}
+	if got := findCommandArgValue(backendCmd.Args, "-i"); got != DefaultDevicePath {
+		t.Errorf("backend device = %q, want %q (args=%v)", got, DefaultDevicePath, backendCmd.Args)
 	}
 }
 
