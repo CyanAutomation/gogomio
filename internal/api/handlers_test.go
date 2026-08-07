@@ -104,6 +104,29 @@ func (c *readinessCamera) CaptureFrame() ([]byte, error) {
 }
 func (c *readinessCamera) CaptureFrameWithContext(_ context.Context) ([]byte, error) { return nil, nil }
 
+type lifecycleCamera struct {
+	captureCalls atomic.Int64
+	captureReady chan struct{}
+	readyOnce    sync.Once
+}
+
+func newLifecycleCamera() *lifecycleCamera {
+	return &lifecycleCamera{captureReady: make(chan struct{})}
+}
+
+func (c *lifecycleCamera) Start(_, _, _, _ int) error { return nil }
+func (c *lifecycleCamera) Stop() error                { return nil }
+func (c *lifecycleCamera) IsReady() bool              { return true }
+func (c *lifecycleCamera) CaptureFrame() ([]byte, error) {
+	return c.CaptureFrameWithContext(context.Background())
+}
+func (c *lifecycleCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error) {
+	c.captureCalls.Add(1)
+	c.readyOnce.Do(func() { close(c.captureReady) })
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
 type blockingCaptureCamera struct{}
 
 func (c *blockingCaptureCamera) Start(_, _, _, _ int) error { return nil }
@@ -2021,28 +2044,45 @@ func TestFrameManager_Metrics_FrameCount(t *testing.T) {
 	}
 }
 
-// TestFrameManager_Stop_MultipleTimes tests Stop() is idempotent
+// TestFrameManager_Stop_MultipleTimes covers REQ-GRACEFUL-SHUTDOWN: Stop is idempotent.
 func TestFrameManager_Stop_MultipleTimes(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
+	cam := newLifecycleCamera()
+	fm := NewFrameManager(cam, &config.Config{FPS: 24, TargetFPS: 24})
 
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-
-	// Start capture
 	fm.startCapture()
-	waitForCaptureState(t, fm, true)
+	select {
+	case <-cam.captureReady:
+	case <-time.After(testDuration(500 * time.Millisecond)):
+		t.Fatal("camera capture was not invoked")
+	}
 
-	// Stop multiple times - should not panic
 	fm.Stop()
+	callsAfterFirstStop := cam.captureCalls.Load()
 	fm.Stop()
-	fm.Stop()
+
+	fm.captureMu.Lock()
+	captureStarted := fm.captureStarted
+	captureCtx := fm.captureCtx
+	captureCancel := fm.captureCancel
+	fm.captureMu.Unlock()
+	if captureStarted || captureCtx != nil || captureCancel != nil {
+		t.Fatalf("capture state after repeated Stop = (started=%t, ctx=%v, cancel set=%t), want stopped with stable cleared cancellation state", captureStarted, captureCtx, captureCancel != nil)
+	}
+	if !fm.stopped.Load() {
+		t.Fatal("frame manager is not marked stopped after repeated Stop")
+	}
+	if clients := atomic.LoadInt64(&fm.clientCount); clients != 0 {
+		t.Fatalf("client count after repeated Stop = %d, want 0", clients)
+	}
+	fm.cleanupSendMu.Lock()
+	cleanupSenders, cleanupAccept := fm.cleanupSenders, fm.cleanupAccept
+	fm.cleanupSendMu.Unlock()
+	if cleanupSenders != 0 || cleanupAccept {
+		t.Fatalf("cleanup state after repeated Stop = (senders=%d, accepting=%t), want no senders and not accepting", cleanupSenders, cleanupAccept)
+	}
+
+	fm.startCapture()
+	if calls := cam.captureCalls.Load(); calls != callsAfterFirstStop {
+		t.Fatalf("camera capture calls after shutdown restart attempt = %d, want stable at %d", calls, callsAfterFirstStop)
+	}
 }
