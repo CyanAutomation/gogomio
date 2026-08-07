@@ -73,12 +73,13 @@ type RealCamera struct {
 	backendAttempted string
 
 	// test hooks
-	lookPath func(string) (string, error)
-	statFn   func(string) (os.FileInfo, error)
-	launchFn func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
-	runCmdFn func(*exec.Cmd) ([]byte, error)
-	waitFn   func(*exec.Cmd) error
-	logger   *log.Logger
+	lookPath       func(string) (string, error)
+	statFn         func(string) (os.FileInfo, error)
+	launchFn       func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
+	startCommandFn func(*exec.Cmd, string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
+	runCmdFn       func(*exec.Cmd) ([]byte, error)
+	waitFn         func(*exec.Cmd) error
+	logger         *log.Logger
 }
 
 // InitializationError describes why real camera startup failed.
@@ -123,6 +124,7 @@ func NewRealCamera() *RealCamera {
 	rc.lookPath = exec.LookPath
 	rc.statFn = os.Stat
 	rc.launchFn = rc.launchContinuousProducer
+	rc.startCommandFn = rc.startCommand
 	rc.runCmdFn = func(cmd *exec.Cmd) ([]byte, error) {
 		return cmd.CombinedOutput()
 	}
@@ -465,7 +467,7 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		log.Printf("✓ Selected camera backend binary: %s", BackendRpicam)
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := rc.buildRpiCamVidCommand()
-		return rc.startCommand(cmd, BackendRpicam)
+		return rc.startCommandFn(cmd, BackendRpicam)
 	}
 
 	if _, err := rc.lookPath(BackendLibcamera); err == nil {
@@ -473,7 +475,7 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 		log.Printf("✓ Selected camera backend binary: %s", BackendLibcamera)
 		log.Printf("  Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.width, rc.height, rc.fps, rc.jpegQuality)
 		cmd := rc.buildLibcameraVidCommand()
-		return rc.startCommand(cmd, BackendLibcamera)
+		return rc.startCommandFn(cmd, BackendLibcamera)
 	}
 
 	if _, err := rc.lookPath(BackendFFmpeg); err != nil {
@@ -505,7 +507,7 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 	log.Printf("  Using device: %s | Resolution: %dx%d | FPS: %d | Quality: %d%%", rc.devicePath, rc.width, rc.height, rc.fps, rc.jpegQuality)
 
 	cmd := rc.buildFFmpegCommand()
-	return rc.startCommand(cmd, BackendFFmpeg)
+	return rc.startCommandFn(cmd, BackendFFmpeg)
 }
 
 func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
