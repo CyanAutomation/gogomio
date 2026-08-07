@@ -68,41 +68,32 @@ func TestConnectionTrackerDecrementBelowZeroClamps(t *testing.T) {
 	}
 }
 
-// TestConnectionTrackerTryIncrementSuccess tests successful increment within limit
-func TestConnectionTrackerTryIncrementSuccess(t *testing.T) {
-	tracker := NewConnectionTracker()
-	maxConnections := 5
-
-	for i := 0; i < maxConnections; i++ {
-		ok := tracker.TryIncrement(maxConnections)
-		if !ok {
-			t.Errorf("TryIncrement failed at connection %d (max=%d)", i, maxConnections)
-		}
+func TestConnectionTrackerTryIncrementLimits(t *testing.T) {
+	tests := []struct {
+		name string
+		max  int
+	}{
+		{name: "zero", max: 0},
+		{name: "one", max: 1},
+		{name: "configured maximum", max: 5},
 	}
 
-	if tracker.Count() != maxConnections {
-		t.Errorf("count is %d, want %d", tracker.Count(), maxConnections)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := NewConnectionTracker()
 
-// TestConnectionTrackerTryIncrementFailure tests that increment fails at limit
-func TestConnectionTrackerTryIncrementFailure(t *testing.T) {
-	tracker := NewConnectionTracker()
-	maxConnections := 3
-
-	// Fill to limit
-	for i := 0; i < maxConnections; i++ {
-		tracker.TryIncrement(maxConnections)
-	}
-
-	// Try to exceed limit
-	ok := tracker.TryIncrement(maxConnections)
-	if ok {
-		t.Errorf("TryIncrement should fail at max connections, but succeeded")
-	}
-
-	if tracker.Count() != maxConnections {
-		t.Errorf("count is %d, want %d", tracker.Count(), maxConnections)
+			for admitted := 0; admitted < tt.max; admitted++ {
+				if !tracker.TryIncrement(tt.max) {
+					t.Fatalf("TryIncrement rejected connection %d below limit %d", admitted+1, tt.max)
+				}
+			}
+			if tracker.TryIncrement(tt.max) {
+				t.Errorf("TryIncrement admitted a connection at limit %d", tt.max)
+			}
+			if got := tracker.Count(); got != tt.max {
+				t.Errorf("final count is %d, want %d", got, tt.max)
+			}
+		})
 	}
 }
 
@@ -207,43 +198,5 @@ func TestConnectionTrackerConcurrentIncrementDecrement(t *testing.T) {
 	// Should end at 0 (all decremented)
 	if tracker.Count() != 0 {
 		t.Errorf("final count is %d, want 0", tracker.Count())
-	}
-}
-
-// TestConnectionTrackerMaxZero tests behavior with max connection of 0
-func TestConnectionTrackerMaxZero(t *testing.T) {
-	tracker := NewConnectionTracker()
-
-	// With max=0, all TryIncrement should fail
-	ok := tracker.TryIncrement(0)
-	if ok {
-		t.Errorf("TryIncrement with max=0 should fail")
-	}
-
-	if tracker.Count() != 0 {
-		t.Errorf("count is %d, want 0", tracker.Count())
-	}
-}
-
-// TestConnectionTrackerLargeNumbers tests with large connection numbers
-func TestConnectionTrackerLargeNumbers(t *testing.T) {
-	tracker := NewConnectionTracker()
-	maxConnections := 10000
-
-	// Increment to nearly max
-	for i := 0; i < maxConnections-1; i++ {
-		tracker.TryIncrement(maxConnections)
-	}
-
-	// Should have room for one more
-	ok := tracker.TryIncrement(maxConnections)
-	if !ok {
-		t.Errorf("TryIncrement should succeed for connection %d", maxConnections)
-	}
-
-	// Now should be full
-	ok = tracker.TryIncrement(maxConnections)
-	if ok {
-		t.Errorf("TryIncrement should fail at max")
 	}
 }
