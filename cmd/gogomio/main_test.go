@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -454,37 +453,16 @@ func TestConcurrentServerInitialization(t *testing.T) {
 	}
 }
 
-// TestSignalHandling_ContextCancellation tests graceful shutdown via context
-func TestSignalHandling_ContextCancellation(t *testing.T) {
-	// This test verifies signal handling pattern works correctly
-	// by testing the underlying mechanisms (channels and signal.Notify)
+// TestNewShutdownContext_SignalCancelsApplicationContext covers REQ-GRACEFUL-SHUTDOWN.
+func TestNewShutdownContext_SignalCancelsApplicationContext(t *testing.T) {
+	testSigChan := make(chan os.Signal)
+	appCtx, cancel := newShutdownContext(context.Background(), testSigChan)
+	t.Cleanup(cancel)
 
-	// Create a test signal channel
-	testSigChan := make(chan os.Signal, 1)
-
-	// Track if signal was received
-	signalReceived := atomic.Bool{}
-	processed := make(chan struct{})
-
-	// Simulate the signal handling pattern from main.go
-	go func() {
-		signal.Notify(testSigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-testSigChan
-		signalReceived.Store(true)
-		close(processed)
-	}()
-
-	// Send a signal
 	testSigChan <- syscall.SIGINT
+	<-appCtx.Done()
 
-	select {
-	case <-processed:
-	case <-time.After(300 * time.Millisecond):
-		t.Logf("timeout waiting for signal processing ack")
-		t.Fatalf("signal processing was not acknowledged")
-	}
-
-	if !signalReceived.Load() {
-		t.Fatalf("expected signal to be received")
+	if !errors.Is(appCtx.Err(), context.Canceled) {
+		t.Fatalf("expected application context to be cancelled, got %v", appCtx.Err())
 	}
 }
