@@ -182,11 +182,13 @@ func initializeApplication(cfg *config.Config, deps applicationDependencies) (*a
 
 func (app *application) cleanup() {
 	app.cleanupOnce.Do(func() {
-		_ = app.listener.Close()
+	app.cleanupOnce.Do(func() {
 		app.frameManager.Stop()
 		if err := app.camera.Stop(); err != nil {
 			log.Printf("Error stopping camera: %v", err)
 		}
+		_ = app.listener.Close()
+	})
 	})
 }
 
