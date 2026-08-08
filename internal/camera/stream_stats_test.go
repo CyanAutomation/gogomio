@@ -2,7 +2,6 @@ package camera
 
 import (
 	"math"
-	"sync"
 	"testing"
 	"time"
 )
@@ -93,114 +92,87 @@ func TestStreamStatsWindowSliding(t *testing.T) {
 	}
 }
 
-// TestStreamStatsThreadSafety tests concurrent RecordFrame calls and consistent snapshots.
-func TestStreamStatsThreadSafety(t *testing.T) {
+// TestStreamStatsSnapshotConsistency is a regression test for the requirement that
+// Snapshot return frame count, timestamp, and FPS from one atomic published state,
+// even when RecordFrame is concurrently publishing the next state.
+func TestStreamStatsSnapshotConsistency(t *testing.T) {
 	stats := NewStreamStats()
 
-	baseTime := time.Now().UnixNano()
-	numGoroutines := 10
-	framesPerGoroutine := 100
-	numReaders := 5
-	expectedCount := int64(numGoroutines * framesPerGoroutine)
+	const transitions int64 = 256
+	const frameInterval = int64(time.Second)
+	const baseTime = int64(1_000_000_000_000)
 
-	type snapshot struct {
-		frameCount int64
-		lastTime   *int64
-		fps        float64
-	}
-
-	start := make(chan struct{})
-	writersDone := make(chan struct{})
-	readerReady := make(chan struct{}, numReaders)
-	snapshots := make(chan []snapshot, numReaders)
-
-	var writerWG sync.WaitGroup
-
-	// Launch concurrent writers
-	for g := 0; g < numGoroutines; g++ {
-		writerWG.Add(1)
-		go func(id int) {
-			defer writerWG.Done()
-			<-start
-			for i := 0; i < framesPerGoroutine; i++ {
-				ts := baseTime + int64(id*framesPerGoroutine+i)*1_000_000
-				stats.RecordFrame(ts)
+	assertPublishedState := func(frameCount int64, lastTime *int64, fps float64) {
+		t.Helper()
+		if frameCount == 0 {
+			if lastTime != nil {
+				t.Errorf("snapshot with no frames has last frame time %d, want nil", *lastTime)
 			}
-		}(g)
-	}
-
-	// Readers start with the writers and keep taking snapshots until every record
-	// has completed. Each reader owns its result slice, so collecting the results
-	// does not add synchronization around Snapshot itself.
-	for r := 0; r < numReaders; r++ {
-		go func() {
-			readerReady <- struct{}{}
-			<-start
-
-			var results []snapshot
-			for {
-				frameCount, lastTime, fps := stats.Snapshot()
-				results = append(results, snapshot{frameCount, lastTime, fps})
-
-				select {
-				case <-writersDone:
-					snapshots <- results
-					return
-				default:
-				}
+			if fps != 0 {
+				t.Errorf("snapshot with no frames has FPS %v, want 0", fps)
 			}
-		}()
-	}
+			return
+		}
 
-	// Do not release the writers until all readers are waiting at the same start
-	// barrier. writersDone is the corresponding completion barrier.
-	for r := 0; r < numReaders; r++ {
-		<-readerReady
-	}
-	close(start)
-	writerWG.Wait()
-	close(writersDone)
+		wantTime := baseTime + (frameCount-1)*frameInterval
+		if lastTime == nil {
+			t.Errorf("snapshot with %d frames has nil last frame time", frameCount)
+		} else if *lastTime != wantTime {
+			t.Errorf("torn snapshot: count %d has last frame time %d, want %d", frameCount, *lastTime, wantTime)
+		}
 
-	for r := 0; r < numReaders; r++ {
-		var previousCount int64
-		for _, result := range <-snapshots {
-			if result.frameCount < previousCount {
-				t.Errorf("snapshot frame count decreased from %d to %d", previousCount, result.frameCount)
-			}
-			if result.frameCount > expectedCount {
-				t.Errorf("snapshot frame count is %d, exceeds %d completed records", result.frameCount, expectedCount)
-			}
-
-			if result.frameCount == 0 {
-				if result.lastTime != nil {
-					t.Errorf("snapshot with no frames has last frame time %d, want nil", *result.lastTime)
-				}
-				if result.fps != 0 {
-					t.Errorf("snapshot with no frames has FPS %v, want 0", result.fps)
-				}
-			} else {
-				if result.lastTime == nil {
-					t.Errorf("snapshot with %d frames has nil last frame time", result.frameCount)
-				} else if *result.lastTime < baseTime || *result.lastTime >= baseTime+expectedCount*1_000_000 {
-					t.Errorf("snapshot last frame time %d is outside the recorded range", *result.lastTime)
-				}
-				if result.frameCount == 1 && result.fps != 0 {
-					t.Errorf("snapshot with one frame has FPS %v, want 0", result.fps)
-				}
-				if result.frameCount > 1 && (math.IsNaN(result.fps) || math.IsInf(result.fps, 0) || result.fps <= 0) {
-					t.Errorf("snapshot with %d frames has invalid FPS %v", result.frameCount, result.fps)
-				}
-			}
-
-			previousCount = result.frameCount
+		wantFPS := 0.0
+		if frameCount > 1 {
+			wantFPS = 1
+		}
+		if fps != wantFPS {
+			t.Errorf("torn snapshot: count %d has FPS %v, want %v", frameCount, fps, wantFPS)
 		}
 	}
 
-	frameCount, _, _ := stats.Snapshot()
+	requested := make(chan int64)
+	attempting := make(chan int64)
+	published := make(chan int64)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for timestamp := range requested {
+			// This rendezvous releases the reader and writer at the boundary of
+			// RecordFrame, so the following Snapshot races with that publication.
+			attempting <- timestamp
+			stats.RecordFrame(timestamp)
+			published <- timestamp
+		}
+	}()
 
-	if frameCount != expectedCount {
-		t.Errorf("frame count is %d, want %d", frameCount, expectedCount)
+	assertPublishedState(stats.Snapshot())
+	for count := int64(1); count <= transitions; count++ {
+		timestamp := baseTime + (count-1)*frameInterval
+		requested <- timestamp
+		if got := <-attempting; got != timestamp {
+			t.Fatalf("writer attempting timestamp %d, want %d", got, timestamp)
+		}
+
+		// Depending on lock acquisition, this must be exactly the state before
+		// or after the transition; cross-field mixing identifies a torn read.
+		frameCount, lastTime, fps := stats.Snapshot()
+		if frameCount != count-1 && frameCount != count {
+			t.Errorf("snapshot frame count is %d during transition %d, want %d or %d", frameCount, count, count-1, count)
+		}
+		assertPublishedState(frameCount, lastTime, fps)
+
+		if got := <-published; got != timestamp {
+			t.Fatalf("writer published timestamp %d, want %d", got, timestamp)
+		}
+		frameCount, lastTime, fps = stats.Snapshot()
+		if frameCount != count {
+			t.Errorf("frame count after transition is %d, want %d", frameCount, count)
+		}
+		assertPublishedState(frameCount, lastTime, fps)
 	}
+
+	close(requested)
+	<-done
 }
 
 // TestStreamStatsFPSWithZeroTimeSpan tests FPS when frames arrive simultaneously
