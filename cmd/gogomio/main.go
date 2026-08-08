@@ -31,11 +31,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -45,6 +47,21 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/go-chi/chi/v5"
 )
+
+type application struct {
+	camera       camera.Camera
+	frameManager *api.FrameManager
+	router       chi.Router
+	listener     net.Listener
+	server       *http.Server
+	cleanupOnce  sync.Once
+}
+
+type applicationDependencies struct {
+	newRealCamera func() camera.Camera
+	newMockCamera func() camera.Camera
+	listen        func(network, address string) (net.Listener, error)
+}
 
 var (
 	Version   = "0.1.0-dev"
@@ -70,30 +87,18 @@ func startServer() {
 	log.Printf("🌊 Motion In Ocean - Go Edition v%s", Version)
 	log.Printf("Configuration: %s", cfg.String())
 
-	// Initialize and start camera
-	cam, backend, err := initializeCamera(
-		cfg,
-		func() camera.Camera { return camera.NewRealCamera() },
-		func() camera.Camera { return camera.NewMockCamera() },
-	)
+	app, backend, err := initializeApplication(cfg, applicationDependencies{
+		newRealCamera: func() camera.Camera { return camera.NewRealCamera() },
+		newMockCamera: func() camera.Camera { return camera.NewMockCamera() },
+		listen:        net.Listen,
+	})
 	if err != nil {
-		log.Fatalf("Failed to initialize camera: %v", err)
+		log.Fatalf("Failed to initialize application: %v", err)
 	}
-	defer func() {
-		if err := cam.Stop(); err != nil {
-			log.Printf("Error stopping camera: %v", err)
-		}
-	}()
+	defer app.cleanup()
 
 	log.Printf("Camera backend initialized: %s", backend)
 	log.Printf("Camera capture started: %dx%d @ %d FPS", cfg.Resolution[0], cfg.Resolution[1], cfg.FPS)
-
-	// Create HTTP router and register handlers
-	router := chi.NewRouter()
-	frameManager := api.NewFrameManager(cam, cfg)
-	defer frameManager.Stop()
-
-	api.RegisterHandlers(router, frameManager, cfg)
 
 	// Start pprof profiling server on separate port (only if explicitly enabled)
 	if os.Getenv("MIO_ENABLE_PPROF") == "true" {
@@ -111,15 +116,7 @@ func startServer() {
 	go logGoroutineStats()
 
 	// Setup HTTP server with security timeouts
-	addr := cfg.AddressString()
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           router,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
+	addr := app.listener.Addr().String()
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -132,7 +129,7 @@ func startServer() {
 	go func() {
 		<-shutdownCtx.Done()
 		log.Println("Shutdown signal received, stopping server...")
-		if err := server.Close(); err != nil {
+		if err := app.server.Close(); err != nil {
 			log.Printf("Error closing server: %v", err)
 		}
 	}()
@@ -143,11 +140,56 @@ func startServer() {
 	log.Printf("Snapshot: http://%s/snapshot.jpg", addr)
 	log.Printf("API: http://%s/api/config", addr)
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := app.server.Serve(app.listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server error: %v", err)
 	}
 
 	log.Println("Server stopped")
+}
+
+func initializeApplication(cfg *config.Config, deps applicationDependencies) (*application, string, error) {
+	cam, backend, err := initializeCamera(cfg, deps.newRealCamera, deps.newMockCamera)
+	if err != nil {
+		return nil, "", err
+	}
+
+	router := chi.NewRouter()
+	frameManager := api.NewFrameManager(cam, cfg)
+	api.RegisterHandlers(router, frameManager, cfg)
+
+	listener, err := deps.listen("tcp", cfg.AddressString())
+	if err != nil {
+		frameManager.Stop()
+		_ = cam.Stop()
+		return nil, "", fmt.Errorf("listen on %s: %w", cfg.AddressString(), err)
+	}
+
+	return &application{
+		camera:       cam,
+		frameManager: frameManager,
+		router:       router,
+		listener:     listener,
+		server: &http.Server{
+			Addr:              listener.Addr().String(),
+			Handler:           router,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      15 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+		},
+	}, backend, nil
+}
+
+func (app *application) cleanup() {
+	app.cleanupOnce.Do(func() {
+	app.cleanupOnce.Do(func() {
+		app.frameManager.Stop()
+		if err := app.camera.Stop(); err != nil {
+			log.Printf("Error stopping camera: %v", err)
+		}
+		_ = app.listener.Close()
+	})
+	})
 }
 
 func newShutdownContext(parent context.Context, signalSource <-chan os.Signal) (context.Context, context.CancelFunc) {

@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -25,6 +25,19 @@ type fakeCamera struct {
 	startCalls int
 	stopCalls  int
 	mu         sync.Mutex
+}
+
+type trackingListener struct {
+	net.Listener
+	closeCalls int
+	mu         sync.Mutex
+}
+
+func (l *trackingListener) Close() error {
+	l.mu.Lock()
+	l.closeCalls++
+	l.mu.Unlock()
+	return l.Listener.Close()
 }
 
 func (f *fakeCamera) Start(width, height, fps, jpegQuality int) error {
@@ -390,38 +403,93 @@ func (r *testResponseRecorder) WriteHeader(code int) {
 	r.statusCode = code
 }
 
-// TestConcurrentServerInitialization tests multiple cameras can initialize concurrently
+// TestConcurrentServerInitialization verifies that the production application
+// initializer does not share lifecycle state between concurrent applications.
 func TestConcurrentServerInitialization(t *testing.T) {
+	const applicationCount = 3
+
+	apps := make([]*application, applicationCount)
+	cameras := make([]*fakeCamera, applicationCount)
+	listeners := make([]*trackingListener, applicationCount)
+	errs := make(chan error, applicationCount)
+	start := make(chan struct{})
+	var ready sync.WaitGroup
 	var wg sync.WaitGroup
-	errCount := atomic.Int32{}
+	ready.Add(applicationCount)
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < applicationCount; i++ {
 		wg.Add(1)
-		go func() {
+		go func(index int) {
 			defer wg.Done()
+			ready.Done()
+			<-start
 
-			cfg := &config.Config{
-				Resolution:  [2]int{640, 640},
+			cam := &fakeCamera{}
+			cameras[index] = cam
+			app, _, err := initializeApplication(&config.Config{
+				Resolution:  [2]int{640, 480},
 				FPS:         24,
+				TargetFPS:   24,
 				JPEGQuality: 90,
-			}
-
-			mockCam := camera.NewMockCamera()
-			if err := mockCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-				errCount.Add(1)
+				MockCamera:  true,
+				BindHost:    "127.0.0.1",
+				Port:        0,
+			}, applicationDependencies{
+				newRealCamera: func() camera.Camera { return &fakeCamera{} },
+				newMockCamera: func() camera.Camera { return cam },
+				listen: func(network, address string) (net.Listener, error) {
+					listener, listenErr := net.Listen(network, address)
+					if listenErr != nil {
+						return nil, listenErr
+					}
+					tracked := &trackingListener{Listener: listener}
+					listeners[index] = tracked
+					return tracked, nil
+				},
+			})
+			if err != nil {
+				errs <- err
 				return
 			}
-			defer func() { _ = mockCam.Stop() }()
-
-			frameManager := api.NewFrameManager(mockCam, cfg)
-			frameManager.Stop()
-		}()
+			apps[index] = app
+		}(i)
 	}
 
+	ready.Wait()
+	close(start)
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent application initialization failed: %v", err)
+	}
 
-	if errCount.Load() > 0 {
-		t.Fatalf("concurrent initialization failed: %d errors", errCount.Load())
+	for i, app := range apps {
+		if app == nil {
+			t.Fatalf("application %d was not initialized", i)
+		}
+		if app.camera != cameras[i] || app.listener != listeners[i] {
+			t.Fatalf("application %d does not own its injected resources", i)
+		}
+		for j := 0; j < i; j++ {
+			if app.camera == apps[j].camera || app.frameManager == apps[j].frameManager ||
+				app.router == apps[j].router || app.listener == apps[j].listener {
+				t.Fatalf("applications %d and %d share initialization state", i, j)
+			}
+		}
+	}
+
+	apps[0].cleanup()
+	if cameras[0].stopCalls != 1 || listeners[0].closeCalls != 1 {
+		t.Fatal("first application cleanup did not close its camera and listener")
+	}
+	for i := 1; i < applicationCount; i++ {
+		if cameras[i].stopCalls != 0 || listeners[i].closeCalls != 0 {
+			t.Fatalf("cleaning application 0 affected application %d", i)
+		}
+		apps[i].cleanup()
+		if cameras[i].stopCalls != 1 || listeners[i].closeCalls != 1 {
+			t.Fatalf("application %d did not run its independent cleanup", i)
+		}
 	}
 }
 
