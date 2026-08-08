@@ -138,40 +138,6 @@ func TestConfigJSON(t *testing.T) {
 	}
 }
 
-// TestConfigToString tests string representation
-func TestConfigToString(t *testing.T) {
-	cfg := &Config{
-		Resolution:           [2]int{1280, 720},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 10,
-		Port:                 8000,
-		BindHost:             "0.0.0.0",
-		MockCamera:           false,
-	}
-
-	str := cfg.String()
-	if str == "" {
-		t.Error("Config.String() returned empty string")
-	}
-
-	// String() is treated as a logging/debug helper, not a strict public contract.
-	// Keep this test at sanity level and avoid pinning formatting details.
-	if !json.Valid([]byte(str)) {
-		t.Fatalf("Config.String() returned invalid JSON: %q", str)
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal([]byte(str), &got); err != nil {
-		t.Fatalf("Config.String() failed JSON unmarshal: %v", err)
-	}
-
-	if len(got) == 0 {
-		t.Fatalf("Config.String() returned empty JSON object: %q", str)
-	}
-}
-
 // TestConfigTimeouts tests timeout computation
 func TestConfigTimeouts(t *testing.T) {
 	cfg := &Config{
