@@ -29,13 +29,20 @@ type fakeCamera struct {
 
 type trackingListener struct {
 	net.Listener
-	closeCalls int
-	mu         sync.Mutex
+	camera                  *fakeCamera
+	closeCalls              int
+	closeAfterCameraStopped bool
+	mu                      sync.Mutex
 }
 
 func (l *trackingListener) Close() error {
+	l.camera.mu.Lock()
+	cameraStopped := l.camera.stopCalls > 0
+	l.camera.mu.Unlock()
+
 	l.mu.Lock()
 	l.closeCalls++
+	l.closeAfterCameraStopped = cameraStopped
 	l.mu.Unlock()
 	return l.Listener.Close()
 }
@@ -442,7 +449,7 @@ func TestConcurrentServerInitialization(t *testing.T) {
 					if listenErr != nil {
 						return nil, listenErr
 					}
-					tracked := &trackingListener{Listener: listener}
+					tracked := &trackingListener{Listener: listener, camera: cam}
 					listeners[index] = tracked
 					return tracked, nil
 				},
@@ -479,7 +486,7 @@ func TestConcurrentServerInitialization(t *testing.T) {
 	}
 
 	apps[0].cleanup()
-	if cameras[0].stopCalls != 1 || listeners[0].closeCalls != 1 {
+	if cameras[0].stopCalls != 1 || listeners[0].closeCalls != 1 || !listeners[0].closeAfterCameraStopped {
 		t.Fatal("first application cleanup did not close its camera and listener")
 	}
 	for i := 1; i < applicationCount; i++ {
@@ -487,7 +494,7 @@ func TestConcurrentServerInitialization(t *testing.T) {
 			t.Fatalf("cleaning application 0 affected application %d", i)
 		}
 		apps[i].cleanup()
-		if cameras[i].stopCalls != 1 || listeners[i].closeCalls != 1 {
+		if cameras[i].stopCalls != 1 || listeners[i].closeCalls != 1 || !listeners[i].closeAfterCameraStopped {
 			t.Fatalf("application %d did not run its independent cleanup", i)
 		}
 	}
