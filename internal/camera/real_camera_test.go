@@ -80,6 +80,17 @@ func TestRealCameraProcessLifecycle(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/null"
 	rc.captureWaitTimeout = 200 * time.Millisecond
+	rc.stopWaitTimeout = time.Second
+
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready before Start")
+	}
+
+	releaseBackend := make(chan struct{})
+	rc.waitFn = func(cmd *exec.Cmd) error {
+		<-releaseBackend
+		return cmd.Wait()
+	}
 
 	var startedCmd *exec.Cmd
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
@@ -114,7 +125,26 @@ func TestRealCameraProcessLifecycle(t *testing.T) {
 		t.Fatal("expected process to be started")
 	}
 
-	if err := rc.Stop(); err != nil {
+	stopDone := make(chan error, 1)
+	go func() {
+		stopDone <- rc.Stop()
+	}()
+
+	deadline := time.Now().Add(250 * time.Millisecond)
+	for rc.IsReady() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready while Stop is in progress")
+	}
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop() completed before the backend was released: %v", err)
+	default:
+	}
+
+	close(releaseBackend)
+	if err := <-stopDone; err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
 	if rc.IsReady() {
@@ -373,21 +403,6 @@ func TestExtractJPEGFrame(t *testing.T) {
 	}
 	if len(rem) != 1 || rem[0] != 0x33 {
 		t.Fatalf("unexpected remaining bytes: %v", rem)
-	}
-}
-
-func TestRealCameraIsReady(t *testing.T) {
-	rc := NewRealCamera()
-	if rc.IsReady() {
-		t.Error("camera should not be ready before Start")
-	}
-	rc.isReady.Store(true)
-	if !rc.IsReady() {
-		t.Error("camera should be ready after isReady set")
-	}
-	rc.isStopping.Store(true)
-	if rc.IsReady() {
-		t.Error("camera should not be ready when stopping")
 	}
 }
 
