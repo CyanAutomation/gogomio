@@ -26,6 +26,10 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 		rc.healthMonitor()
 		close(done)
 	}()
+	defer func() {
+		close(ticks)
+		<-done
+	}()
 
 	assertProgress := func(sequence uint64, tick time.Time) {
 		t.Helper()
@@ -53,7 +57,6 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 
 	rc.isStopping.Store(true)
 	ticks <- firstTick.Add(20 * time.Second)
-	<-done
 }
 
 type logWriterFunc func(string)
