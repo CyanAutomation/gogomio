@@ -1,8 +1,11 @@
 package camera
 
 import (
+	"bytes"
 	"fmt"
 	"hash/fnv"
+	"image"
+	"image/jpeg"
 	"sync"
 	"testing"
 	"time"
@@ -23,59 +26,59 @@ func TestMockCameraStart(t *testing.T) {
 	}
 }
 
-// TestMockCameraCaptureFrame tests capturing frames
+// TestMockCameraCaptureFrame verifies that captures are correctly sized JPEGs
+// and that advancing the frame sequence changes the generated image.
 func TestMockCameraCaptureFrame(t *testing.T) {
-	mc := NewMockCamera()
+	const (
+		width  = 64
+		height = 48
+		fps    = 20
+	)
+	frameInterval := time.Second / fps
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
 
-	err := mc.Start(640, 480, 24, 90)
+	err := mc.Start(width, height, fps, 90)
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
+	defer func() { _ = mc.Stop() }()
 
-	// Capture a frame
-	frame, err := mc.CaptureFrame()
-	if err != nil {
-		t.Fatalf("CaptureFrame failed: %v", err)
-	}
-
-	if len(frame) == 0 {
-		t.Error("captured frame is empty")
-	}
-
-	// Should have JPEG SOI marker
-	if len(frame) < 2 || frame[0] != 0xFF || frame[1] != 0xD8 {
-		t.Errorf("frame does not have JPEG SOI marker, got %02x %02x", frame[0], frame[1])
-	}
-}
-
-// TestMockCameraMultipleCaptures tests rapid frame capture
-func TestMockCameraMultipleCaptures(t *testing.T) {
-	mc := NewMockCamera()
-
-	err := mc.Start(640, 480, 30, 90)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	// Capture multiple frames
-	frames := make([][]byte, 10)
-	for i := 0; i < 10; i++ {
+	frames := make([][]byte, 2)
+	decoded := make([]image.Image, len(frames))
+	for i := range frames {
 		frame, err := mc.CaptureFrame()
 		if err != nil {
 			t.Fatalf("CaptureFrame %d failed: %v", i, err)
 		}
 		frames[i] = frame
 
-		if len(frames[i]) == 0 {
-			t.Errorf("frame %d is empty", i)
+		decoded[i], err = jpeg.Decode(bytes.NewReader(frame))
+		if err != nil {
+			t.Fatalf("decode frame %d as JPEG: %v", i, err)
+		}
+		if bounds := decoded[i].Bounds(); bounds.Dx() != width || bounds.Dy() != height {
+			t.Errorf("frame %d dimensions = %dx%d, want %dx%d", i, bounds.Dx(), bounds.Dy(), width, height)
 		}
 	}
 
-	// Should eventually get different frames (if updating)
-	// or at least consistent frames
-	for i, frame := range frames {
-		if len(frame) == 0 {
-			t.Errorf("frame %d is empty", i)
+	// Each synthetic frame advances its hue and counter decoration, making the
+	// decoded image observably different from the preceding frame.
+	if bytes.Equal(frames[0], frames[1]) {
+		t.Fatal("successive frame JPEGs are identical")
+	}
+	center := image.Pt(width/2, height/2)
+	if decoded[0].At(center.X, center.Y) == decoded[1].At(center.X, center.Y) {
+		t.Fatal("successive frames did not change the center pixel")
+	}
+
+	sleeps := clock.Sleeps()
+	if len(sleeps) != len(frames) {
+		t.Fatalf("sleep calls = %d, want %d", len(sleeps), len(frames))
+	}
+	for i, slept := range sleeps {
+		if slept != frameInterval {
+			t.Errorf("sleep %d = %v, want frame interval %v", i, slept, frameInterval)
 		}
 	}
 }
