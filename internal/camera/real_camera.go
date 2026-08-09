@@ -80,6 +80,7 @@ type RealCamera struct {
 	runCmdFn       func(*exec.Cmd) ([]byte, error)
 	waitFn         func(*exec.Cmd) error
 	logger         *log.Logger
+	healthTicks    <-chan time.Time
 }
 
 // InitializationError describes why real camera startup failed.
@@ -862,22 +863,31 @@ func encodeFrameToJPEG(img image.Image, quality int) ([]byte, error) {
 
 // healthMonitor runs in a background goroutine and periodically checks subprocess health.
 func (rc *RealCamera) healthMonitor() {
+	logger := rc.logger
+	if logger == nil {
+		logger = log.Default()
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("❌ PANIC in healthMonitor: %v", r)
+			logger.Printf("❌ PANIC in healthMonitor: %v", r)
 		}
-		log.Printf("🏥 Health monitor EXIT")
+		logger.Printf("🏥 Health monitor EXIT")
 	}()
 
-	log.Printf("🏥 Health monitor STARTED - checking every 10 seconds")
+	logger.Printf("🏥 Health monitor STARTED - checking every 10 seconds")
 
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	ticks := rc.healthTicks
+	if ticks == nil {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		ticks = ticker.C
+	}
 
 	var lastFrameTime time.Time
 	var lastFrameSeq uint64
 
-	for range ticker.C {
+	for tickTime := range ticks {
 		if rc.isStopping.Load() {
 			return
 		}
@@ -889,7 +899,7 @@ func (rc *RealCamera) healthMonitor() {
 
 		if proc != nil && proc.Process != nil {
 			// Process is still alive, good sign
-			log.Printf("🏥 Health check: process running (PID: %d)", proc.Process.Pid)
+			logger.Printf("🏥 Health check: process running (PID: %d)", proc.Process.Pid)
 		}
 
 		// Check for frame progress (detect stalled capture)
@@ -899,22 +909,22 @@ func (rc *RealCamera) healthMonitor() {
 		rc.frameMutex.Unlock()
 
 		if currentFrameSeq > lastFrameSeq {
-			lastFrameTime = time.Now()
+			lastFrameTime = tickTime
 			lastFrameSeq = currentFrameSeq
-			log.Printf("🏥 Health check: frames flowing normally (seq: %d)", currentFrameSeq)
+			logger.Printf("🏥 Health check: frames flowing normally (seq: %d)", currentFrameSeq)
 		} else {
 			if !lastFrameTime.IsZero() {
-				stalledDuration := time.Since(lastFrameTime)
+				stalledDuration := tickTime.Sub(lastFrameTime)
 				if stalledDuration > 30*time.Second {
-					log.Printf("⚠️  Health check: frame capture stalled for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
+					logger.Printf("⚠️  Health check: frame capture stalled for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
 				} else if stalledDuration > 10*time.Second {
-					log.Printf("ℹ️  Health check: no recent frames for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
+					logger.Printf("ℹ️  Health check: no recent frames for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
 				}
 			}
 		}
 
 		if readerErr != nil {
-			log.Printf("⚠️  Health check: reader error detected: %v", readerErr)
+			logger.Printf("⚠️  Health check: reader error detected: %v", readerErr)
 		}
 	}
 }
