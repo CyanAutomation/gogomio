@@ -2,61 +2,65 @@ package camera
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// TestHealthMonitorFrameProgressDetection tests that health monitor detects frame progress
-func TestHealthMonitorFrameProgressDetection(t *testing.T) {
-	// Create a simple mock for testing frame progress detection
-	// This simulates the health monitor logic without needing a real camera process
+// TestHealthMonitorReportsFrameProgress covers REQ-CAMERA-HEALTH-FRAME-PROGRESS:
+// every sequence advance must be reported as a healthy, flowing capture stream.
+func TestHealthMonitorReportsFrameProgress(t *testing.T) {
+	ticks := make(chan time.Time)
+	diagnostics := make(chan string, 4)
+	rc := NewRealCamera()
+	rc.healthTicks = ticks
+	rc.logger = log.New(logWriterFunc(func(message string) {
+		diagnostics <- message
+	}), "", 0)
 
-	type frameMonitor struct {
-		frameSeq uint64
-		mu       sync.RWMutex
-	}
-
-	monitor := &frameMonitor{}
-
-	// Simulate frame captures
+	done := make(chan struct{})
 	go func() {
-		for i := 0; i < 5; i++ {
-			time.Sleep(50 * time.Millisecond)
-			monitor.mu.Lock()
-			atomic.AddUint64(&monitor.frameSeq, 1)
-			monitor.mu.Unlock()
-		}
+		rc.healthMonitor()
+		close(done)
 	}()
 
-	// Monitor for frame progress
-	var lastSeq uint64
-	lastTime := time.Now()
-	stallDetected := false
+	assertProgress := func(sequence uint64, tick time.Time) {
+		t.Helper()
+		rc.frameMutex.Lock()
+		rc.frameSeq = sequence // The same counter advanced by the production frame reader.
+		rc.frameMutex.Unlock()
+		ticks <- tick
 
-	// Wait a bit for frames to be captured
-	time.Sleep(300 * time.Millisecond)
-
-	// Check frame progress
-	monitor.mu.RLock()
-	currentSeq := atomic.LoadUint64(&monitor.frameSeq)
-	monitor.mu.RUnlock()
-
-	if currentSeq == lastSeq {
-		stallDuration := time.Since(lastTime)
-		if stallDuration > 100*time.Millisecond {
-			stallDetected = true
+		want := fmt.Sprintf("🏥 Health check: frames flowing normally (seq: %d)\n", sequence)
+		for {
+			select {
+			case diagnostic := <-diagnostics:
+				if diagnostic == want {
+					return
+				}
+			case <-time.After(time.Second):
+				t.Fatalf("health monitor did not report frame progress: want %q", want)
+			}
 		}
 	}
 
-	if currentSeq == 0 {
-		t.Error("Expected frames to be captured, but frame count is 0")
-	}
+	firstTick := time.Date(2026, time.August, 9, 12, 0, 0, 0, time.UTC)
+	assertProgress(7, firstTick)
+	assertProgress(8, firstTick.Add(10*time.Second))
 
-	if stallDetected {
-		t.Error("False positive: stall detected when frames are being captured")
-	}
+	rc.isStopping.Store(true)
+	ticks <- firstTick.Add(20 * time.Second)
+	<-done
+}
+
+type logWriterFunc func(string)
+
+func (write logWriterFunc) Write(p []byte) (int, error) {
+	write(string(p))
+	return len(p), nil
 }
 
 // TestHealthMonitorStallDetection tests that health monitor detects frame stalls
