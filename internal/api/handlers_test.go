@@ -276,70 +276,53 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
-// TestReadyEndpoint tests the /ready endpoint
-func TestReadyEndpoint(t *testing.T) {
-	router, cam, _ := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
-
-	req, _ := http.NewRequest("GET", "/ready", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	// Should be 200 because camera is ready
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
+func TestReadyRoute(t *testing.T) {
+	tests := []struct {
+		name       string
+		ready      bool
+		wantStatus int
+		wantBody   map[string]string
+	}{
+		{
+			name:       "camera ready",
+			ready:      true,
+			wantStatus: http.StatusOK,
+			wantBody:   map[string]string{"status": "ready"},
+		},
+		{
+			name:       "camera not ready",
+			ready:      false,
+			wantStatus: http.StatusServiceUnavailable,
+			wantBody:   map[string]string{"status": "initializing"},
+		},
 	}
 
-	if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
-		t.Errorf("expected content type application/json, got %s", contentType)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			fm := NewFrameManager(&readinessCamera{ready: tt.ready}, cfg)
+			router := chi.NewRouter()
+			RegisterHandlers(router, fm, cfg)
 
-func TestHandleReadyNotReady(t *testing.T) {
-	fm := NewFrameManager(&readinessCamera{ready: false}, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
-	w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
 
-	handleReady(w, req, fm)
+			if w.Code != tt.wantStatus {
+				t.Errorf("expected status %d, got %d", tt.wantStatus, w.Code)
+			}
+			if contentType := w.Header().Get("Content-Type"); contentType != ContentTypeJSON {
+				t.Errorf("expected content type %s, got %s", ContentTypeJSON, contentType)
+			}
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected status %d, got %d", http.StatusServiceUnavailable, w.Code)
-	}
-
-	if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
-		t.Errorf("expected content type application/json, got %s", contentType)
-	}
-
-	var result map[string]string
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-		t.Fatalf("failed to parse JSON response: %v", err)
-	}
-	if result["status"] != "initializing" {
-		t.Errorf("expected status initializing, got %q", result["status"])
-	}
-}
-
-func TestHandleReadyReady(t *testing.T) {
-	fm := NewFrameManager(&readinessCamera{ready: true}, &config.Config{})
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
-	w := httptest.NewRecorder()
-
-	handleReady(w, req, fm)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
-	}
-
-	if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
-		t.Errorf("expected content type application/json, got %s", contentType)
-	}
-
-	var result map[string]string
-	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-		t.Fatalf("failed to parse JSON response: %v", err)
-	}
-	if result["status"] != "ready" {
-		t.Errorf("expected status ready, got %q", result["status"])
+			var result map[string]string
+			if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+				t.Fatalf("failed to parse JSON response: %v", err)
+			}
+			if len(result) != len(tt.wantBody) || result["status"] != tt.wantBody["status"] {
+				t.Errorf("expected response body %v, got %v", tt.wantBody, result)
+			}
+		})
 	}
 }
 
