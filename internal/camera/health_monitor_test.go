@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// TestHealthMonitorReportsFrameProgress covers REQ-CAMERA-HEALTH-FRAME-PROGRESS:
-// every sequence advance must be reported as a healthy, flowing capture stream.
-func TestHealthMonitorReportsFrameProgress(t *testing.T) {
+// TestHealthMonitorRunsProductionCheckOnTick covers REQ-CAMERA-HEALTH-FRAME-PROGRESS:
+// a delivered tick must run the production health check and report frame progress.
+func TestHealthMonitorRunsProductionCheckOnTick(t *testing.T) {
 	ticks := make(chan time.Time)
 	diagnostics := make(chan string, 4)
 	rc := NewRealCamera()
@@ -90,39 +90,6 @@ func TestHealthMonitorStallDetection(t *testing.T) {
 				t.Error("Stall duration should be > 10 seconds")
 			}
 		}
-	}
-}
-
-// TestHealthMonitorTickInterval tests that health monitor runs at expected interval
-func TestHealthMonitorTickInterval(t *testing.T) {
-	// Test that the health monitor ticker interval is reasonable
-	expectedInterval := 10 * time.Second
-
-	// Verify tick count over a period
-	ticker := time.NewTicker(expectedInterval)
-	defer ticker.Stop()
-
-	tickCount := 0
-	testDuration := 25 * time.Millisecond // Short duration for testing
-	timeout := time.After(testDuration)
-
-	for {
-		select {
-		case <-ticker.C:
-			tickCount++
-			if tickCount >= 3 {
-				goto done
-			}
-		case <-timeout:
-			// Timeout is expected in unit test
-			goto done
-		}
-	}
-
-done:
-	// In this short test, we won't get actual ticks, but this validates the ticker logic
-	if expectedInterval != 10*time.Second {
-		t.Error("Expected health monitor interval to be 10 seconds")
 	}
 }
 
