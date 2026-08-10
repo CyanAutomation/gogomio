@@ -25,6 +25,8 @@ type FrameBuffer struct {
 	lastFrameTime       time.Time
 	targetFrameInterval time.Duration
 	nowFn               func() time.Time
+	// waitHook is used by tests to observe the point immediately before blocking.
+	waitHook func()
 }
 
 // NewFrameBuffer creates a new FrameBuffer.
@@ -162,6 +164,9 @@ func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Du
 		}
 		notifyCh := fb.notifyCh
 		fb.mu.Unlock()
+		if fb.waitHook != nil {
+			fb.waitHook()
+		}
 
 		select {
 		case <-notifyCh:
