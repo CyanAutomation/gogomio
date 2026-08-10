@@ -26,6 +26,7 @@ const (
 	v4l2ProbeTimeout          = 3 * time.Second
 	jpegQualityMin            = 1
 	jpegQualityMax            = 100
+	healthCheckInterval       = 10 * time.Second
 )
 
 // ErrFirstFrameTimeout is returned when the camera fails to produce
@@ -875,11 +876,11 @@ func (rc *RealCamera) healthMonitor() {
 		logger.Printf("🏥 Health monitor EXIT")
 	}()
 
-	logger.Printf("🏥 Health monitor STARTED - checking every 10 seconds")
+	logger.Printf("🏥 Health monitor STARTED - checking every %v", healthCheckInterval)
 
 	ticks := rc.healthTicks
 	if ticks == nil {
-		ticker := time.NewTicker(10 * time.Second)
+		ticker := time.NewTicker(healthCheckInterval)
 		defer ticker.Stop()
 		ticks = ticker.C
 	}
