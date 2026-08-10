@@ -299,7 +299,8 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	initialSeq := fb.CurrentSequence()
 
 	waiting := make(chan struct{})
-	fb.waitHook = func() { close(waiting) }
+	var waitingOnce sync.Once
+	fb.waitHook = func() { waitingOnce.Do(func() { close(waiting) }) }
 
 	done := make(chan struct {
 		frame []byte
