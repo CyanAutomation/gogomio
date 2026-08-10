@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/CyanAutomation/gogomio/internal/config"
@@ -76,10 +75,12 @@ func BenchmarkStreamFixedFrames(b *testing.B) {
 	const framesPerStream = 8
 
 	frame := bytes.Repeat([]byte{0xFF, 0xD8, 0xFF, 0xD9}, 16*1024/4)
-	frameBytes := len(mjpegBoundaryBytes) + len(mjpegContentTypeBytes) +
-		len(mjpegContentLengthBytes) + len(strconv.Itoa(len(frame))) +
-		len(mjpegHeaderEndBytes) + len(frame) + len(mjpegTrailerBytes)
-	streamBytes := int64(framesPerStream * frameBytes)
+	encodedFrame := httptest.NewRecorder()
+	contentLengthScratch := make([]byte, 0, 20)
+	if err := writeMultipartFrame(encodedFrame, &contentLengthScratch, frame); err != nil {
+		b.Fatal(err)
+	}
+	streamBytes := int64(framesPerStream * encodedFrame.Body.Len())
 
 	cfg := &config.Config{MaxStreamConnections: 1}
 	fm := NewFrameManager(newStableFrameCamera(frame), cfg)
