@@ -5,7 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
+
+	"github.com/CyanAutomation/gogomio/internal/config"
+	"github.com/go-chi/chi/v5"
 )
 
 type discardResponseWriter struct{}
@@ -63,6 +68,40 @@ func BenchmarkWriteMultipartFrameLegacy(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if err := writeMultipartFrameLegacy(writer, frame); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkStreamFixedFrames(b *testing.B) {
+	const framesPerStream = 8
+
+	frame := bytes.Repeat([]byte{0xFF, 0xD8, 0xFF, 0xD9}, 16*1024/4)
+	frameBytes := len(mjpegBoundaryBytes) + len(mjpegContentTypeBytes) +
+		len(mjpegContentLengthBytes) + len(strconv.Itoa(len(frame))) +
+		len(mjpegHeaderEndBytes) + len(frame) + len(mjpegTrailerBytes)
+	streamBytes := int64(framesPerStream * frameBytes)
+
+	cfg := &config.Config{MaxStreamConnections: 1}
+	fm := NewFrameManager(newStableFrameCamera(frame), cfg)
+	b.Cleanup(func() { fm.Stop() })
+
+	router := chi.NewRouter()
+	RegisterHandlers(router, fm, cfg)
+
+	b.SetBytes(streamBytes)
+	b.ReportMetric(framesPerStream, "frames/op")
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// The byte limit admits exactly framesPerStream complete frames. The next
+		// multipart boundary returns io.EOF, ending the handler deterministically.
+		writer := newStreamCapturingWriter(streamBytes)
+		req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+		router.ServeHTTP(writer, req)
+
+		if got := writer.GetBytesWritten(); got != streamBytes {
+			b.Fatalf("delivered %d bytes, want %d (%d complete frames)", got, streamBytes, framesPerStream)
 		}
 	}
 }
