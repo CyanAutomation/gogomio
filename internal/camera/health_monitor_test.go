@@ -66,31 +66,47 @@ func (write logWriterFunc) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// TestHealthMonitorStallDetection tests that health monitor detects frame stalls
+// TestHealthMonitorStallDetection verifies that RealCamera's health monitor
+// reports increasingly severe diagnostics while the frame sequence is stalled.
 func TestHealthMonitorStallDetection(t *testing.T) {
-	// Test stall detection logic
-	lastSeq := uint64(5)
-	lastTime := time.Now().Add(-15 * time.Second)
+	ticks := make(chan time.Time)
+	diagnostics := make(chan string, 4)
+	rc := NewRealCamera()
+	rc.healthTicks = ticks
+	rc.logger = log.New(logWriterFunc(func(message string) {
+		diagnostics <- message
+	}), "", 0)
+	rc.frameSeq = 5
 
-	// Simulate no frame progress for 15 seconds
-	currentSeq := uint64(5)
+	done := make(chan struct{})
+	go func() {
+		rc.healthMonitor()
+		close(done)
+	}()
+	defer func() {
+		close(ticks)
+		<-done
+	}()
 
-	// Check for stall
-	if currentSeq == lastSeq {
-		stallDuration := time.Since(lastTime)
-
-		if stallDuration > 30*time.Second {
-			// Should log as error
-			if stallDuration <= 30*time.Second {
-				t.Error("Stall duration should be > 30 seconds")
-			}
-		} else if stallDuration > 10*time.Second {
-			// Should log as warning
-			if stallDuration <= 10*time.Second {
-				t.Error("Stall duration should be > 10 seconds")
+	assertDiagnostic := func(tick time.Time, want string) {
+		t.Helper()
+		ticks <- tick
+		for {
+			select {
+			case diagnostic := <-diagnostics:
+				if diagnostic == want {
+					return
+				}
+			case <-time.After(time.Second):
+				t.Fatalf("health monitor did not report stall: want %q", want)
 			}
 		}
 	}
+
+	firstTick := time.Date(2026, time.August, 9, 12, 0, 0, 0, time.UTC)
+	assertDiagnostic(firstTick, "🏥 Health check: frames flowing normally (seq: 5)\n")
+	assertDiagnostic(firstTick.Add(11*time.Second), "ℹ️  Health check: no recent frames for 11s (seq: 5)\n")
+	assertDiagnostic(firstTick.Add(31*time.Second), "⚠️  Health check: frame capture stalled for 31s (seq: 5)\n")
 }
 
 // TestHealthMonitorConcurrentFrameUpdates tests concurrent frame sequence updates
