@@ -6,18 +6,13 @@ import (
 	"testing"
 )
 
-// TestConnectionTrackerInitialization tests that tracker starts at zero
-func TestConnectionTrackerInitialization(t *testing.T) {
+// TestConnectionTrackerIncrement tests the tracker lifecycle.
+func TestConnectionTrackerIncrement(t *testing.T) {
 	tracker := NewConnectionTracker()
 
 	if tracker.Count() != 0 {
 		t.Errorf("initial count is %d, want 0", tracker.Count())
 	}
-}
-
-// TestConnectionTrackerIncrement tests incrementing connections
-func TestConnectionTrackerIncrement(t *testing.T) {
-	tracker := NewConnectionTracker()
 
 	tracker.Increment()
 	if tracker.Count() != 1 {
@@ -28,16 +23,8 @@ func TestConnectionTrackerIncrement(t *testing.T) {
 	if tracker.Count() != 2 {
 		t.Errorf("count is %d, want 2", tracker.Count())
 	}
-}
 
-// TestConnectionTrackerDecrement tests decrementing connections
-func TestConnectionTrackerDecrement(t *testing.T) {
-	tracker := NewConnectionTracker()
-
-	tracker.Increment()
-	tracker.Increment()
 	tracker.Decrement()
-
 	if tracker.Count() != 1 {
 		t.Errorf("count is %d, want 1", tracker.Count())
 	}
