@@ -6,23 +6,6 @@ import (
 	"time"
 )
 
-// TestStreamStatsInitialization tests that stats start at zero
-func TestStreamStatsInitialization(t *testing.T) {
-	stats := NewStreamStats()
-
-	frameCount, lastTime, fps := stats.Snapshot()
-
-	if frameCount != 0 {
-		t.Errorf("initial frame count is %d, want 0", frameCount)
-	}
-	if lastTime != nil {
-		t.Errorf("initial last frame time is %v, want nil", lastTime)
-	}
-	if fps != 0 {
-		t.Errorf("initial FPS is %v, want 0", fps)
-	}
-}
-
 // TestStreamStatsRecordFrame tests frame recording
 func TestStreamStatsRecordFrame(t *testing.T) {
 	stats := NewStreamStats()
@@ -130,6 +113,17 @@ func TestStreamStatsSnapshotConsistency(t *testing.T) {
 		}
 	}
 
+	frameCount, lastTime, fps := stats.Snapshot()
+	if frameCount != 0 {
+		t.Errorf("initial frame count is %d, want 0", frameCount)
+	}
+	if lastTime != nil {
+		t.Errorf("initial last frame time is %v, want nil", lastTime)
+	}
+	if fps != 0 {
+		t.Errorf("initial FPS is %v, want 0", fps)
+	}
+
 	requested := make(chan int64)
 	attempting := make(chan int64)
 	published := make(chan int64)
@@ -145,7 +139,6 @@ func TestStreamStatsSnapshotConsistency(t *testing.T) {
 		}
 	}()
 
-	assertPublishedState(stats.Snapshot())
 	for count := int64(1); count <= transitions; count++ {
 		timestamp := baseTime + (count-1)*frameInterval
 		requested <- timestamp
