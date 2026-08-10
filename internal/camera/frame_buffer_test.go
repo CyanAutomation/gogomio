@@ -32,34 +32,6 @@ func TestFrameBufferWrite(t *testing.T) {
 	}
 }
 
-// TestFrameBufferConditionSignaling tests waiter notification on writes.
-func TestFrameBufferConditionSignaling(t *testing.T) {
-	stats := NewStreamStats()
-	fb := NewFrameBuffer(stats, 0)
-
-	testFrame := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-	received := make(chan []byte, 1)
-
-	go func() {
-		frame, _ := fb.WaitFrame(2*time.Second, 0)
-		received <- frame
-	}()
-
-	time.Sleep(100 * time.Millisecond)
-
-	_, _ = fb.Write(testFrame)
-
-	// Should receive frame within timeout
-	select {
-	case frame := <-received:
-		if !bytes.Equal(frame, testFrame) {
-			t.Errorf("frame mismatch: got %v, want %v", frame, testFrame)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for frame")
-	}
-}
-
 // TestFrameBufferFPSThrottling tests FPS throttling when target_fps > 0
 func TestFrameBufferFPSThrottling(t *testing.T) {
 	stats := NewStreamStats()
@@ -315,40 +287,53 @@ func TestFrameBufferConcurrentWrites(t *testing.T) {
 	}
 }
 
-// TestFrameBufferWaitFrameSuccess tests WaitFrame returns frame when available
+// TestFrameBufferWaitFrameSuccess tests that a waiting reader is notified by a write.
 func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 0)
-	testFrame := []byte{1, 2, 3, 4, 5}
+	initialFrame := []byte{1, 2, 3}
+	testFrame := []byte{4, 5, 6}
+	if _, err := fb.Write(initialFrame); err != nil {
+		t.Fatalf("initial Write returned error: %v", err)
+	}
+	initialSeq := fb.CurrentSequence()
+
+	waiting := make(chan struct{})
+	fb.waitHook = func() { close(waiting) }
 
 	done := make(chan struct {
 		frame []byte
 		seq   uint64
 	})
 	go func() {
-		frame, seq := fb.WaitFrame(2*time.Second, 0)
+		frame, seq := fb.WaitFrame(time.Second, initialSeq)
 		done <- struct {
 			frame []byte
 			seq   uint64
 		}{frame: frame, seq: seq}
 	}()
 
-	// Give goroutine time to start waiting
-	time.Sleep(50 * time.Millisecond)
-
-	// Write frame
-	_, _ = fb.Write(testFrame)
+	writeDone := make(chan error, 1)
+	go func() {
+		<-waiting
+		_, err := fb.Write(testFrame)
+		writeDone <- err
+	}()
 
 	select {
 	case result := <-done:
 		if !bytes.Equal(result.frame, testFrame) {
 			t.Errorf("WaitFrame got %v, want %v", result.frame, testFrame)
 		}
-		if result.seq == 0 {
-			t.Error("WaitFrame returned zero sequence after write")
+		if wantSeq := initialSeq + 1; result.seq != wantSeq {
+			t.Errorf("WaitFrame returned sequence %d, want %d", result.seq, wantSeq)
 		}
-	case <-time.After(3 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for frame")
+	}
+
+	if err := <-writeDone; err != nil {
+		t.Fatalf("Write returned error: %v", err)
 	}
 }
 
