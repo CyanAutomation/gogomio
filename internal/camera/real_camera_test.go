@@ -406,7 +406,7 @@ func TestExtractJPEGFrame(t *testing.T) {
 	}
 }
 
-func TestRealCameraEncodeFrame(t *testing.T) {
+func TestRealCameraEncodesDecodableJPEGWithInputDimensions(t *testing.T) {
 	img := createTestImage(10, 10)
 	jpegData, err := encodeFrameToJPEG(img, 80)
 	if err != nil {
@@ -417,6 +417,14 @@ func TestRealCameraEncodeFrame(t *testing.T) {
 	}
 	if len(jpegData) >= 2 && (jpegData[0] != 0xFF || jpegData[1] != 0xD8) {
 		t.Error("encoded data doesn't start with JPEG SOI marker")
+	}
+
+	decoded, err := jpeg.Decode(bytes.NewReader(jpegData))
+	if err != nil {
+		t.Fatalf("jpeg.Decode failed: %v", err)
+	}
+	if got, want := decoded.Bounds().Size(), img.Bounds().Size(); got != want {
+		t.Errorf("decoded image dimensions = %v, want %v", got, want)
 	}
 }
 
