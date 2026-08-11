@@ -173,6 +173,7 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 		close(done)
 	}()
 	defer func() {
+		rc.isStopping.Store(true)
 		close(ticks)
 		<-done
 	}()
@@ -183,7 +184,6 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 		select {
 		case diagnostic := <-diagnostics:
 			if diagnostic == want {
-				rc.isStopping.Store(true)
 				return
 			}
 		case <-time.After(time.Second):
