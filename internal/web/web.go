@@ -10,7 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-//go:embed *.html
+//go:embed *.html *.js
 var webFS embed.FS
 
 //go:embed mio
@@ -37,6 +37,17 @@ func RegisterStaticFiles(r *chi.Mux) {
 			// Client likely disconnected
 			_ = err
 		}
+	})
+
+	r.HandleFunc("/static/aspect-ratio.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		data, err := webFS.ReadFile("aspect-ratio.js")
+		if err != nil {
+			http.Error(w, "Failed to load UI script", http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(data)
 	})
 
 	// Serve MIO mascot images at /static/mio/
