@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -73,6 +74,62 @@ func TestRealCameraStartNoDevice(t *testing.T) {
 	err := rc.Start(640, 480, 24, 80)
 	if err == nil {
 		t.Error("Start should return error for non-existent device")
+	}
+}
+
+func TestRealCameraConcurrentStartLaunchesOnce(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.stopWaitTimeout = time.Second
+
+	launchStarted := make(chan struct{})
+	releaseLaunch := make(chan struct{})
+	var launchCalls atomic.Int32
+	var launched *exec.Cmd
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		launchCalls.Add(1)
+		close(launchStarted)
+		<-releaseLaunch
+
+		stdoutR, stdoutW := io.Pipe()
+		stderrR, stderrW := io.Pipe()
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		launched = cmd
+		go func() {
+			defer func() { _ = stdoutW.Close() }()
+			jpegData, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
+			_, _ = stdoutW.Write(jpegData)
+		}()
+		go func() { _ = stderrW.Close() }()
+		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	}
+
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- rc.Start(640, 480, 24, 80) }()
+	<-launchStarted
+
+	if err := rc.Start(640, 480, 24, 80); !errors.Is(err, ErrCameraAlreadyStarted) {
+		t.Fatalf("second Start() error = %v, want %v", err, ErrCameraAlreadyStarted)
+	}
+	if got := launchCalls.Load(); got != 1 {
+		t.Fatalf("launchFn call count = %d, want 1", got)
+	}
+
+	close(releaseLaunch)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Start() error = %v", err)
+	}
+	if err := rc.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if launched == nil {
+		t.Fatal("launchFn did not launch a process")
+	}
+	if err := launched.Process.Signal(syscall.Signal(0)); err == nil {
+		t.Fatal("sole camera process is still running after Stop")
 	}
 }
 
