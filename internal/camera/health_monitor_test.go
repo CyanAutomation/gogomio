@@ -1,8 +1,8 @@
 package camera
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -144,25 +144,51 @@ func TestHealthMonitorConcurrentFrameUpdates(t *testing.T) {
 	}
 }
 
-// TestHealthMonitorErrorDetection tests that health monitor detects reader errors
-func TestHealthMonitorErrorDetection(t *testing.T) {
-	// Test error tracking logic
-	errorCount := 0
-	lastError := error(nil)
+// TestHealthMonitorReportsReaderError verifies that an error published by the
+// production MJPEG reader is reported by RealCamera's health monitor.
+func TestHealthMonitorReportsReaderError(t *testing.T) {
+	ticks := make(chan time.Time)
+	diagnostics := make(chan string, 4)
+	rc := NewRealCamera()
+	rc.healthTicks = ticks
+	rc.logger = log.New(logWriterFunc(func(message string) {
+		diagnostics <- message
+	}), "", 0)
+	rc.readerDone = make(chan struct{})
+	rc.frameUpdateCh = make(chan struct{})
 
-	// Simulate error occurring
-	err := context.Canceled
-	if err != nil {
-		errorCount++
-		lastError = err
+	stdout, backend := io.Pipe()
+	rc.procStdout = stdout
+	go rc.readMJPEGStream()
+
+	readerErr := fmt.Errorf("camera stream disconnected")
+	if err := backend.CloseWithError(readerErr); err != nil {
+		t.Fatalf("close camera stream: %v", err)
 	}
+	<-rc.readerDone
 
-	if errorCount != 1 {
-		t.Errorf("Expected error count 1, got %d", errorCount)
-	}
+	done := make(chan struct{})
+	go func() {
+		rc.healthMonitor()
+		close(done)
+	}()
+	defer func() {
+		close(ticks)
+		<-done
+	}()
 
-	if lastError == nil {
-		t.Error("Expected last error to be set")
+	ticks <- time.Date(2026, time.August, 9, 12, 0, 0, 0, time.UTC)
+	want := "⚠️  Health check: reader error detected: camera stream disconnected\n"
+	for {
+		select {
+		case diagnostic := <-diagnostics:
+			if diagnostic == want {
+				rc.isStopping.Store(true)
+				return
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("health monitor did not report reader error: want %q", want)
+		}
 	}
 }
 
