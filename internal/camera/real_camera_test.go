@@ -76,6 +76,98 @@ func TestRealCameraStartNoDevice(t *testing.T) {
 	}
 }
 
+func TestRealCameraStopCancelsStartBlockedInStat(t *testing.T) {
+	rc := NewRealCamera()
+	statStarted := make(chan struct{})
+	releaseStat := make(chan struct{})
+	rc.statFn = func(string) (os.FileInfo, error) {
+		close(statStarted)
+		<-releaseStat
+		return nil, nil
+	}
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		t.Fatal("launchFn called after startup was canceled")
+		return nil, nil, nil, nil, nil
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- rc.Start(640, 480, 24, 80) }()
+	<-statStarted
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- rc.Stop() }()
+	waitForLifecycleState(t, rc, lifecycleStopping)
+
+	close(releaseStat)
+	if err := <-startDone; !errors.Is(err, errStartupCanceled) {
+		t.Fatalf("Start() error = %v, want startup cancellation", err)
+	}
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready after canceled startup")
+	}
+}
+
+func TestRealCameraStopCleansProcessFromBlockedLaunch(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	launchStarted := make(chan struct{})
+	releaseLaunch := make(chan struct{})
+	var launched *exec.Cmd
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		close(launchStarted)
+		<-releaseLaunch
+		cmd := exec.Command("bash", "-c", "sleep 30")
+		if err := cmd.Start(); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		launched = cmd
+		return cmd, nopWriteCloser{}, io.NopCloser(strings.NewReader("")), io.NopCloser(strings.NewReader("")), nil
+	}
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- rc.Start(640, 480, 24, 80) }()
+	<-launchStarted
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- rc.Stop() }()
+	waitForLifecycleState(t, rc, lifecycleStopping)
+	close(releaseLaunch)
+
+	if err := <-startDone; !errors.Is(err, errStartupCanceled) {
+		t.Fatalf("Start() error = %v, want startup cancellation", err)
+	}
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready after canceled startup")
+	}
+	if launched == nil {
+		t.Fatal("launchFn did not launch a process")
+	}
+	if err := launched.Process.Signal(syscall.Signal(0)); err == nil {
+		t.Fatal("process from canceled startup is still running")
+	}
+}
+
+func waitForLifecycleState(t *testing.T, rc *RealCamera, want lifecycleState) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		rc.captureMutex.Lock()
+		got := rc.lifecycle
+		rc.captureMutex.Unlock()
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("lifecycle state = %d, want %d", got, want)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestRealCameraProcessLifecycle(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/null"
