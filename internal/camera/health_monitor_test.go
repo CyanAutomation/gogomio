@@ -27,16 +27,19 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 		close(done)
 	}()
 
-	frameUpdates := make(chan uint64)
-	framePublished := make(chan struct{})
+	type frameUpdate struct {
+		sequence  uint64
+		published chan struct{}
+	}
+	frameUpdates := make(chan frameUpdate)
 	publisherDone := make(chan struct{})
 	go func() {
 		defer close(publisherDone)
-		for sequence := range frameUpdates {
+		for update := range frameUpdates {
 			rc.frameMutex.Lock()
-			rc.frameSeq = sequence // The same counter advanced by the production frame reader.
+			rc.frameSeq = update.sequence // The same counter advanced by the production frame reader.
 			rc.frameMutex.Unlock()
-			framePublished <- struct{}{}
+			close(update.published)
 		}
 	}()
 
@@ -49,11 +52,11 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 
 	assertProgress := func(sequence uint64, tick time.Time) {
 		t.Helper()
-		frameUpdates <- sequence
-		<-framePublished
-		// Ensure health monitor can observe the updated frameSeq before tick
-		rc.frameMutex.Lock()
-		rc.frameMutex.Unlock()
+		published := make(chan struct{})
+		frameUpdates <- frameUpdate{sequence: sequence, published: published}
+		<-published
+		// Closing published happens after the frameSeq write. Sending the tick
+		// afterward makes the monitor's frameSeq read occur after that write.
 		ticks <- tick
 
 		want := fmt.Sprintf("🏥 Health check: frames flowing normally (seq: %d)\n", sequence)
