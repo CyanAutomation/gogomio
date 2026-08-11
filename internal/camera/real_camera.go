@@ -33,6 +33,17 @@ const (
 // the first frame within the expected timeout period.
 var ErrFirstFrameTimeout = errors.New("camera first frame timeout")
 
+var errStartupCanceled = errors.New("camera startup canceled")
+
+type lifecycleState uint8
+
+const (
+	lifecycleStopped lifecycleState = iota
+	lifecycleStarting
+	lifecycleRunning
+	lifecycleStopping
+)
+
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
 // process that emits an MJPEG byte stream.
 type RealCamera struct {
@@ -49,6 +60,9 @@ type RealCamera struct {
 	isStopping atomic.Bool
 
 	captureMutex sync.Mutex
+	lifecycle    lifecycleState
+	startupID    uint64
+	startupDone  chan struct{}
 
 	// Process management
 	proc       *exec.Cmd
@@ -160,10 +174,15 @@ func (rc *RealCamera) SetSensorMode(width, height int) {
 // Start initializes camera configuration and starts the long-lived capture process.
 func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Lock()
-	if rc.isReady.Load() {
+	if rc.lifecycle != lifecycleStopped {
 		rc.captureMutex.Unlock()
-		return fmt.Errorf("camera already started")
+		return fmt.Errorf("camera is not stopped")
 	}
+	rc.lifecycle = lifecycleStarting
+	rc.startupID++
+	startupID := rc.startupID
+	rc.startupDone = make(chan struct{})
+	rc.isStopping.Store(false)
 
 	rc.width = width
 	rc.height = height
@@ -174,6 +193,17 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.jpegQuality = jpegQuality
 	rc.backendAttempted = "preflight"
 	rc.captureMutex.Unlock()
+	failStartup := func() {
+		rc.captureMutex.Lock()
+		if rc.startupID == startupID && rc.startupDone != nil {
+			close(rc.startupDone)
+			rc.startupDone = nil
+			if rc.lifecycle == lifecycleStarting {
+				rc.lifecycle = lifecycleStopped
+			}
+		}
+		rc.captureMutex.Unlock()
+	}
 
 	// Check if camera device exists
 	if _, err := rc.statFn(rc.devicePath); err != nil {
@@ -182,6 +212,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 		log.Printf("   - CSI camera is physically connected")
 		log.Printf("   - Camera is enabled in raspi-config")
 		log.Printf("   - Device permissions allow access to %s", rc.devicePath)
+		failStartup()
 		return &InitializationError{
 			Backend: rc.getBackendAttempted(),
 			Reason:  fmt.Sprintf("camera device not found at %s", rc.devicePath),
@@ -189,6 +220,10 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 		}
 	}
 	log.Printf("✓ Camera device found at %s", rc.devicePath)
+	if !rc.startupCurrent(startupID) {
+		failStartup()
+		return errStartupCanceled
+	}
 
 	rc.frameMutex.Lock()
 	rc.latestFrame = nil
@@ -202,6 +237,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	cmd, stdin, stdout, stderr, err := rc.launchFn()
 	if err != nil {
 		log.Printf("❌ Failed to launch camera backend: %v", err)
+		failStartup()
 		return &InitializationError{
 			Backend: rc.getBackendAttempted(),
 			Reason:  "failed to launch camera backend",
@@ -210,6 +246,12 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	}
 
 	rc.captureMutex.Lock()
+	if rc.lifecycle != lifecycleStarting || rc.startupID != startupID {
+		rc.captureMutex.Unlock()
+		closeLaunchedProcess(cmd, stdin, stdout, stderr, rc.waitFn)
+		failStartup()
+		return errStartupCanceled
+	}
 	rc.proc = cmd
 	rc.procStdin = stdin
 	rc.procStdout = stdout
@@ -218,7 +260,6 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.stderrDone = make(chan struct{})
 	rc.procWaitDone = make(chan error, 1)
 
-	rc.isStopping.Store(false)
 	rc.isReady.Store(false)
 	rc.captureMutex.Unlock()
 
@@ -231,13 +272,61 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	go rc.healthMonitor()
 
 	if err := rc.waitForFirstFrame(); err != nil {
-		_ = rc.Stop()
+		rc.captureMutex.Lock()
+		canceled := rc.lifecycle == lifecycleStopping || rc.startupID != startupID
+		if !canceled {
+			// Hand the installed process to Stop without making Stop wait for
+			// this startup attempt to finish.
+			rc.lifecycle = lifecycleRunning
+			close(rc.startupDone)
+			rc.startupDone = nil
+		}
+		rc.captureMutex.Unlock()
+		if !canceled {
+			_ = rc.Stop()
+		}
+		failStartup()
+		if canceled {
+			return errStartupCanceled
+		}
 		return err
 	}
 
+	rc.captureMutex.Lock()
+	if rc.lifecycle != lifecycleStarting || rc.startupID != startupID {
+		rc.captureMutex.Unlock()
+		failStartup()
+		return errStartupCanceled
+	}
+	rc.lifecycle = lifecycleRunning
 	rc.isReady.Store(true)
+	close(rc.startupDone)
+	rc.startupDone = nil
+	rc.captureMutex.Unlock()
 
 	return nil
+}
+
+func (rc *RealCamera) startupCurrent(id uint64) bool {
+	rc.captureMutex.Lock()
+	defer rc.captureMutex.Unlock()
+	return rc.lifecycle == lifecycleStarting && rc.startupID == id
+}
+
+func closeLaunchedProcess(cmd *exec.Cmd, stdin io.WriteCloser, stdout, stderr io.ReadCloser, waitFn func(*exec.Cmd) error) {
+	if stdin != nil {
+		_ = stdin.Close()
+	}
+	if stdout != nil {
+		_ = stdout.Close()
+	}
+	if stderr != nil {
+		_ = stderr.Close()
+	}
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+		_ = waitFn(cmd)
+	}
 }
 
 func (rc *RealCamera) waitForFirstFrame() error {
@@ -390,8 +479,15 @@ func (rc *RealCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, erro
 // Stop stops the camera process and reader goroutines.
 func (rc *RealCamera) Stop() error {
 	log.Printf("🛑 Camera Stop() called")
+	rc.captureMutex.Lock()
+	if rc.lifecycle == lifecycleStopped {
+		rc.captureMutex.Unlock()
+		return nil
+	}
+	rc.lifecycle = lifecycleStopping
 	rc.isStopping.Store(true)
 	rc.isReady.Store(false)
+	startupDone := rc.startupDone
 
 	rc.frameMutex.Lock()
 	if rc.frameUpdateCh != nil {
@@ -400,7 +496,6 @@ func (rc *RealCamera) Stop() error {
 	}
 	rc.frameMutex.Unlock()
 
-	rc.captureMutex.Lock()
 	proc := rc.proc
 	stdin := rc.procStdin
 	readerDone := rc.readerDone
@@ -454,6 +549,17 @@ func (rc *RealCamera) Stop() error {
 			log.Printf("⚠️  Timeout waiting for stderr drainer goroutine to exit")
 		}
 	}
+	if startupDone != nil {
+		select {
+		case <-startupDone:
+		case <-time.After(rc.stopWaitTimeout):
+			log.Printf("⚠️  Timeout waiting for startup to complete")
+		}
+	}
+
+	rc.captureMutex.Lock()
+	rc.lifecycle = lifecycleStopped
+	rc.captureMutex.Unlock()
 
 	return nil
 }
