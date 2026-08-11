@@ -550,7 +550,11 @@ func (rc *RealCamera) Stop() error {
 		}
 	}
 	if startupDone != nil {
-		<-startupDone
+		select {
+		case <-startupDone:
+		case <-time.After(rc.stopWaitTimeout):
+			log.Printf("⚠️  Timeout waiting for startup to complete")
+		}
 	}
 
 	rc.captureMutex.Lock()
