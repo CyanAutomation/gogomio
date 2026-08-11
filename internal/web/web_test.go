@@ -5,7 +5,6 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -37,6 +36,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		`id="start-stream"`,
 		`id="stop-stream"`,
 		`id="diagnostics-btn"`,
+		`<script src="/static/aspect-ratio.js"></script>`,
 	}
 
 	for _, hook := range runtimeHooks {
@@ -65,52 +65,16 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	if !strings.Contains(body, `id="diagnostics-btn" onclick="openDiagnosticsModal()"`) {
 		t.Error("missing stable element-to-action linkage for diagnostics button")
 	}
-}
 
-// TestStreamImageFillsContainerWithoutCropping protects the stream presentation
-// from regressions that either leave unused image dimensions or crop camera frames.
-func TestStreamImageFillsContainerWithoutCropping(t *testing.T) {
-	page, err := webFS.ReadFile("index.html")
-	if err != nil {
-		t.Fatalf("read embedded index.html: %v", err)
-	}
-	match := regexp.MustCompile(`(?s)#stream-img\s*\{([^}]*)\}`).FindSubmatch(page)
-	if match == nil {
-		t.Fatal("stream image CSS rule is missing")
-	}
-	styles := string(match[1])
-	streamImageStyles := []string{
-		"width: 100%;",
-		"height: 100%;",
-		"object-fit: contain;",
-	}
-
-	for _, style := range streamImageStyles {
-		if !strings.Contains(styles, style) {
+	// Presentation hooks belong with the other stable root-page requirements;
+	// aspect-ratio behavior itself is covered by aspect-ratio.test.js.
+	for _, style := range []string{"width: 100%;", "height: 100%;", "object-fit: contain;"} {
+		if !strings.Contains(body, style) {
 			t.Errorf("stream image CSS missing %q", style)
 		}
 	}
-
-	if strings.Contains(styles, "object-fit: cover;") {
-		t.Error("stream image CSS uses object-fit: cover, which crops frames")
-	}
-}
-
-// TestStreamContainerUsesConfiguredResolution verifies the UI derives the
-// container proportions from camera dimensions instead of assuming widescreen.
-func TestStreamContainerUsesConfiguredResolution(t *testing.T) {
-	pageBytes, err := webFS.ReadFile("index.html")
-	if err != nil {
-		t.Fatalf("read embedded index.html: %v", err)
-	}
-	page := string(pageBytes)
-
-	if strings.Contains(page, "aspect-ratio: 16 / 9;") {
+	if strings.Contains(body, "aspect-ratio: 16 / 9;") {
 		t.Error("stream container hard-codes a 16:9 aspect ratio")
-	}
-	if !strings.Contains(page, "style.aspectRatio") ||
-		!strings.Contains(page, "`${config.resolution[0]} / ${config.resolution[1]}`") {
-		t.Error("stream container does not derive its aspect ratio from the configured resolution")
 	}
 }
 

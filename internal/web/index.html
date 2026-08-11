@@ -765,6 +765,7 @@
         </div>
     </div>
 
+    <script src="/static/aspect-ratio.js"></script>
     <script>
         const DIAG_ICONS = {
             camera:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
@@ -1019,9 +1020,9 @@
                     if (!response.ok) throw new Error("Failed to load stats");
 
                     const config = await response.json();
-                    if (config.resolution && config.resolution[0] > 0 && config.resolution[1] > 0) {
-                        document.getElementById("stream-container").style.aspectRatio =
-                            `${config.resolution[0]} / ${config.resolution[1]}`;
+                    const aspectRatio = resolutionToAspectRatio(config.resolution);
+                    if (aspectRatio) {
+                        document.getElementById("stream-container").style.aspectRatio = aspectRatio;
                     }
                     // FPS with color coding relative to target
                     const fps = config.fps || 0;
