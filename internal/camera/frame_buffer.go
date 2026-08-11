@@ -164,11 +164,9 @@ func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Du
 		}
 		notifyCh := fb.notifyCh
 		fb.mu.Unlock()
-		notifyCh := fb.notifyCh
 		if fb.waitHook != nil {
 			fb.waitHook()
 		}
-		fb.mu.Unlock()
 
 		select {
 		case <-notifyCh:
