@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// TestHealthMonitorRunsProductionCheckOnTick covers REQ-CAMERA-HEALTH-FRAME-PROGRESS:
-// a delivered tick must run the production health check and report frame progress.
-func TestHealthMonitorRunsProductionCheckOnTick(t *testing.T) {
+// TestHealthMonitorReportsFrameProgress covers REQ-CAMERA-HEALTH-FRAME-PROGRESS:
+// a delivered tick must run the production health check and report frame progress
+// published concurrently by the production camera state.
+func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 	ticks := make(chan time.Time)
 	diagnostics := make(chan string, 4)
 	rc := NewRealCamera()
@@ -26,15 +26,33 @@ func TestHealthMonitorRunsProductionCheckOnTick(t *testing.T) {
 		rc.healthMonitor()
 		close(done)
 	}()
+
+	frameUpdates := make(chan uint64)
+	framePublished := make(chan struct{})
+	publisherDone := make(chan struct{})
+	go func() {
+		defer close(publisherDone)
+		for sequence := range frameUpdates {
+			rc.frameMutex.Lock()
+			rc.frameSeq = sequence // The same counter advanced by the production frame reader.
+			rc.frameMutex.Unlock()
+			framePublished <- struct{}{}
+		}
+	}()
+
 	defer func() {
+		close(frameUpdates)
+		<-publisherDone
 		close(ticks)
 		<-done
 	}()
 
 	assertProgress := func(sequence uint64, tick time.Time) {
 		t.Helper()
+		frameUpdates <- sequence
+		<-framePublished
+		// Ensure health monitor can observe the updated frameSeq before tick
 		rc.frameMutex.Lock()
-		rc.frameSeq = sequence // The same counter advanced by the production frame reader.
 		rc.frameMutex.Unlock()
 		ticks <- tick
 
@@ -107,41 +125,6 @@ func TestHealthMonitorStallDetection(t *testing.T) {
 	assertDiagnostic(firstTick, "🏥 Health check: frames flowing normally (seq: 5)\n")
 	assertDiagnostic(firstTick.Add(11*time.Second), "ℹ️  Health check: no recent frames for 11s (seq: 5)\n")
 	assertDiagnostic(firstTick.Add(31*time.Second), "⚠️  Health check: frame capture stalled for 31s (seq: 5)\n")
-}
-
-// TestHealthMonitorConcurrentFrameUpdates tests concurrent frame sequence updates
-func TestHealthMonitorConcurrentFrameUpdates(t *testing.T) {
-	type frameMonitor struct {
-		frameSeq uint64
-		mu       sync.RWMutex
-	}
-
-	monitor := &frameMonitor{}
-
-	// Simulate concurrent frame captures
-	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 10; j++ {
-				monitor.mu.Lock()
-				atomic.AddUint64(&monitor.frameSeq, 1)
-				monitor.mu.Unlock()
-				time.Sleep(1 * time.Millisecond)
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	monitor.mu.RLock()
-	finalSeq := atomic.LoadUint64(&monitor.frameSeq)
-	monitor.mu.RUnlock()
-
-	if finalSeq != 50 {
-		t.Errorf("Expected frame count 50, got %d", finalSeq)
-	}
 }
 
 // TestHealthMonitorReportsReaderError verifies that an error published by the
