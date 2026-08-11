@@ -1,6 +1,8 @@
 package web
 
 import (
+	"bytes"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -126,32 +128,47 @@ func TestWebUINotFoundPath(t *testing.T) {
 	}
 }
 
-// TestWebUICacheHeaders verifies root page and static assets have expected cache policy directives and TTLs.
+// TestWebUICacheHeaders verifies the root page has the expected cache policy directives and TTL.
 func TestWebUICacheHeaders(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterStaticFiles(router)
 
+	req, _ := http.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code: got %d, want 200", w.Code)
+	}
+
+	cacheControl := w.Header().Get("Cache-Control")
+	if !strings.Contains(cacheControl, "max-age=3600") {
+		t.Errorf("cache-control: got %q, want directive %q", cacheControl, "max-age=3600")
+	}
+	if !strings.Contains(cacheControl, "public") {
+		t.Errorf("cache-control: got %q, missing directive %q", cacheControl, "public")
+	}
+	if strings.Contains(cacheControl, "no-cache") {
+		t.Errorf("cache-control: got %q, should not include %q", cacheControl, "no-cache")
+	}
+}
+
+func TestMioStaticAssetsAreServed(t *testing.T) {
+	router := chi.NewRouter()
+	RegisterStaticFiles(router)
+
 	tests := []struct {
-		name            string
-		path            string
-		wantMaxAge      string
-		wantDirective   string
-		forbidDirective string
+		name string
+		path string
 	}{
-		{
-			name:            "root_html",
-			path:            "/",
-			wantMaxAge:      "max-age=3600",
-			wantDirective:   "public",
-			forbidDirective: "no-cache",
-		},
-		{
-			name:            "mio_asset",
-			path:            "/static/mio/mio_pose_idle.png",
-			wantMaxAge:      "max-age=86400",
-			wantDirective:   "public",
-			forbidDirective: "no-cache",
-		},
+		{name: "idle", path: "/static/mio/mio_pose_idle.png"},
+		{name: "sleeping", path: "/static/mio/mio_pose_sleeping.png"},
+		{name: "concerned", path: "/static/mio/mio_pose_concerned.png"},
+		{name: "happy", path: "/static/mio/mio_pose_happy.png"},
+		{name: "worried", path: "/static/mio/mio_pose_worried.png"},
+		{name: "curious", path: "/static/mio/mio_pose_curious.png"},
+		{name: "angry", path: "/static/mio/mio_pose_angry.png"},
+		{name: "looking", path: "/static/mio/mio_pose_looking.png"},
 	}
 
 	for _, tc := range tests {
@@ -161,50 +178,28 @@ func TestWebUICacheHeaders(t *testing.T) {
 			router.ServeHTTP(w, req)
 
 			if w.Code != http.StatusOK {
-				t.Fatalf("%s status code: got %d, want 200", tc.path, w.Code)
+				t.Fatalf("status code: got %d, want 200", w.Code)
+			}
+			if got := w.Header().Get("Content-Type"); !strings.HasPrefix(got, "image/png") {
+				t.Errorf("Content-Type: got %q, want image/png", got)
+			}
+
+			body := w.Body.Bytes()
+			if len(body) == 0 {
+				t.Fatal("response body is empty")
+			}
+			if _, err := png.Decode(bytes.NewReader(body)); err != nil {
+				t.Errorf("decode response as PNG: %v", err)
 			}
 
 			cacheControl := w.Header().Get("Cache-Control")
-			if cacheControl == "" {
-				t.Fatalf("%s Cache-Control header missing", tc.path)
+			if !strings.Contains(cacheControl, "public") || !strings.Contains(cacheControl, "max-age=86400") {
+				t.Errorf("Cache-Control: got %q, want public and max-age=86400", cacheControl)
 			}
-
-			if !strings.Contains(cacheControl, tc.wantMaxAge) {
-				t.Errorf("%s cache-control: got %q, want directive %q", tc.path, cacheControl, tc.wantMaxAge)
-			}
-
-			if !strings.Contains(cacheControl, tc.wantDirective) {
-				t.Errorf("%s cache-control: got %q, missing directive %q", tc.path, cacheControl, tc.wantDirective)
-			}
-
-			if tc.forbidDirective != "" && strings.Contains(cacheControl, tc.forbidDirective) {
-				t.Errorf("%s cache-control: got %q, should not include %q", tc.path, cacheControl, tc.forbidDirective)
+			if strings.Contains(cacheControl, "no-cache") {
+				t.Errorf("Cache-Control: got %q, should not include no-cache", cacheControl)
 			}
 		})
-	}
-}
-
-func TestMioStaticAssetsAreServed(t *testing.T) {
-	router := chi.NewRouter()
-	RegisterStaticFiles(router)
-
-	assets := []string{
-		"mio_pose_idle.png",
-		"mio_pose_sleeping.png",
-		"mio_pose_concerned.png",
-		"mio_pose_happy.png",
-		"mio_pose_worried.png",
-	}
-
-	for _, asset := range assets {
-		req, _ := http.NewRequest("GET", "/static/mio/"+asset, nil)
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("asset %q status code: got %d, want 200", asset, w.Code)
-		}
-
 	}
 }
 
