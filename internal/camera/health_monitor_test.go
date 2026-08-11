@@ -51,6 +51,9 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 		t.Helper()
 		frameUpdates <- sequence
 		<-framePublished
+		// Ensure health monitor can observe the updated frameSeq before tick
+		rc.frameMutex.Lock()
+		rc.frameMutex.Unlock()
 		ticks <- tick
 
 		want := fmt.Sprintf("🏥 Health check: frames flowing normally (seq: %d)\n", sequence)
