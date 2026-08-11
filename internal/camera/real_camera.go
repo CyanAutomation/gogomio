@@ -33,6 +33,10 @@ const (
 // the first frame within the expected timeout period.
 var ErrFirstFrameTimeout = errors.New("camera first frame timeout")
 
+// ErrCameraAlreadyStarted is returned when Start is called while another
+// startup is in progress or the camera is already running or stopping.
+var ErrCameraAlreadyStarted = errors.New("camera already starting or started")
+
 var errStartupCanceled = errors.New("camera startup canceled")
 
 type lifecycleState uint8
@@ -176,7 +180,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Lock()
 	if rc.lifecycle != lifecycleStopped {
 		rc.captureMutex.Unlock()
-		return fmt.Errorf("camera is not stopped")
+		return ErrCameraAlreadyStarted
 	}
 	rc.lifecycle = lifecycleStarting
 	rc.startupID++
@@ -195,12 +199,12 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Unlock()
 	failStartup := func() {
 		rc.captureMutex.Lock()
-		if rc.startupID == startupID && rc.startupDone != nil {
-			close(rc.startupDone)
-			rc.startupDone = nil
-			if rc.lifecycle == lifecycleStarting {
-				rc.lifecycle = lifecycleStopped
+		if rc.lifecycle == lifecycleStarting && rc.startupID == startupID {
+			if rc.startupDone != nil {
+				close(rc.startupDone)
+				rc.startupDone = nil
 			}
+			rc.lifecycle = lifecycleStopped
 		}
 		rc.captureMutex.Unlock()
 	}
