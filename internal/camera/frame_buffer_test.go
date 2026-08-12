@@ -37,6 +37,12 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	stats := NewStreamStats()
 	targetFPS := 10
 	fb := NewFrameBuffer(stats, targetFPS)
+	frameInterval := time.Second / time.Duration(targetFPS)
+
+	now := time.Unix(1700000000, 0)
+	fb.nowFn = func() time.Time {
+		return now
+	}
 
 	frame1 := []byte{1}
 	frame2 := []byte{2}
@@ -48,37 +54,26 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 		t.Errorf("first write returned %d", n1)
 	}
 
-	// Get timestamp after first write
-	lastTime := fb.lastFrameTime
-
-	// Write second frame immediately (should be throttled)
+	// Write the second frame just before the throttle boundary.
+	now = now.Add(frameInterval - time.Nanosecond)
 	n2, _ := fb.Write(frame2)
 	if n2 != 1 {
 		t.Errorf("second write returned %d", n2)
 	}
 
-	// Frame should NOT have changed if throttled
-	if !bytes.Equal(fb.snapshot.data, frame1) {
-		t.Errorf("frame should still be frame1 after throttled write, got %v", fb.snapshot.data)
+	if got := fb.GetFrame(); !bytes.Equal(got, frame1) {
+		t.Errorf("frame should still be frame1 before throttle boundary, got %v", got)
 	}
 
-	// Wait for throttle interval
-	time.Sleep(time.Duration(1000/targetFPS) * time.Millisecond)
-
-	// Write third frame (should succeed)
+	// Writes at the throttle boundary are published.
+	now = now.Add(time.Nanosecond)
 	n3, _ := fb.Write(frame3)
 	if n3 != 1 {
 		t.Errorf("third write returned %d", n3)
 	}
 
-	// Frame should now be frame3
-	if !bytes.Equal(fb.snapshot.data, frame3) {
-		t.Errorf("frame should be frame3 after throttle interval, got %v", fb.snapshot.data)
-	}
-
-	// Timestamp should have advanced
-	if fb.lastFrameTime.Equal(lastTime) {
-		t.Error("lastFrameTime did not advance")
+	if got := fb.GetFrame(); !bytes.Equal(got, frame3) {
+		t.Errorf("frame should be frame3 at throttle boundary, got %v", got)
 	}
 }
 
