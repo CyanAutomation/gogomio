@@ -224,83 +224,131 @@ func waitForLifecycleState(t *testing.T, rc *RealCamera, want lifecycleState) {
 	}
 }
 
+type fakeCommandProcess struct {
+	started chan struct{}
+	killed  chan struct{}
+	wait    chan error
+
+	stdinR  *io.PipeReader
+	stdinW  *io.PipeWriter
+	stdoutR *io.PipeReader
+	stdoutW *io.PipeWriter
+	stderrR *io.PipeReader
+	stderrW *io.PipeWriter
+}
+
+type waitCommandProcess struct {
+	realCommandProcess
+	waitFn func(*exec.Cmd) error
+}
+
+func (p waitCommandProcess) Wait(cmd *exec.Cmd) error { return p.waitFn(cmd) }
+func (p waitCommandProcess) Kill(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	return p.realCommandProcess.Kill(cmd)
+}
+
+func newFakeCommandProcess() *fakeCommandProcess {
+	stdinR, stdinW := io.Pipe()
+	stdoutR, stdoutW := io.Pipe()
+	stderrR, stderrW := io.Pipe()
+	return &fakeCommandProcess{
+		started: make(chan struct{}, 1),
+		killed:  make(chan struct{}, 1),
+		wait:    make(chan error, 1),
+		stdinR:  stdinR, stdinW: stdinW,
+		stdoutR: stdoutR, stdoutW: stdoutW,
+		stderrR: stderrR, stderrW: stderrW,
+	}
+}
+
+func (p *fakeCommandProcess) Start(*exec.Cmd) error {
+	p.started <- struct{}{}
+	return nil
+}
+func (p *fakeCommandProcess) Wait(*exec.Cmd) error              { return <-p.wait }
+func (p *fakeCommandProcess) Signal(*exec.Cmd, os.Signal) error { return nil }
+func (p *fakeCommandProcess) Kill(*exec.Cmd) error {
+	select {
+	case p.killed <- struct{}{}:
+	default:
+	}
+	_ = p.stdinR.Close()
+	_ = p.stdinW.Close()
+	_ = p.stdoutW.Close()
+	_ = p.stderrW.Close()
+	return nil
+}
+func (p *fakeCommandProcess) close() {
+	_ = p.stdinR.Close()
+	_ = p.stdinW.Close()
+	_ = p.stdoutR.Close()
+	_ = p.stdoutW.Close()
+	_ = p.stderrR.Close()
+	_ = p.stderrW.Close()
+	select {
+	case p.wait <- nil:
+	default:
+	}
+}
+
 func TestRealCameraProcessLifecycle(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/null"
 	rc.captureWaitTimeout = 200 * time.Millisecond
 	rc.stopWaitTimeout = time.Second
 
+	process := newFakeCommandProcess()
+	t.Cleanup(process.close)
+	rc.process = process
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		cmd := &exec.Cmd{}
+		if err := process.Start(cmd); err != nil {
+			return nil, nil, nil, nil, err
+		}
+		return cmd, process.stdinW, process.stdoutR, process.stderrR, nil
+	}
+
 	if rc.IsReady() {
 		t.Fatal("camera should not be ready before Start")
 	}
-
-	releaseBackend := make(chan struct{})
-	rc.waitFn = func(cmd *exec.Cmd) error {
-		<-releaseBackend
-		return cmd.Wait()
+	startDone := make(chan error, 1)
+	go func() { startDone <- rc.Start(640, 480, 24, 80) }()
+	<-process.started
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready before the first valid frame")
 	}
 
-	var startedCmd *exec.Cmd
-	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
-		stdoutR, stdoutW := io.Pipe()
-		stderrR, stderrW := io.Pipe()
-
-		cmd := exec.Command("bash", "-c", "sleep 30")
-		if err := cmd.Start(); err != nil {
-			return nil, nil, nil, nil, err
-		}
-		startedCmd = cmd
-
-		go func() {
-			defer func() { _ = stdoutW.Close() }()
-			jpegData, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
-			_, _ = stdoutW.Write(jpegData)
-		}()
-		go func() {
-			defer func() { _ = stderrW.Close() }()
-		}()
-
-		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+	frame, err := encodeFrameToJPEG(createTestImage(8, 8), 80)
+	if err != nil {
+		t.Fatalf("encode startup frame: %v", err)
 	}
-
-	if err := rc.Start(640, 480, 24, 80); err != nil {
+	if _, err := process.stdoutW.Write(frame); err != nil {
+		t.Fatalf("write startup frame: %v", err)
+	}
+	if err := <-startDone; err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	if !rc.IsReady() {
-		t.Fatal("camera should be ready after Start")
-	}
-	if startedCmd == nil || rc.proc == nil {
-		t.Fatal("expected process to be started")
+		t.Fatal("camera should be ready after the first valid frame")
 	}
 
 	stopDone := make(chan error, 1)
-	go func() {
-		stopDone <- rc.Stop()
-	}()
-
-	deadline := time.Now().Add(250 * time.Millisecond)
-	for rc.IsReady() && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
+	go func() { stopDone <- rc.Stop() }()
+	<-process.killed
 	if rc.IsReady() {
-		t.Fatal("camera should not be ready while Stop is in progress")
+		t.Fatal("camera should not be ready once shutdown begins")
 	}
 	select {
 	case err := <-stopDone:
-		t.Fatalf("Stop() completed before the backend was released: %v", err)
+		t.Fatalf("Stop() completed before process wait was released: %v", err)
 	default:
 	}
-
-	close(releaseBackend)
+	process.wait <- nil
 	if err := <-stopDone; err != nil {
 		t.Fatalf("Stop() error = %v", err)
-	}
-	if rc.IsReady() {
-		t.Fatal("camera should not be ready after Stop")
-	}
-
-	if err := startedCmd.Process.Signal(syscall.Signal(0)); err == nil {
-		t.Fatal("expected process to be terminated after Stop")
 	}
 }
 
@@ -312,12 +360,12 @@ func TestRealCameraStopReturnsWhenBackendWaitExceedsDeadline(t *testing.T) {
 	waitStarted := make(chan struct{})
 	releaseWait := make(chan struct{})
 	waitExited := make(chan struct{})
-	rc.waitFn = func(*exec.Cmd) error {
+	rc.process = waitCommandProcess{waitFn: func(*exec.Cmd) error {
 		defer close(waitExited)
 		close(waitStarted)
 		<-releaseWait
 		return nil
-	}
+	}}
 	timeoutRequested := make(chan time.Duration, 1)
 	expireTimeout := make(chan time.Time, 1)
 	alreadyExpired := make(chan time.Time)
@@ -380,7 +428,7 @@ func TestRealCameraRestartAfterStopTimeoutIsolatesBlockedReader(t *testing.T) {
 	expired := make(chan time.Time)
 	close(expired)
 	rc.stopWaitAfter = func(time.Duration) <-chan time.Time { return expired }
-	rc.waitFn = func(*exec.Cmd) error { return nil }
+	rc.process = waitCommandProcess{waitFn: func(*exec.Cmd) error { return nil }}
 
 	type generationStream struct {
 		reader *io.PipeReader
@@ -460,14 +508,14 @@ func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 	var releases []chan struct{}
 	var activeWaiters atomic.Int32
 	var completedWaiters atomic.Int32
-	rc.waitFn = func(*exec.Cmd) error {
+	rc.process = waitCommandProcess{waitFn: func(*exec.Cmd) error {
 		activeWaiters.Add(1)
 		release := releases[len(releases)-1]
 		<-release
 		activeWaiters.Add(-1)
 		completedWaiters.Add(1)
 		return nil
-	}
+	}}
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		release := make(chan struct{})
 		releases = append(releases, release)
