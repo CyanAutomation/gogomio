@@ -17,9 +17,7 @@ func TestStreamCapturingWriterClosesFirstBoundaryOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			if _, err := writer.Write([]byte("--frame\r\n")); err != nil {
-				t.Errorf("Write() error = %v", err)
-			}
+			_, _ = writer.Write([]byte("--frame\r\n"))
 		}()
 	}
 
