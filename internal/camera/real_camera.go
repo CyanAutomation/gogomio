@@ -98,6 +98,7 @@ type RealCamera struct {
 	startCommandFn func(*exec.Cmd, string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 	runCmdFn       func(*exec.Cmd) ([]byte, error)
 	waitFn         func(*exec.Cmd) error
+	stopWaitAfter  func(time.Duration) <-chan time.Time
 	logger         *log.Logger
 	healthTicks    <-chan time.Time
 }
@@ -151,6 +152,7 @@ func NewRealCamera() *RealCamera {
 	rc.waitFn = func(cmd *exec.Cmd) error {
 		return cmd.Wait()
 	}
+	rc.stopWaitAfter = time.After
 	rc.logger = log.Default()
 	return rc
 }
@@ -526,7 +528,7 @@ func (rc *RealCamera) Stop() error {
 			select {
 			case <-procWaitDone:
 				log.Printf("✓ Process exited cleanly")
-			case <-time.After(rc.stopWaitTimeout):
+			case <-rc.stopWaitAfter(rc.stopWaitTimeout):
 				log.Printf("⚠️  Timeout waiting for camera process to exit")
 			}
 		}
@@ -538,7 +540,7 @@ func (rc *RealCamera) Stop() error {
 		case <-readerDone:
 			// Reader exited
 			log.Printf("✓ Frame reader goroutine exited")
-		case <-time.After(rc.stopWaitTimeout):
+		case <-rc.stopWaitAfter(rc.stopWaitTimeout):
 			// Timeout waiting for reader
 			log.Printf("⚠️  Timeout waiting for reader goroutine to exit")
 		}
@@ -548,7 +550,7 @@ func (rc *RealCamera) Stop() error {
 		case <-stderrDone:
 			// Stderr drainer exited
 			log.Printf("✓ Stderr drainer goroutine exited")
-		case <-time.After(rc.stopWaitTimeout):
+		case <-rc.stopWaitAfter(rc.stopWaitTimeout):
 			// Timeout waiting for stderr drainer
 			log.Printf("⚠️  Timeout waiting for stderr drainer goroutine to exit")
 		}
@@ -556,7 +558,7 @@ func (rc *RealCamera) Stop() error {
 	if startupDone != nil {
 		select {
 		case <-startupDone:
-		case <-time.After(rc.stopWaitTimeout):
+		case <-rc.stopWaitAfter(rc.stopWaitTimeout):
 			log.Printf("⚠️  Timeout waiting for startup to complete")
 		}
 	}
