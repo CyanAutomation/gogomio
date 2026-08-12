@@ -121,43 +121,54 @@ func TestFrameBufferConcurrentReads(t *testing.T) {
 	fb := NewFrameBuffer(stats, 0)
 
 	testFrame := []byte{0xFF, 0xD8}
-	numReaders := 5
+	const numReaders = 5
 	results := make([][]byte, numReaders)
-	var wg sync.WaitGroup
+	ready := make(chan struct{}, numReaders)
+	fb.waiterRegisteredHook = func() {
+		ready <- struct{}{}
+	}
 
-	// Start readers
+	// This is the test's only failure deadline. Reader readiness, publication,
+	// and completion are otherwise coordinated entirely through notifications.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
 	for i := 0; i < numReaders; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			frame, _ := fb.WaitFrame(2*time.Second, 0)
+			frame, _ := fb.WaitFrameWithContext(ctx, time.Hour, 0)
 			results[idx] = frame
 		}(i)
 	}
 
-	// Give readers time to block
-	time.Sleep(100 * time.Millisecond)
+	for i := 0; i < numReaders; i++ {
+		select {
+		case <-ready:
+		case <-ctx.Done():
+			t.Fatal("deadline exceeded waiting for readers to register")
+		}
+	}
 
-	// Write frame (should notify all readers)
 	_, _ = fb.Write(testFrame)
 
-	// Wait for all readers
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
-		done <- struct{}{}
+		close(done)
 	}()
 
 	select {
 	case <-done:
-		// Verify all readers got the frame
-		for i, frame := range results {
-			if !bytes.Equal(frame, testFrame) {
-				t.Errorf("reader %d got %v, want %v", i, frame, testFrame)
-			}
+	case <-ctx.Done():
+		t.Fatal("deadline exceeded waiting for readers to receive frame")
+	}
+
+	for i, frame := range results {
+		if !bytes.Equal(frame, testFrame) {
+			t.Errorf("reader %d got %v, want %v", i, frame, testFrame)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for readers")
 	}
 }
 
@@ -296,7 +307,7 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 
 	waiting := make(chan struct{})
 	var waitingOnce sync.Once
-	fb.waitHook = func() { waitingOnce.Do(func() { close(waiting) }) }
+	fb.waiterRegisteredHook = func() { waitingOnce.Do(func() { close(waiting) }) }
 
 	done := make(chan struct {
 		frame []byte
