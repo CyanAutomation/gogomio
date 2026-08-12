@@ -39,9 +39,9 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	fb := NewFrameBuffer(stats, targetFPS)
 	frameInterval := time.Second / time.Duration(targetFPS)
 
-	now := time.Unix(1700000000, 0)
+var nowPtr = &now
 	fb.nowFn = func() time.Time {
-		return now
+		return *nowPtr
 	}
 
 	frame1 := []byte{1}
