@@ -49,6 +49,7 @@ type streamCapturingWriter struct {
 	maxBytes      int64
 	bytesWritten  int64
 	firstBoundary chan struct{}
+	boundaryOnce  sync.Once
 	boundarySeen  bool
 }
 
@@ -80,10 +81,10 @@ func (w *streamCapturingWriter) Write(p []byte) (int, error) {
 	w.buf = append(w.buf, p...)
 	w.bytesWritten += int64(len(p))
 	if !w.boundarySeen && strings.Contains(string(w.buf), "--frame\r\n") {
-		if !w.boundarySeen {
+		w.boundaryOnce.Do(func() {
 			w.boundarySeen = true
 			close(w.firstBoundary)
-		}
+		})
 	}
 	return len(p), nil
 }
