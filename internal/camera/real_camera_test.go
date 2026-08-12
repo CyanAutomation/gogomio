@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -305,26 +304,36 @@ func TestRealCameraProcessLifecycle(t *testing.T) {
 	}
 }
 
-func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
+func TestRealCameraStopReturnsWhenBackendWaitExceedsDeadline(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/null"
 	rc.captureWaitTimeout = 200 * time.Millisecond
-	rc.stopWaitTimeout = 10 * time.Millisecond
 
 	waitStarted := make(chan struct{})
-	var waitStartedOnce sync.Once
+	releaseWait := make(chan struct{})
+	waitExited := make(chan struct{})
 	rc.waitFn = func(*exec.Cmd) error {
-		waitStartedOnce.Do(func() { close(waitStarted) })
-		select {}
+		defer close(waitExited)
+		close(waitStarted)
+		<-releaseWait
+		return nil
+	}
+	timeoutRequested := make(chan time.Duration, 1)
+	expireTimeout := make(chan time.Time, 1)
+	alreadyExpired := make(chan time.Time)
+	close(alreadyExpired)
+	var timeoutCalls atomic.Int32
+	rc.stopWaitAfter = func(timeout time.Duration) <-chan time.Time {
+		if timeoutCalls.Add(1) == 1 {
+			timeoutRequested <- timeout
+			return expireTimeout
+		}
+		return alreadyExpired
 	}
 
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("bash", "-c", "sleep 30")
-		if err := cmd.Start(); err != nil {
-			return nil, nil, nil, nil, err
-		}
 		go func() {
 			defer func() { _ = stdoutW.Close() }()
 			jpegData, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
@@ -333,40 +342,86 @@ func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 		go func() {
 			defer func() { _ = stderrW.Close() }()
 		}()
-		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+		return &exec.Cmd{}, nopWriteCloser{}, stdoutR, stderrR, nil
 	}
 
 	if err := rc.Start(640, 480, 24, 80); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	select {
-	case <-waitStarted:
-		// The process wait goroutine is definitely running and now stuck.
-	case <-time.After(250 * time.Millisecond):
-		t.Fatal("timed out waiting for waitFn to start")
-	}
+	<-waitStarted
+	t.Cleanup(func() {
+		close(releaseWait)
+		<-waitExited
+	})
 
 	stopDone := make(chan error, 1)
 	go func() {
 		stopDone <- rc.Stop()
 	}()
 
-	select {
-	case err := <-stopDone:
-		if err != nil {
-			t.Fatalf("Stop() error = %v", err)
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Stop() did not complete while waitFn was stuck")
+	if got := <-timeoutRequested; got != rc.stopWaitTimeout {
+		t.Fatalf("Stop() timeout = %v, want %v", got, rc.stopWaitTimeout)
+	}
+	expireTimeout <- time.Time{}
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop() error = %v", err)
 	}
 
 	if rc.IsReady() {
 		t.Fatal("camera should not be ready after Stop")
 	}
+}
 
-	if rc.frameUpdateCh != nil {
-		t.Fatal("frameUpdateCh should be closed and cleared during Stop")
+func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = 200 * time.Millisecond
+
+	var releases []chan struct{}
+	var activeWaiters atomic.Int32
+	var completedWaiters atomic.Int32
+	rc.waitFn = func(*exec.Cmd) error {
+		activeWaiters.Add(1)
+		release := releases[len(releases)-1]
+		<-release
+		activeWaiters.Add(-1)
+		completedWaiters.Add(1)
+		return nil
+	}
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		release := make(chan struct{})
+		releases = append(releases, release)
+		stdoutR, stdoutW := io.Pipe()
+		frame, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
+		go func() {
+			defer func() { _ = stdoutW.Close() }()
+			_, _ = stdoutW.Write(frame)
+		}()
+		return &exec.Cmd{}, nopWriteCloser{}, stdoutR, io.NopCloser(strings.NewReader("")), nil
+	}
+
+	const cycles = 5
+	for cycle := 1; cycle <= cycles; cycle++ {
+		if err := rc.Start(640, 480, 24, 80); err != nil {
+			t.Fatalf("Start() cycle %d error = %v", cycle, err)
+		}
+		if !rc.IsReady() {
+			t.Fatalf("camera should be ready during cycle %d", cycle)
+		}
+		close(releases[cycle-1])
+		if err := rc.Stop(); err != nil {
+			t.Fatalf("Stop() cycle %d error = %v", cycle, err)
+		}
+		if rc.IsReady() {
+			t.Fatalf("camera should not be ready after cycle %d", cycle)
+		}
+		if got := activeWaiters.Load(); got != 0 {
+			t.Fatalf("active backend waiters after cycle %d = %d, want 0", cycle, got)
+		}
+		if got := completedWaiters.Load(); got != int32(cycle) {
+			t.Fatalf("completed backend waiters after cycle %d = %d, want %d", cycle, got, cycle)
+		}
 	}
 }
 
