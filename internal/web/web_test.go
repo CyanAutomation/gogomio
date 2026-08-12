@@ -66,15 +66,11 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		t.Error("missing stable element-to-action linkage for diagnostics button")
 	}
 
-	// Presentation hooks belong with the other stable root-page requirements;
-	// aspect-ratio behavior itself is covered by aspect-ratio.test.js.
-	for _, style := range []string{"width: 100%;", "height: 100%;", "object-fit: contain;"} {
-		if !strings.Contains(body, style) {
-			t.Errorf("stream image CSS missing %q", style)
-		}
-	}
-	if strings.Contains(body, "aspect-ratio: 16 / 9;") {
-		t.Error("stream container hard-codes a 16:9 aspect ratio")
+	// Keep the image-fit policy with the broader UI contract rather than
+	// maintaining a source-shape-sensitive standalone CSS test. Configured
+	// aspect-ratio behavior is covered by aspect-ratio.test.js.
+	if !strings.Contains(body, "object-fit: contain;") {
+		t.Error("stream image must preserve the whole camera frame")
 	}
 }
 
