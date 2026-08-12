@@ -11,21 +11,6 @@ import (
 	"time"
 )
 
-// TestMockCameraStart tests mock camera initialization
-func TestMockCameraStart(t *testing.T) {
-	mc := NewMockCamera()
-
-	err := mc.Start(640, 480, 24, 90)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	// Should be ready after start
-	if !mc.IsReady() {
-		t.Error("mock camera should be ready after Start")
-	}
-}
-
 // TestMockCameraCaptureFrame verifies that captures are correctly sized JPEGs
 // and that advancing the frame sequence changes the generated image.
 func TestMockCameraCaptureFrame(t *testing.T) {
@@ -307,6 +292,10 @@ func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
 
 // TestMockCameraLifecycle tests complete start/capture/stop lifecycle
 func TestMockCameraLifecycle(t *testing.T) {
+	const (
+		width  = 64
+		height = 48
+	)
 	mc := NewMockCamera()
 
 	// Initially not ready
@@ -315,7 +304,7 @@ func TestMockCameraLifecycle(t *testing.T) {
 	}
 
 	// Start
-	err := mc.Start(640, 480, 24, 90)
+	err := mc.Start(width, height, 24, 90)
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
@@ -327,8 +316,15 @@ func TestMockCameraLifecycle(t *testing.T) {
 
 	// Capture works
 	frame, err := mc.CaptureFrame()
-	if err != nil || len(frame) == 0 {
-		t.Error("CaptureFrame failed after Start")
+	if err != nil {
+		t.Fatalf("CaptureFrame failed after Start: %v", err)
+	}
+	decoded, err := jpeg.Decode(bytes.NewReader(frame))
+	if err != nil {
+		t.Fatalf("decode captured frame as JPEG: %v", err)
+	}
+	if bounds := decoded.Bounds(); bounds.Dx() != width || bounds.Dy() != height {
+		t.Errorf("captured frame dimensions = %dx%d, want %dx%d", bounds.Dx(), bounds.Dy(), width, height)
 	}
 
 	// Stop
@@ -340,6 +336,15 @@ func TestMockCameraLifecycle(t *testing.T) {
 	// Not ready after stop
 	if mc.IsReady() {
 		t.Error("mock camera should not be ready after Stop")
+	}
+
+	// Captures after Stop return no frame and report that the camera is not ready.
+	frame, err = mc.CaptureFrame()
+	if err == nil {
+		t.Fatal("CaptureFrame after Stop succeeded, want camera not ready error")
+	}
+	if frame != nil {
+		t.Errorf("CaptureFrame after Stop returned frame data, want nil")
 	}
 }
 
