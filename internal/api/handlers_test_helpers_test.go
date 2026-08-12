@@ -80,8 +80,10 @@ func (w *streamCapturingWriter) Write(p []byte) (int, error) {
 	w.buf = append(w.buf, p...)
 	w.bytesWritten += int64(len(p))
 	if !w.boundarySeen && strings.Contains(string(w.buf), "--frame\r\n") {
-		w.boundarySeen = true
-		close(w.firstBoundary)
+		if !w.boundarySeen {
+			w.boundarySeen = true
+			close(w.firstBoundary)
+		}
 	}
 	return len(p), nil
 }
