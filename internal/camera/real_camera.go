@@ -87,7 +87,9 @@ type RealCamera struct {
 
 	readerDone   chan struct{}
 	stderrDone   chan struct{}
+	healthDone   chan struct{}
 	procWaitDone chan error
+	stopCancel   context.CancelFunc
 
 	backendAttempted string
 
@@ -264,18 +266,25 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.procStderr = stderr
 	rc.readerDone = make(chan struct{})
 	rc.stderrDone = make(chan struct{})
+	rc.healthDone = make(chan struct{})
 	rc.procWaitDone = make(chan error, 1)
+	stopCtx, stopCancel := context.WithCancel(context.Background())
+	rc.stopCancel = stopCancel
+	readerDone := rc.readerDone
+	stderrDone := rc.stderrDone
+	healthDone := rc.healthDone
+	procWaitDone := rc.procWaitDone
 
 	rc.isReady.Store(false)
 	rc.captureMutex.Unlock()
 
 	go func(cmd *exec.Cmd, done chan<- error) {
 		done <- rc.waitFn(cmd)
-	}(cmd, rc.procWaitDone)
+	}(cmd, procWaitDone)
 
-	go rc.readMJPEGStream()
-	go rc.drainStderr()
-	go rc.healthMonitor()
+	go rc.readMJPEGStream(stdout, readerDone, stopCtx, startupID)
+	go rc.drainStderr(stderr, stderrDone, stopCtx, startupID)
+	go rc.healthMonitor(cmd, healthDone, stopCtx, startupID)
 
 	if err := rc.waitForFirstFrame(); err != nil {
 		rc.captureMutex.Lock()
@@ -506,14 +515,23 @@ func (rc *RealCamera) Stop() error {
 	stdin := rc.procStdin
 	readerDone := rc.readerDone
 	stderrDone := rc.stderrDone
+	healthDone := rc.healthDone
 	procWaitDone := rc.procWaitDone
+	stopCancel := rc.stopCancel
 
 	rc.proc = nil
 	rc.procStdin = nil
 	rc.procStdout = nil
 	rc.procStderr = nil
+	rc.readerDone = nil
+	rc.stderrDone = nil
+	rc.healthDone = nil
 	rc.procWaitDone = nil
+	rc.stopCancel = nil
 	rc.captureMutex.Unlock()
+	if stopCancel != nil {
+		stopCancel()
+	}
 
 	if stdin != nil {
 		_ = stdin.Close()
@@ -553,6 +571,14 @@ func (rc *RealCamera) Stop() error {
 		case <-rc.stopWaitAfter(rc.stopWaitTimeout):
 			// Timeout waiting for stderr drainer
 			log.Printf("⚠️  Timeout waiting for stderr drainer goroutine to exit")
+		}
+	}
+	if healthDone != nil {
+		select {
+		case <-healthDone:
+			log.Printf("✓ Health monitor goroutine exited")
+		case <-rc.stopWaitAfter(rc.stopWaitTimeout):
+			log.Printf("⚠️  Timeout waiting for health monitor goroutine to exit")
 		}
 	}
 	if startupDone != nil {
@@ -808,13 +834,13 @@ func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd
 	return cmd, stdin, stdout, stderr, nil
 }
 
-func (rc *RealCamera) readMJPEGStream() {
+func (rc *RealCamera) readMJPEGStream(stdout io.Reader, done chan struct{}, stopCtx context.Context, generation uint64) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("❌ PANIC in readMJPEGStream: %v", r)
 		}
 		log.Printf("📹 Frame reader: EXIT (closing readerDone channel)")
-		close(rc.readerDone)
+		close(done)
 	}()
 
 	log.Printf("📹 Frame reader: STARTED")
@@ -825,17 +851,12 @@ func (rc *RealCamera) readMJPEGStream() {
 
 	for {
 		// Check if stopping before attempting read
-		if rc.isStopping.Load() {
+		if stopCtx.Err() != nil {
 			log.Printf("📹 Frame reader: stopping (graceful shutdown)")
 			return
 		}
 
-		rc.captureMutex.Lock()
-		stdout := rc.procStdout
-		isStopping := rc.isStopping.Load()
-		rc.captureMutex.Unlock()
-
-		if stdout == nil || isStopping {
+		if stdout == nil || !rc.generationCurrent(generation) {
 			return
 		}
 
@@ -846,6 +867,11 @@ func (rc *RealCamera) readMJPEGStream() {
 				log.Printf("📹 Frame reader: read %d bytes (attempt %d)", n, readAttempts)
 			}
 
+			rc.captureMutex.Lock()
+			if rc.startupID != generation || (rc.lifecycle != lifecycleStarting && rc.lifecycle != lifecycleRunning) {
+				rc.captureMutex.Unlock()
+				return
+			}
 			rc.frameMutex.Lock()
 			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
 			if len(rc.readBuffer) > maxReadBufferSize {
@@ -855,6 +881,7 @@ func (rc *RealCamera) readMJPEGStream() {
 					rc.frameUpdateCh = nil
 				}
 				rc.frameMutex.Unlock()
+				rc.captureMutex.Unlock()
 				log.Printf("❌ Frame reader: buffer overflow (%d bytes)", len(rc.readBuffer))
 				return
 			}
@@ -879,11 +906,17 @@ func (rc *RealCamera) readMJPEGStream() {
 				rc.readBuffer = remaining
 			}
 			rc.frameMutex.Unlock()
+			rc.captureMutex.Unlock()
 		}
 
 		if err != nil {
-			if errors.Is(err, io.EOF) && rc.isStopping.Load() {
+			if errors.Is(err, io.EOF) && stopCtx.Err() != nil {
 				log.Printf("📹 Frame reader: EOF (graceful shutdown), extracted %d frames total", framesExtracted)
+				return
+			}
+			rc.captureMutex.Lock()
+			if rc.startupID != generation || (rc.lifecycle != lifecycleStarting && rc.lifecycle != lifecycleRunning) {
+				rc.captureMutex.Unlock()
 				return
 			}
 			rc.frameMutex.Lock()
@@ -896,40 +929,36 @@ func (rc *RealCamera) readMJPEGStream() {
 				log.Printf("❌ Frame reader: error after %d bytes, %d frames extracted: %v", readAttempts*readChunkSize, framesExtracted, err)
 			}
 			rc.frameMutex.Unlock()
+			rc.captureMutex.Unlock()
 			return
 		}
 	}
 }
 
-func (rc *RealCamera) drainStderr() {
+func (rc *RealCamera) drainStderr(stderr io.Reader, done chan struct{}, stopCtx context.Context, generation uint64) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("❌ PANIC in drainStderr: %v", r)
 		}
 		log.Printf("📹 Stderr drainer: EXIT (closing stderrDone channel)")
-		close(rc.stderrDone)
+		close(done)
 	}()
 
 	log.Printf("📹 Stderr drainer: STARTED")
 
 	// Check if stopping before attempting to access stderr
-	if rc.isStopping.Load() {
+	if stopCtx.Err() != nil || !rc.generationCurrent(generation) {
 		return
 	}
 
-	rc.captureMutex.Lock()
-	stderr := rc.procStderr
-	isStopping := rc.isStopping.Load()
-	rc.captureMutex.Unlock()
-
-	if stderr == nil || isStopping {
+	if stderr == nil {
 		return
 	}
 
 	scanner := bufio.NewScanner(stderr)
 	for scanner.Scan() {
 		// Check if stopping during scan loop
-		if rc.isStopping.Load() {
+		if stopCtx.Err() != nil || !rc.generationCurrent(generation) {
 			return
 		}
 		line := scanner.Text()
@@ -975,13 +1004,14 @@ func encodeFrameToJPEG(img image.Image, quality int) ([]byte, error) {
 }
 
 // healthMonitor runs in a background goroutine and periodically checks subprocess health.
-func (rc *RealCamera) healthMonitor() {
+func (rc *RealCamera) healthMonitor(proc *exec.Cmd, done chan struct{}, stopCtx context.Context, generation uint64) {
 	logger := rc.logger
 	if logger == nil {
 		logger = log.Default()
 	}
 
 	defer func() {
+		close(done)
 		if r := recover(); r != nil {
 			logger.Printf("❌ PANIC in healthMonitor: %v", r)
 		}
@@ -1000,15 +1030,20 @@ func (rc *RealCamera) healthMonitor() {
 	var lastFrameTime time.Time
 	var lastFrameSeq uint64
 
-	for tickTime := range ticks {
-		if rc.isStopping.Load() {
+	for {
+		var tickTime time.Time
+		select {
+		case <-stopCtx.Done():
+			return
+		case nextTick, ok := <-ticks:
+			if !ok {
+				return
+			}
+			tickTime = nextTick
+		}
+		if !rc.generationCurrent(generation) {
 			return
 		}
-
-		// Check if process is still running
-		rc.captureMutex.Lock()
-		proc := rc.proc
-		rc.captureMutex.Unlock()
 
 		if proc != nil && proc.Process != nil {
 			// Process is still alive, good sign
@@ -1040,4 +1075,10 @@ func (rc *RealCamera) healthMonitor() {
 			logger.Printf("⚠️  Health check: reader error detected: %v", readerErr)
 		}
 	}
+}
+
+func (rc *RealCamera) generationCurrent(generation uint64) bool {
+	rc.captureMutex.Lock()
+	defer rc.captureMutex.Unlock()
+	return rc.startupID == generation && (rc.lifecycle == lifecycleStarting || rc.lifecycle == lifecycleRunning)
 }

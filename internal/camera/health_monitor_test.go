@@ -1,6 +1,7 @@
 package camera
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -22,10 +23,9 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 	}), "", 0)
 
 	done := make(chan struct{})
-	go func() {
-		rc.healthMonitor()
-		close(done)
-	}()
+	rc.startupID, rc.lifecycle = 1, lifecycleRunning
+	ctx, cancel := context.WithCancel(context.Background())
+	go rc.healthMonitor(nil, done, ctx, 1)
 
 	type frameUpdate struct {
 		sequence  uint64
@@ -48,6 +48,7 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 		<-publisherDone
 		close(ticks)
 		<-done
+		cancel()
 	}()
 
 	assertProgress := func(sequence uint64, tick time.Time) {
@@ -76,8 +77,7 @@ func TestHealthMonitorReportsFrameProgress(t *testing.T) {
 	assertProgress(7, firstTick)
 	assertProgress(8, firstTick.Add(10*time.Second))
 
-	rc.isStopping.Store(true)
-	ticks <- firstTick.Add(20 * time.Second)
+	cancel()
 }
 
 type logWriterFunc func(string)
@@ -100,11 +100,11 @@ func TestHealthMonitorStallDetection(t *testing.T) {
 	rc.frameSeq = 5
 
 	done := make(chan struct{})
-	go func() {
-		rc.healthMonitor()
-		close(done)
-	}()
+	rc.startupID, rc.lifecycle = 1, lifecycleRunning
+	ctx, cancel := context.WithCancel(context.Background())
+	go rc.healthMonitor(nil, done, ctx, 1)
 	defer func() {
+		cancel()
 		close(ticks)
 		<-done
 	}()
@@ -142,10 +142,12 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 	}), "", 0)
 	rc.readerDone = make(chan struct{})
 	rc.frameUpdateCh = make(chan struct{})
+	rc.startupID, rc.lifecycle = 1, lifecycleRunning
+	ctx, cancel := context.WithCancel(context.Background())
 
 	stdout, backend := io.Pipe()
 	rc.procStdout = stdout
-	go rc.readMJPEGStream()
+	go rc.readMJPEGStream(stdout, rc.readerDone, ctx, 1)
 
 	readerErr := fmt.Errorf("camera stream disconnected")
 	if err := backend.CloseWithError(readerErr); err != nil {
@@ -154,12 +156,9 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 	<-rc.readerDone
 
 	done := make(chan struct{})
-	go func() {
-		rc.healthMonitor()
-		close(done)
-	}()
+	go rc.healthMonitor(nil, done, ctx, 1)
 	defer func() {
-		rc.isStopping.Store(true)
+		cancel()
 		close(ticks)
 		<-done
 	}()
