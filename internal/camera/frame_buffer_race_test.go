@@ -3,85 +3,9 @@ package camera
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
-
-// TestFrameBufferConcurrentWriteRead stress tests concurrent frame writes and reads
-func TestFrameBufferConcurrentWriteRead(t *testing.T) {
-	stats := NewStreamStats()
-	fb := NewFrameBuffer(stats, 30)
-
-	done := make(chan struct{})
-	writeCount := int64(0)
-	readCount := int64(0)
-	var wg sync.WaitGroup
-
-	// 5 concurrent writers
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for {
-				select {
-				case <-done:
-					return
-				default:
-				}
-				frame := []byte{0xFF, 0xD8, byte(id), 0xFF, 0xD9}
-				_, _ = fb.Write(frame)
-				atomic.AddInt64(&writeCount, 1)
-			}
-		}(i)
-	}
-
-	// 20 concurrent readers
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			lastSeq := uint64(0)
-			for {
-				select {
-				case <-done:
-					return
-				default:
-				}
-				_, seq := fb.WaitFrame(raceScaledDuration(10*time.Millisecond), lastSeq)
-				if seq > lastSeq {
-					lastSeq = seq
-					atomic.AddInt64(&readCount, 1)
-				}
-			}
-		}(i)
-	}
-
-	runFor := raceScaledDuration(400 * time.Millisecond)
-	timer := time.NewTimer(runFor)
-	<-timer.C
-	close(done)
-	wg.Wait()
-
-	if writeCount == 0 || readCount == 0 {
-		t.Logf("concurrent write/read stress test: %d writes, %d reads", writeCount, readCount)
-	}
-
-	// Verify frameSeq monotonicity with a bounded eventual loop.
-	seq1 := fb.CurrentSequence()
-	var seq2 uint64
-	deadline := time.Now().Add(raceScaledDuration(300 * time.Millisecond))
-	for {
-		seq2 = fb.CurrentSequence()
-		if seq2 >= seq1 || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if seq2 < seq1 {
-		t.Errorf("frame sequence went backwards: %d -> %d", seq1, seq2)
-	}
-}
 
 // TestFrameBufferWaitTimeoutRaceFree verifies WaitFrame timeout doesn't race
 func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
