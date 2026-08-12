@@ -373,6 +373,85 @@ func TestRealCameraStopReturnsWhenBackendWaitExceedsDeadline(t *testing.T) {
 	}
 }
 
+func TestRealCameraRestartAfterStopTimeoutIsolatesBlockedReader(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	rc.captureWaitTimeout = time.Second
+	expired := make(chan time.Time)
+	close(expired)
+	rc.stopWaitAfter = func(time.Duration) <-chan time.Time { return expired }
+	rc.waitFn = func(*exec.Cmd) error { return nil }
+
+	type generationStream struct {
+		reader *io.PipeReader
+		writer *io.PipeWriter
+	}
+	streams := make([]generationStream, 0, 2)
+	launched := make(chan generationStream, 2)
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		reader, writer := io.Pipe()
+		stream := generationStream{reader: reader, writer: writer}
+		launched <- stream
+		return &exec.Cmd{}, nopWriteCloser{}, reader, io.NopCloser(strings.NewReader("")), nil
+	}
+
+	startWithFrame := func(size int) error {
+		done := make(chan error, 1)
+		go func() { done <- rc.Start(640, 480, 24, 80) }()
+		stream := <-launched
+		streams = append(streams, stream)
+		frame, _ := encodeFrameToJPEG(createTestImage(size, size), 80)
+		if _, err := streams[len(streams)-1].writer.Write(frame); err != nil {
+			t.Fatalf("write startup frame: %v", err)
+		}
+		return <-done
+	}
+
+	if err := startWithFrame(8); err != nil {
+		t.Fatalf("first Start() error = %v", err)
+	}
+	oldReaderDone := rc.readerDone
+	if err := rc.Stop(); err != nil {
+		t.Fatalf("first Stop() error = %v", err)
+	}
+	select {
+	case <-oldReaderDone:
+		t.Fatal("old reader unexpectedly exited before its blocked pipe was released")
+	default:
+	}
+
+	if err := startWithFrame(10); err != nil {
+		t.Fatalf("second Start() error = %v", err)
+	}
+	newReaderDone := rc.readerDone
+	if err := streams[0].writer.CloseWithError(errors.New("old generation released")); err != nil {
+		t.Fatalf("release old reader: %v", err)
+	}
+	select {
+	case <-oldReaderDone:
+	case <-time.After(time.Second):
+		t.Fatal("old reader did not exit after release")
+	}
+	select {
+	case <-newReaderDone:
+		t.Fatal("old reader closed the new generation's completion channel")
+	default:
+	}
+	rc.frameMutex.Lock()
+	readerErr := rc.readerErr
+	rc.frameMutex.Unlock()
+	if readerErr != nil {
+		t.Fatalf("old reader changed new generation stream state: %v", readerErr)
+	}
+	if _, err := rc.CaptureFrame(); err != nil {
+		t.Fatalf("new generation stream unavailable after old reader exit: %v", err)
+	}
+	_ = streams[1].writer.Close()
+	if err := rc.Stop(); err != nil {
+		t.Fatalf("second Stop() error = %v", err)
+	}
+}
+
 func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/null"
