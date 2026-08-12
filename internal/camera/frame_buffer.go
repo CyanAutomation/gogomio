@@ -25,8 +25,10 @@ type FrameBuffer struct {
 	lastFrameTime       time.Time
 	targetFrameInterval time.Duration
 	nowFn               func() time.Time
-	// waitHook is used by tests to observe the point immediately before blocking.
-	waitHook func()
+	// waiterRegisteredHook is used by tests to observe that a waiter has captured
+	// the notification channel it will block on. It must be configured before
+	// starting concurrent calls to WaitFrame.
+	waiterRegisteredHook func()
 }
 
 // NewFrameBuffer creates a new FrameBuffer.
@@ -164,8 +166,8 @@ func (fb *FrameBuffer) WaitFrameWithContext(ctx context.Context, timeout time.Du
 		}
 		notifyCh := fb.notifyCh
 		fb.mu.Unlock()
-		if fb.waitHook != nil {
-			fb.waitHook()
+		if fb.waiterRegisteredHook != nil {
+			fb.waiterRegisteredHook()
 		}
 
 		select {
