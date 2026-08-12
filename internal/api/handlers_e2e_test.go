@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -342,6 +343,7 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	req = req.WithContext(ctx)
 
 	writer := newStreamCapturingWriter(50 * 1024)
+	connectionCountBefore := atomic.LoadInt64(&fm.clientCount)
 
 	// Start streaming in background
 	done := make(chan struct{})
@@ -349,9 +351,20 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 		router.ServeHTTP(writer, req)
 		close(done)
 	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
 
-	// Let it stream for a bit
-	time.Sleep(200 * time.Millisecond)
+	// This is the only timeout in the test: it guards both observable milestones
+	// so a regression cannot deadlock the suite.
+	deadlockGuard, stopDeadlockGuard := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopDeadlockGuard()
+	select {
+	case <-writer.FirstBoundary():
+	case <-deadlockGuard.Done():
+		t.Fatal("timed out waiting for the first complete MJPEG boundary")
+	}
 
 	// Simulate client disconnect by canceling context
 	cancel()
@@ -360,13 +373,12 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	select {
 	case <-done:
 		t.Log("  ✓ Handler completed after client disconnect")
-	case <-time.After(2 * time.Second):
-		t.Error("handler did not complete after disconnect (possible goroutine leak)")
+	case <-deadlockGuard.Done():
+		t.Fatal("handler did not complete after disconnect (possible goroutine leak)")
 	}
 
-	// Verify some data was streamed before disconnect
-	if writer.GetBytesWritten() == 0 {
-		t.Error("expected some data to be streamed before disconnect")
+	if connectionCount := atomic.LoadInt64(&fm.clientCount); connectionCount != connectionCountBefore {
+		t.Fatalf("stream connection count did not return to %d after disconnect: got %d", connectionCountBefore, connectionCount)
 	}
 
 	t.Logf("✓ Client disconnection handled cleanly: %d bytes streamed before disconnect", writer.GetBytesWritten())
