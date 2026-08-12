@@ -832,6 +832,7 @@ type RateLimiter struct {
 	window    time.Duration
 	staleTTL  time.Duration
 	lastEvict time.Time
+	now       func() time.Time
 }
 
 // ipRequestTracker tracks requests for a single IP
@@ -855,6 +856,10 @@ const (
 //   - maxReqSec <= 0 is clamped to rateLimiterDefaultMaxReqSec.
 //   - window <= 0 is clamped to rateLimiterDefaultWindow.
 func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
+	return newRateLimiterWithClock(maxReqSec, window, time.Now)
+}
+
+func newRateLimiterWithClock(maxReqSec int, window time.Duration, now func() time.Time) *RateLimiter {
 	if maxReqSec <= 0 {
 		maxReqSec = rateLimiterDefaultMaxReqSec
 	}
@@ -862,7 +867,11 @@ func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
 		window = rateLimiterDefaultWindow
 	}
 
-	now := time.Now()
+	if now == nil {
+		now = time.Now
+	}
+
+	createdAt := now()
 	staleTTL := time.Duration(rateLimiterStaleWindowFactor) * window
 	if staleTTL <= 0 {
 		staleTTL = window
@@ -873,13 +882,14 @@ func NewRateLimiter(maxReqSec int, window time.Duration) *RateLimiter {
 		maxReqSec: maxReqSec,
 		window:    window,
 		staleTTL:  staleTTL,
-		lastEvict: now,
+		lastEvict: createdAt,
+		now:       now,
 	}
 }
 
 // Allow checks if an IP is within rate limit
 func (rl *RateLimiter) Allow(ip string) bool {
-	now := time.Now()
+	now := rl.now()
 
 	rl.mu.Lock()
 	if now.Sub(rl.lastEvict) >= rl.window {
@@ -912,6 +922,16 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	rl.mu.Unlock()
 
 	return false
+}
+
+// cleanupStale synchronously runs one bounded stale-entry cleanup pass.
+func (rl *RateLimiter) cleanupStale() {
+	now := rl.now()
+
+	rl.mu.Lock()
+	rl.evictStaleLocked(now, rateLimiterEvictScanLimit)
+	rl.lastEvict = now
+	rl.mu.Unlock()
 }
 
 func (rl *RateLimiter) evictStaleLocked(now time.Time, scanLimit int) {
