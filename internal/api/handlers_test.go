@@ -1754,124 +1754,109 @@ func TestFrameManager_CaptureLoop_IdempotentStart(t *testing.T) {
 	}
 }
 
-// TestFrameManager_StopCaptureIfIdle tests idle timeout behavior
-func TestFrameManager_StopCaptureIfIdle(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
+func setupIdleCaptureManager(
+	t *testing.T,
+	idleStopDelay time.Duration,
+	afterFunc func(time.Duration, func()) stopTimer,
+) *FrameManager {
+	t.Helper()
 
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Start capture
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	// Get the current done channel
-	fm.captureMu.Lock()
-	done := fm.doneChan
-	fm.captureMu.Unlock()
-
-	// Should be able to stop when no clients are connected
-	if !fm.stopCaptureIfIdle(done) {
-		t.Fatal("expected stopCaptureIfIdle to succeed when no clients")
-	}
-
-	waitForCaptureState(t, fm, false)
-}
-
-// TestFrameManager_StopCaptureIfIdle_WithClient tests idle stop is prevented when client connected
-func TestFrameManager_StopCaptureIfIdle_WithClient(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
-
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Start capture
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	// Simulate a client connecting
-	atomic.AddInt64(&fm.clientCount, 1)
-
-	// Get the current done channel
-	fm.captureMu.Lock()
-	done := fm.doneChan
-	fm.captureMu.Unlock()
-
-	// Should NOT be able to stop when a client is connected
-	if fm.stopCaptureIfIdle(done) {
-		t.Fatal("expected stopCaptureIfIdle to fail when client connected")
-	}
-
-	// Verify capture is still running
-	waitForCaptureState(t, fm, true)
-
-	// Clean up client count
-	atomic.AddInt64(&fm.clientCount, -1)
-
-	// Now it should work
-	if !fm.stopCaptureIfIdle(done) {
-		t.Fatal("expected stopCaptureIfIdle to succeed after client disconnect")
-	}
-}
-
-// TestFrameManager_ScheduleStopCapture tests scheduling delayed capture stop
-func TestFrameManager_ScheduleStopCapture(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
-
-	cfg := &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	}
-	fm := NewFrameManager(cam, cfg)
-	defer fm.Stop()
-
-	// Start capture
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	// Schedule stop (should stop after idle timeout ~3 seconds)
-	fm.scheduleStopCapture()
-
-	// Wait for capture to stop (with timeout longer than idle delay + buffer)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		fm.captureMu.Lock()
-		started := fm.captureStarted
-		fm.captureMu.Unlock()
-		if !started {
-			return // Success
+	if afterFunc == nil {
+		afterFunc = func(delay time.Duration, callback func()) stopTimer {
+			return time.AfterFunc(delay, callback)
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
+	fm := newFrameManagerWithAfterFunc(newLifecycleCamera(), &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	}, idleStopDelay, afterFunc)
+	t.Cleanup(fm.Stop)
+	fm.startCapture()
+	waitForCaptureState(t, fm, true)
+	return fm
+}
 
-	t.Fatal("expected capture to stop after scheduling stop")
+func TestFrameManager_StopCaptureIfIdle(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		clients     int64
+		wantStopped bool
+	}{
+		{name: "idle", wantStopped: true},
+		{name: "connected client", clients: 1, wantStopped: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			fm := setupIdleCaptureManager(t, defaultIdleStopDelay, nil)
+			atomic.StoreInt64(&fm.clientCount, tt.clients)
+
+			fm.captureMu.Lock()
+			done := fm.doneChan
+			fm.captureMu.Unlock()
+
+			if stopped := fm.stopCaptureIfIdle(done); stopped != tt.wantStopped {
+				t.Fatalf("stopCaptureIfIdle() = %v, want %v", stopped, tt.wantStopped)
+			}
+			waitForCaptureState(t, fm, !tt.wantStopped)
+		})
+	}
+}
+
+type fakeStopTimer struct {
+	callback func()
+	stopped  atomic.Bool
+}
+
+func (timer *fakeStopTimer) Stop() bool { return !timer.stopped.Swap(true) }
+
+func (timer *fakeStopTimer) trigger() {
+	if !timer.stopped.Load() {
+		timer.callback()
+	}
+}
+
+func TestFrameManager_ScheduleStopCapture(t *testing.T) {
+	const idleStopDelay = 37 * time.Second
+
+	for _, tt := range []struct {
+		name      string
+		reconnect bool
+	}{
+		{name: "stops when idle"},
+		{name: "reconnect cancels stop", reconnect: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			type registration struct {
+				delay time.Duration
+				timer *fakeStopTimer
+			}
+			registrations := make(chan registration, 2)
+			fm := setupIdleCaptureManager(t, idleStopDelay, func(delay time.Duration, callback func()) stopTimer {
+				timer := &fakeStopTimer{callback: callback}
+				registrations <- registration{delay: delay, timer: timer}
+				return timer
+			})
+
+			fm.scheduleStopCapture()
+			registered := <-registrations
+			if registered.delay != idleStopDelay {
+				t.Fatalf("registered delay = %v, want %v", registered.delay, idleStopDelay)
+			}
+			select {
+			case extra := <-registrations:
+				t.Fatalf("unexpected extra timer registration with delay %v", extra.delay)
+			default:
+			}
+
+			if tt.reconnect {
+				fm.IncrementClients()
+			}
+			registered.timer.trigger()
+			waitForCaptureState(t, fm, tt.reconnect)
+		})
+	}
 }
 
 // TestFrameManager_MultipleConcurrentStreams tests multiple simultaneous streams
