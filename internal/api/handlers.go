@@ -59,10 +59,15 @@ type FrameManager struct {
 	fallbackWG      sync.WaitGroup
 
 	idleStopDelay time.Duration
+	afterFunc     func(time.Duration, func()) stopTimer
 	captureStarts int64
 
 	consecutiveCaptureFailures int64
 	captureFailureTotal        int64
+}
+
+type stopTimer interface {
+	Stop() bool
 }
 
 // cleanupRequest represents a pending cleanup task
@@ -112,6 +117,17 @@ func NewFrameManager(cam camera.Camera, cfg *config.Config) *FrameManager {
 }
 
 func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.Duration) *FrameManager {
+	return newFrameManagerWithAfterFunc(cam, cfg, idleStopDelay, func(delay time.Duration, callback func()) stopTimer {
+		return time.AfterFunc(delay, callback)
+	})
+}
+
+func newFrameManagerWithAfterFunc(
+	cam camera.Camera,
+	cfg *config.Config,
+	idleStopDelay time.Duration,
+	afterFunc func(time.Duration, func()) stopTimer,
+) *FrameManager {
 	stats := camera.NewStreamStats()
 	bufferTargetFPS := cfg.TargetFPS
 	if bufferTargetFPS <= 0 {
@@ -132,6 +148,7 @@ func newFrameManager(cam camera.Camera, cfg *config.Config, idleStopDelay time.D
 		cleanupDone:   make(chan struct{}),
 		clientCount:   0,
 		idleStopDelay: idleStopDelay,
+		afterFunc:     afterFunc,
 		cleanupAccept: true,
 	}
 	fm.rotateStopCancelLocked()
@@ -384,9 +401,12 @@ func (fm *FrameManager) cleanupLoop() {
 				return
 			}
 
-			timer := time.NewTimer(req.delay)
+			expired := make(chan struct{}, 1)
+			timer := fm.afterFunc(req.delay, func() {
+				expired <- struct{}{}
+			})
 			select {
-			case <-timer.C:
+			case <-expired:
 				// Delay expired, proceed with stopping if conditions still met
 				if !fm.stopCaptureIfIdle(req.done) {
 					log.Printf("📊 Stop cancelled: capture already restarted or new client connected")
@@ -396,22 +416,12 @@ func (fm *FrameManager) cleanupLoop() {
 				continue
 
 			case <-req.stopCh:
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
+				timer.Stop()
 				// Stop was cancelled (new client connected)
 				log.Printf("📊 Stop cancelled: new client connected")
 
 			case <-fm.cleanupStop:
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
+				timer.Stop()
 				return
 			}
 		}
