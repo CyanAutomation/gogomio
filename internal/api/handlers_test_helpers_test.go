@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -41,18 +42,21 @@ func (c *stableFrameCamera) CaptureFrameWithContext(ctx context.Context) ([]byte
 
 // streamCapturingWriter captures the full stream response for validation.
 type streamCapturingWriter struct {
-	header       http.Header
-	statusCode   int
-	buf          []byte
-	mu           sync.Mutex
-	maxBytes     int64
-	bytesWritten int64
+	header        http.Header
+	statusCode    int
+	buf           []byte
+	mu            sync.Mutex
+	maxBytes      int64
+	bytesWritten  int64
+	firstBoundary chan struct{}
+	boundarySeen  bool
 }
 
 func newStreamCapturingWriter(maxBytes int64) *streamCapturingWriter {
 	return &streamCapturingWriter{
-		header:   make(http.Header),
-		maxBytes: maxBytes,
+		header:        make(http.Header),
+		maxBytes:      maxBytes,
+		firstBoundary: make(chan struct{}),
 	}
 }
 
@@ -75,6 +79,10 @@ func (w *streamCapturingWriter) Write(p []byte) (int, error) {
 
 	w.buf = append(w.buf, p...)
 	w.bytesWritten += int64(len(p))
+	if !w.boundarySeen && strings.Contains(string(w.buf), "--frame\r\n") {
+		w.boundarySeen = true
+		close(w.firstBoundary)
+	}
 	return len(p), nil
 }
 
@@ -108,4 +116,10 @@ func (w *streamCapturingWriter) GetBytesWritten() int64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.bytesWritten
+}
+
+// FirstBoundary is closed after the writer receives its first complete MJPEG
+// boundary, including when the marker is split across multiple writes.
+func (w *streamCapturingWriter) FirstBoundary() <-chan struct{} {
+	return w.firstBoundary
 }
