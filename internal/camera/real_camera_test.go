@@ -243,11 +243,17 @@ type waitCommandProcess struct {
 }
 
 func (p waitCommandProcess) Wait(cmd *exec.Cmd) error { return p.waitFn(cmd) }
-func (p waitCommandProcess) Kill(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
+
+func TestRealCommandProcessUnstartedCommand(t *testing.T) {
+	process := realCommandProcess{}
+	cmd := exec.Command("unused")
+
+	if err := process.Signal(cmd, os.Interrupt); err != nil {
+		t.Fatalf("Signal() error = %v, want nil", err)
 	}
-	return p.realCommandProcess.Kill(cmd)
+	if err := process.Kill(cmd); err != nil {
+		t.Fatalf("Kill() error = %v, want nil", err)
+	}
 }
 
 func newFakeCommandProcess() *fakeCommandProcess {
