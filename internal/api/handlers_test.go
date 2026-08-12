@@ -814,28 +814,44 @@ func TestRateLimitMiddlewareAcceptsForwardedIPFromTrustedProxy(t *testing.T) {
 
 func TestRateLimiterEvictsStaleEntries(t *testing.T) {
 	window := 20 * time.Millisecond
-	limiter := NewRateLimiter(2, window)
+	now := time.Date(2026, time.August, 12, 12, 0, 0, 0, time.UTC)
+	limiter := newRateLimiterWithClock(2, window, func() time.Time { return now })
+	middleware := rateLimitMiddleware(limiter, nil)
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
 
 	const staleIP = "198.51.100.77"
-	if !limiter.Allow(staleIP) {
-		t.Fatalf("expected first request to be allowed")
+	request := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+		req.RemoteAddr = staleIP + ":1234"
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w.Code
 	}
 
-	time.Sleep(4 * window)
-
-	if !limiter.Allow("203.0.113.10") {
-		t.Fatalf("expected trigger request to be allowed")
+	if got := request(); got != http.StatusOK {
+		t.Fatalf("first request status: got %d, want %d", got, http.StatusOK)
+	}
+	if got := request(); got != http.StatusOK {
+		t.Fatalf("second request status: got %d, want %d", got, http.StatusOK)
+	}
+	if got := request(); got != http.StatusTooManyRequests {
+		t.Fatalf("third request status: got %d, want %d", got, http.StatusTooManyRequests)
 	}
 
-	for i := 0; i < 8; i++ {
-		limiter.Allow("203.0.113.11")
-	}
+	now = now.Add(4 * window)
+	limiter.cleanupStale()
 
 	limiter.mu.Lock()
 	_, exists := limiter.requests[staleIP]
 	limiter.mu.Unlock()
 	if exists {
 		t.Fatalf("expected stale IP entry %q to be evicted", staleIP)
+	}
+
+	if got := request(); got != http.StatusOK {
+		t.Fatalf("request after stale cleanup status: got %d, want %d", got, http.StatusOK)
 	}
 }
 
