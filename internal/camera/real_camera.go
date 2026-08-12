@@ -48,6 +48,25 @@ const (
 	lifecycleStopping
 )
 
+// processOperations isolates the process lifecycle operations used by
+// RealCamera. The indirection keeps lifecycle tests independent of the host's
+// process table while production continues to use os/exec.
+type processOperations interface {
+	Start(*exec.Cmd) error
+	Wait(*exec.Cmd) error
+	Signal(*exec.Cmd, os.Signal) error
+	Kill(*exec.Cmd) error
+}
+
+type execProcessOperations struct{}
+
+func (execProcessOperations) Start(cmd *exec.Cmd) error { return cmd.Start() }
+func (execProcessOperations) Wait(cmd *exec.Cmd) error  { return cmd.Wait() }
+func (execProcessOperations) Signal(cmd *exec.Cmd, signal os.Signal) error {
+	return cmd.Process.Signal(signal)
+}
+func (execProcessOperations) Kill(cmd *exec.Cmd) error { return cmd.Process.Kill() }
+
 // RealCamera captures frames from a Raspberry Pi CSI camera via a long-lived
 // process that emits an MJPEG byte stream.
 type RealCamera struct {
@@ -97,7 +116,7 @@ type RealCamera struct {
 	launchFn       func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 	startCommandFn func(*exec.Cmd, string) (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error)
 	runCmdFn       func(*exec.Cmd) ([]byte, error)
-	waitFn         func(*exec.Cmd) error
+	processOps     processOperations
 	stopWaitAfter  func(time.Duration) <-chan time.Time
 	logger         *log.Logger
 	healthTicks    <-chan time.Time
@@ -149,9 +168,7 @@ func NewRealCamera() *RealCamera {
 	rc.runCmdFn = func(cmd *exec.Cmd) ([]byte, error) {
 		return cmd.CombinedOutput()
 	}
-	rc.waitFn = func(cmd *exec.Cmd) error {
-		return cmd.Wait()
-	}
+	rc.processOps = execProcessOperations{}
 	rc.stopWaitAfter = time.After
 	rc.logger = log.Default()
 	return rc
@@ -254,7 +271,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Lock()
 	if rc.lifecycle != lifecycleStarting || rc.startupID != startupID {
 		rc.captureMutex.Unlock()
-		closeLaunchedProcess(cmd, stdin, stdout, stderr, rc.waitFn)
+		closeLaunchedProcess(cmd, stdin, stdout, stderr, rc.processOps)
 		failStartup()
 		return errStartupCanceled
 	}
@@ -270,7 +287,7 @@ func (rc *RealCamera) Start(width, height, fps, jpegQuality int) error {
 	rc.captureMutex.Unlock()
 
 	go func(cmd *exec.Cmd, done chan<- error) {
-		done <- rc.waitFn(cmd)
+		done <- rc.processOps.Wait(cmd)
 	}(cmd, rc.procWaitDone)
 
 	go rc.readMJPEGStream()
@@ -319,7 +336,7 @@ func (rc *RealCamera) startupCurrent(id uint64) bool {
 	return rc.lifecycle == lifecycleStarting && rc.startupID == id
 }
 
-func closeLaunchedProcess(cmd *exec.Cmd, stdin io.WriteCloser, stdout, stderr io.ReadCloser, waitFn func(*exec.Cmd) error) {
+func closeLaunchedProcess(cmd *exec.Cmd, stdin io.WriteCloser, stdout, stderr io.ReadCloser, processOps processOperations) {
 	if stdin != nil {
 		_ = stdin.Close()
 	}
@@ -330,8 +347,8 @@ func closeLaunchedProcess(cmd *exec.Cmd, stdin io.WriteCloser, stdout, stderr io
 		_ = stderr.Close()
 	}
 	if cmd != nil && cmd.Process != nil {
-		_ = cmd.Process.Kill()
-		_ = waitFn(cmd)
+		_ = processOps.Kill(cmd)
+		_ = processOps.Wait(cmd)
 	}
 }
 
@@ -522,7 +539,7 @@ func (rc *RealCamera) Stop() error {
 	if proc != nil {
 		if proc.Process != nil {
 			log.Printf("🛑 Killing process PID: %d", proc.Process.Pid)
-			_ = proc.Process.Kill()
+			_ = rc.processOps.Kill(proc)
 		}
 		if procWaitDone != nil {
 			select {
@@ -800,7 +817,7 @@ func (rc *RealCamera) startCommand(cmd *exec.Cmd, backendName string) (*exec.Cmd
 		log.Printf("❌ %s: failed creating stdin pipe: %v", backendName, err)
 		return nil, nil, nil, nil, fmt.Errorf("failed creating stdin pipe: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
+	if err := rc.processOps.Start(cmd); err != nil {
 		log.Printf("❌ %s: failed to start capture process: %v", backendName, err)
 		return nil, nil, nil, nil, fmt.Errorf("failed to start capture process: %w", err)
 	}
