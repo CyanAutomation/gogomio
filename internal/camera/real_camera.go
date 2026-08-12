@@ -56,9 +56,17 @@ type realCommandProcess struct{}
 func (realCommandProcess) Start(cmd *exec.Cmd) error { return cmd.Start() }
 func (realCommandProcess) Wait(cmd *exec.Cmd) error  { return cmd.Wait() }
 func (realCommandProcess) Signal(cmd *exec.Cmd, signal os.Signal) error {
+	if cmd.Process == nil {
+		return nil
+	}
 	return cmd.Process.Signal(signal)
 }
-func (realCommandProcess) Kill(cmd *exec.Cmd) error { return cmd.Process.Kill() }
+func (realCommandProcess) Kill(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	return cmd.Process.Kill()
+}
 
 const (
 	lifecycleStopped lifecycleState = iota
