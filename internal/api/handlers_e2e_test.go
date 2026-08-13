@@ -302,12 +302,30 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	// so a regression cannot deadlock the suite.
 	deadlockGuard, stopDeadlockGuard := context.WithTimeout(context.Background(), 2*time.Second)
 	defer stopDeadlockGuard()
+	admissionPoll := time.NewTicker(time.Millisecond)
+	defer admissionPoll.Stop()
+	admitted := false
+	for !admitted {
+		select {
+		case <-admissionPoll.C:
+			admitted = atomic.LoadInt64(&fm.clientCount) > connectionCountBefore
+		case <-done:
+			statusCode := writer.GetStatusCode()
+			if statusCode == http.StatusTooManyRequests {
+				t.Fatalf("stream request was not admitted: got status %d (check MaxStreamConnections)", statusCode)
+			}
+			t.Fatalf("stream handler exited before request admission with status %d", statusCode)
+		case <-deadlockGuard.Done():
+			t.Fatal("timed out waiting for stream request admission")
+		}
+	}
+	if statusCode := writer.GetStatusCode(); statusCode == http.StatusTooManyRequests {
+		t.Fatalf("stream request was not admitted: got status %d (check MaxStreamConnections)", statusCode)
+	}
+
 	select {
 	case <-writer.FirstBoundary():
 	case <-deadlockGuard.Done():
-		if statusCode := writer.GetStatusCode(); statusCode == http.StatusTooManyRequests {
-			t.Fatalf("stream request rejected with status %d", statusCode)
-		}
 		t.Fatal("timed out waiting for the first complete MJPEG boundary")
 	}
 
