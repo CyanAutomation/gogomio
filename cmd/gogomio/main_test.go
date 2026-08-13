@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -14,10 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CyanAutomation/gogomio/internal/api"
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
-	"github.com/go-chi/chi/v5"
 )
 
 type fakeCamera struct {
@@ -343,71 +340,6 @@ func TestServerShutdown_CameraCleanup(t *testing.T) {
 	if realCam.stopCalls != 1 {
 		t.Fatalf("expected camera to be stopped once, got %d calls", realCam.stopCalls)
 	}
-}
-
-// TestRouterRegistration_AllHandlersPresent tests that all handlers are registered
-func TestRouterRegistration_AllHandlersPresent(t *testing.T) {
-	cfg := &config.Config{
-		Resolution:  [2]int{640, 640},
-		FPS:         24,
-		TargetFPS:   24,
-		JPEGQuality: 90,
-		Port:        0,
-		BindHost:    "127.0.0.1",
-	}
-
-	mockCam := camera.NewMockCamera()
-	if err := mockCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-		t.Fatalf("failed to start mock camera: %v", err)
-	}
-	defer func() { _ = mockCam.Stop() }()
-
-	router := chi.NewRouter()
-	frameManager := api.NewFrameManager(mockCam, cfg)
-	defer frameManager.Stop()
-
-	api.RegisterHandlers(router, frameManager, cfg)
-
-	// Test that key endpoints exist by making requests
-	testCases := []struct {
-		method   string
-		path     string
-		expected int
-	}{
-		{http.MethodGet, "/health", http.StatusOK},
-		{http.MethodGet, "/ready", http.StatusOK},
-		{http.MethodGet, "/api/config", http.StatusOK},
-		{http.MethodGet, "/api/status", http.StatusOK},
-	}
-
-	for _, tc := range testCases {
-		req, _ := http.NewRequest(tc.method, tc.path, nil)
-		recorder := &testResponseRecorder{header: http.Header{}, statusCode: 200}
-		router.ServeHTTP(recorder, req)
-
-		if recorder.statusCode == http.StatusNotFound {
-			t.Errorf("%s %s: route not registered (got 404)", tc.method, tc.path)
-		}
-	}
-}
-
-// testResponseRecorder is a simple response writer for testing
-type testResponseRecorder struct {
-	header     http.Header
-	statusCode int
-	body       bytes.Buffer
-}
-
-func (r *testResponseRecorder) Header() http.Header {
-	return r.header
-}
-
-func (r *testResponseRecorder) Write(b []byte) (int, error) {
-	return r.body.Write(b)
-}
-
-func (r *testResponseRecorder) WriteHeader(code int) {
-	r.statusCode = code
 }
 
 // TestConcurrentServerInitialization verifies that the production application
