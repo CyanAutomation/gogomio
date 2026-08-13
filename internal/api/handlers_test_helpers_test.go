@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +51,10 @@ type streamCapturingWriter struct {
 	maxBytes      int64
 	bytesWritten  int64
 	firstBoundary chan struct{}
+	firstFrame    chan []byte
 	boundaryOnce  sync.Once
 	boundarySeen  bool
+	frameSeen     bool
 }
 
 func newStreamCapturingWriter(maxBytes int64) *streamCapturingWriter {
@@ -58,6 +62,7 @@ func newStreamCapturingWriter(maxBytes int64) *streamCapturingWriter {
 		header:        make(http.Header),
 		maxBytes:      maxBytes,
 		firstBoundary: make(chan struct{}),
+		firstFrame:    make(chan []byte, 1),
 	}
 }
 
@@ -85,6 +90,31 @@ func (w *streamCapturingWriter) Write(p []byte) (int, error) {
 			w.boundarySeen = true
 			close(w.firstBoundary)
 		})
+	}
+	if !w.frameSeen {
+		boundaryStart := bytes.Index(w.buf, []byte("--frame\r\n"))
+		if boundaryStart >= 0 {
+			headerStart := boundaryStart + len("--frame\r\n")
+			headerEndOffset := bytes.Index(w.buf[headerStart:], []byte("\r\n\r\n"))
+			if headerEndOffset >= 0 {
+				headerEnd := headerStart + headerEndOffset
+				for _, line := range strings.Split(string(w.buf[headerStart:headerEnd]), "\r\n") {
+					const prefix = "Content-Length: "
+					if !strings.HasPrefix(line, prefix) {
+						continue
+					}
+					frameLength, err := strconv.Atoi(strings.TrimPrefix(line, prefix))
+					frameStart := headerEnd + len("\r\n\r\n")
+					frameEnd := frameStart + frameLength
+					if err == nil && frameLength >= 0 && len(w.buf) >= frameEnd+len("\r\n") {
+						w.frameSeen = true
+						w.firstFrame <- append([]byte(nil), w.buf[frameStart:frameEnd]...)
+						close(w.firstFrame)
+					}
+					break
+				}
+			}
+		}
 	}
 	return len(p), nil
 }
@@ -125,4 +155,10 @@ func (w *streamCapturingWriter) GetBytesWritten() int64 {
 // boundary, including when the marker is split across multiple writes.
 func (w *streamCapturingWriter) FirstBoundary() <-chan struct{} {
 	return w.firstBoundary
+}
+
+// FirstFrame yields the first complete multipart frame after its declared body
+// and trailing CRLF have been written.
+func (w *streamCapturingWriter) FirstFrame() <-chan []byte {
+	return w.firstFrame
 }

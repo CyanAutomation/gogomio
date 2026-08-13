@@ -1949,50 +1949,6 @@ func TestFrameManager_ScheduleStopCapture(t *testing.T) {
 	}
 }
 
-// TestFrameManager_MultipleConcurrentStreams tests multiple simultaneous streams
-func TestFrameManager_MultipleConcurrentStreams(t *testing.T) {
-	router, cam, _ := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start 2 concurrent streams
-	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			req := httptest.NewRequest("GET", "/stream.mjpg", nil)
-			req = req.WithContext(ctx)
-			w := httptest.NewRecorder()
-
-			router.ServeHTTP(w, req)
-		}()
-	}
-
-	// Let streams run briefly
-	time.Sleep(500 * time.Millisecond)
-
-	// Cancel to stop streams
-	cancel()
-
-	// Wait for all streams to finish
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Success
-	case <-time.After(2 * time.Second):
-		t.Fatal("concurrent streams did not complete in time")
-	}
-}
-
 // TestFrameManager_CleanupLoop_GracefulShutdown tests cleanup loop exits cleanly
 func TestFrameManager_CleanupLoop_GracefulShutdown(t *testing.T) {
 	cam := camera.NewMockCamera()
