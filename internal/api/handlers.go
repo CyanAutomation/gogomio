@@ -34,16 +34,19 @@ type FrameManager struct {
 	captureStarted  bool
 	clientCount     int64 // atomic counter for connected clients
 	clientImbalance int64 // atomic counter for decrement calls when clientCount is already 0
+	streamSession   context.Context
+	streamCancel    context.CancelFunc
 
 	// captureDoneCh signals the current capture loop to stop; rotated per capture cycle.
 	doneChan chan struct{}
 	// shutdownCh signals manager-wide shutdown and is closed exactly once in Stop().
-	shutdownCh    chan struct{}
-	stopChancel   <-chan struct{} // Channel to cancel pending stop
-	stopCancelFn  context.CancelFunc
-	captureCtx    context.Context
-	captureCancel context.CancelFunc
-	captureWG     sync.WaitGroup
+	shutdownCh      chan struct{}
+	stopChancel     <-chan struct{} // Channel to cancel pending stop
+	stopCancelFn    context.CancelFunc
+	captureCtx      context.Context
+	captureCancel   context.CancelFunc
+	captureLoopDone chan struct{}
+	captureWG       sync.WaitGroup
 
 	// Cleanup infrastructure for idle timeout
 	cleanupCh       chan cleanupRequest
@@ -152,6 +155,7 @@ func newFrameManagerWithAfterFunc(
 		cleanupAccept: true,
 	}
 	fm.rotateStopCancelLocked()
+	fm.rotateStreamSessionLocked()
 	fm.cleanupSendCond = sync.NewCond(&fm.cleanupSendMu)
 
 	// Start background cleanup goroutine
@@ -168,14 +172,27 @@ func (fm *FrameManager) IncrementClients() {
 	}
 	new := atomic.AddInt64(&fm.clientCount, 1)
 	log.Printf("🔗 Client count incremented to: %d", new)
-	if new == 1 {
-		fm.captureMu.Lock()
+	fm.captureMu.Lock()
+	shouldStart := new == 1 || !fm.captureStarted
+	if shouldStart {
 		// Cancel any pending stop and rotate to a fresh cancellation signal.
 		fm.rotateStopCancelLocked()
-		fm.captureMu.Unlock()
+	}
+	fm.captureMu.Unlock()
+	if shouldStart {
 		log.Printf("🎬 Starting capture (first client)")
 		fm.startCapture()
 	}
+}
+
+func (fm *FrameManager) rotateStreamSessionLocked() {
+	fm.streamSession, fm.streamCancel = context.WithCancel(context.Background())
+}
+
+func (fm *FrameManager) currentStreamSession() context.Context {
+	fm.captureMu.Lock()
+	defer fm.captureMu.Unlock()
+	return fm.streamSession
 }
 
 func (fm *FrameManager) rotateStopCancelLocked() {
@@ -217,12 +234,12 @@ func (fm *FrameManager) startCapture() {
 	fm.doneChan = done
 	captureCtx, captureCancel := context.WithCancel(context.Background())
 	fm.captureCtx, fm.captureCancel = captureCtx, captureCancel
-	// Create a new stop-cancel signal for this capture cycle.
-	fm.rotateStopCancelLocked()
+	loopDone := make(chan struct{})
+	fm.captureLoopDone = loopDone
 	atomic.AddInt64(&fm.captureStarts, 1)
 	fm.captureWG.Add(1)
 	fm.captureMu.Unlock()
-	go fm.captureLoop(done, captureCtx)
+	go fm.captureLoop(done, captureCtx, loopDone)
 }
 
 func (fm *FrameManager) scheduleStopCapture() {
@@ -453,10 +470,41 @@ func (fm *FrameManager) stopCapture() {
 	log.Printf("✓ stopCapture: done channel closed")
 }
 
+// stopStreamSession disconnects handlers belonging to the current stream
+// session, then immediately opens a new session for later connections. Capture
+// is detached while holding captureMu so a new session can safely restart it.
+func (fm *FrameManager) stopStreamSession() {
+	fm.captureMu.Lock()
+	if fm.streamCancel != nil {
+		fm.streamCancel()
+	}
+	fm.rotateStreamSessionLocked()
+
+	wasStarted := fm.captureStarted
+	fm.captureStarted = false
+	done := fm.doneChan
+	loopDone := fm.captureLoopDone
+	cancel := fm.captureCancel
+	fm.captureCancel = nil
+	fm.captureCtx = nil
+	fm.captureMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if wasStarted && done != nil {
+		close(done)
+	}
+	if wasStarted && loopDone != nil {
+		<-loopDone
+	}
+}
+
 // captureLoop continuously captures frames from the camera and writes to the frame buffer.
-func (fm *FrameManager) captureLoop(done <-chan struct{}, captureCtx context.Context) {
+func (fm *FrameManager) captureLoop(done <-chan struct{}, captureCtx context.Context, loopDone chan<- struct{}) {
 	log.Printf("🎬 Capture loop STARTED")
 	defer fm.captureWG.Done()
+	defer close(loopDone)
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("❌ PANIC in captureLoop: %v", r)
@@ -610,6 +658,14 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 	}
 	defer fm.connTracker.Decrement()
 
+	// Bind this handler to the current stream session before counting it. The
+	// stop endpoint cancels this context without rewriting shared counters.
+	session := fm.currentStreamSession()
+	ctx, cancel := context.WithCancel(r.Context())
+	stopSessionCancel := context.AfterFunc(session, cancel)
+	defer stopSessionCancel()
+	defer cancel()
+
 	// Track client lifecycle for lazy capture
 	fm.IncrementClients()
 	defer fm.DecrementClients()
@@ -632,7 +688,6 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 	frameTimeout := fm.cfg.FrameTimeout()
 	lastSeenSeq := fm.frameBuffer.CurrentSequence()
-	ctx := r.Context()
 	contentLengthScratch := make([]byte, 0, 20)
 
 	framesSent := 0
@@ -1551,11 +1606,8 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	log.Printf("🛑 API: Stop stream requested by client")
 
-	// Use the proper stopCapture method to cleanly shut down
-	fm.stopCapture()
-
-	// Also reset client count to ensure cleanup
-	atomic.StoreInt64(&fm.clientCount, 0)
+	// Cancel the current session and stop its capture without changing client counts.
+	fm.stopStreamSession()
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	_ = json.NewEncoder(w).Encode(map[string]string{
