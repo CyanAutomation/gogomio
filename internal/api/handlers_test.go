@@ -34,6 +34,9 @@ func testDuration(d time.Duration) time.Duration {
 type captureLoopCountingCamera struct {
 	activeCaptures int64
 	maxActive      int64
+	captureBegan   chan struct{}
+	releaseCapture chan struct{}
+	beginOnce      sync.Once
 }
 
 func (c *captureLoopCountingCamera) Start(_, _, _, _ int) error { return nil }
@@ -61,6 +64,16 @@ func (c *captureLoopCountingCamera) CaptureFrameWithContext(ctx context.Context)
 		if atomic.CompareAndSwapInt64(&c.maxActive, currentMax, active) {
 			break
 		}
+	}
+
+	if c.captureBegan != nil {
+		c.beginOnce.Do(func() { close(c.captureBegan) })
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-c.releaseCapture:
+		}
+		return []byte{0xFF, 0xD8, 0xFF, 0xD9}, nil
 	}
 
 	timer := time.NewTimer(4 * time.Millisecond)
@@ -1020,28 +1033,52 @@ func TestNewRateLimiterClampsNonPositiveWindow(t *testing.T) {
 
 func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
-	cam := &captureLoopCountingCamera{}
+	cam := &captureLoopCountingCamera{
+		captureBegan:   make(chan struct{}),
+		releaseCapture: make(chan struct{}),
+	}
 	fm := newFrameManager(cam, cfg, 40*time.Millisecond)
 	t.Cleanup(fm.Stop)
 
-	fm.startCapture()
-
-	startDone := make(chan struct{})
+	startBarrier := make(chan struct{})
+	startDone := make(chan struct{}, 10)
 	for i := 0; i < 10; i++ {
 		go func() {
+			<-startBarrier
 			fm.startCapture()
 			startDone <- struct{}{}
 		}()
 	}
-	for i := 0; i < 10; i++ {
-		<-startDone
+	close(startBarrier)
+
+	select {
+	case <-cam.captureBegan:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("capture loop did not begin")
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	for i := 0; i < 10; i++ {
+		select {
+		case <-startDone:
+		case <-time.After(testDuration(testConditionTimeout)):
+			t.Fatalf("startCapture call %d did not return", i+1)
+		}
+	}
+
+	if max := atomic.LoadInt64(&cam.maxActive); max != 1 {
+		t.Fatalf("expected exactly one active capture loop, saw %d", max)
+	}
+
+	fm.captureMu.Lock()
+	loopDone := fm.captureLoopDone
+	fm.captureMu.Unlock()
+	close(cam.releaseCapture)
 	fm.stopCapture()
 
-	if max := atomic.LoadInt64(&cam.maxActive); max > 1 {
-		t.Fatalf("expected at most one active capture loop, saw %d", max)
+	select {
+	case <-loopDone:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("capture loop did not exit")
 	}
 }
 
