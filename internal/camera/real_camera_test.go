@@ -244,15 +244,48 @@ type waitCommandProcess struct {
 
 func (p waitCommandProcess) Wait(cmd *exec.Cmd) error { return p.waitFn(cmd) }
 
-func TestRealCommandProcessUnstartedCommand(t *testing.T) {
-	process := realCommandProcess{}
-	cmd := exec.Command("unused")
-
-	if err := process.Signal(cmd, os.Interrupt); err != nil {
-		t.Fatalf("Signal() error = %v, want nil", err)
+func TestRealCameraStopAfterUnstartedCommandLaunchFailure(t *testing.T) {
+	rc := NewRealCamera()
+	rc.devicePath = "/dev/null"
+	startupFailure := errors.New("backend failed before command start")
+	var createdCommand *exec.Cmd
+	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
+		createdCommand = exec.Command("unused")
+		return createdCommand, nil, nil, nil, startupFailure
 	}
-	if err := process.Kill(cmd); err != nil {
-		t.Fatalf("Kill() error = %v, want nil", err)
+
+	startErr := rc.Start(640, 480, 24, 80)
+	if !errors.Is(startErr, startupFailure) {
+		t.Fatalf("Start() error = %v, want startup failure %v", startErr, startupFailure)
+	}
+	if createdCommand == nil {
+		t.Fatal("launch did not create a command")
+	}
+	if createdCommand.Process != nil {
+		t.Fatal("launch failure command was unexpectedly started")
+	}
+	if rc.IsReady() {
+		t.Fatal("camera should not be ready after startup failure")
+	}
+
+	for call := 1; call <= 2; call++ {
+		stopDone := make(chan error, 1)
+		go func() { stopDone <- rc.Stop() }()
+		select {
+		case err := <-stopDone:
+			if err != nil {
+				t.Fatalf("Stop() call %d error = %v, want nil", call, err)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("Stop() call %d did not return promptly", call)
+		}
+		if rc.IsReady() {
+			t.Fatalf("camera should not be ready after Stop() call %d", call)
+		}
+	}
+
+	if !errors.Is(startErr, startupFailure) {
+		t.Fatalf("startup error after Stop() = %v, want original failure %v", startErr, startupFailure)
 	}
 }
 
