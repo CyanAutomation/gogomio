@@ -253,6 +253,91 @@ func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config
 	return router, mockCam, cfg
 }
 
+func TestRegisteredEndpointResponses(t *testing.T) {
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+
+	router := chi.NewRouter()
+	RegisterHandlers(router, fm, cfg)
+
+	tests := []struct {
+		path       string
+		wantStatus int
+		assertBody func(t *testing.T, body map[string]interface{})
+	}{
+		{
+			path:       "/health",
+			wantStatus: http.StatusOK,
+			assertBody: func(t *testing.T, body map[string]interface{}) {
+				t.Helper()
+				if body["status"] != "ok" || body["camera_ready"] != true {
+					t.Fatalf("expected healthy, ready response, got %v", body)
+				}
+			},
+		},
+		{
+			path:       "/ready",
+			wantStatus: http.StatusOK,
+			assertBody: func(t *testing.T, body map[string]interface{}) {
+				t.Helper()
+				if body["status"] != "ready" {
+					t.Fatalf("expected ready response, got %v", body)
+				}
+			},
+		},
+		{
+			path:       "/api/config",
+			wantStatus: http.StatusOK,
+			assertBody: func(t *testing.T, body map[string]interface{}) {
+				t.Helper()
+				resolution, ok := body["resolution"].([]interface{})
+				if !ok || len(resolution) != 2 || resolution[0] != float64(640) || resolution[1] != float64(480) {
+					t.Fatalf("expected configured resolution, got %v", body["resolution"])
+				}
+			},
+		},
+		{
+			path:       "/api/status",
+			wantStatus: http.StatusOK,
+			assertBody: func(t *testing.T, body map[string]interface{}) {
+				t.Helper()
+				if body["status"] != "ok" || body["camera_ready"] != true {
+					t.Fatalf("expected healthy, ready status response, got %v", body)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			response := httptest.NewRecorder()
+
+			router.ServeHTTP(response, request)
+
+			if response.Code != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, response.Code)
+			}
+			if contentType := response.Header().Get("Content-Type"); contentType != ContentTypeJSON {
+				t.Fatalf("expected content type %q, got %q", ContentTypeJSON, contentType)
+			}
+
+			var body map[string]interface{}
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatalf("failed to parse JSON response: %v", err)
+			}
+			tt.assertBody(t, body)
+		})
+	}
+}
+
 // TestHealthEndpoint tests the /health endpoint
 func TestHealthEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
