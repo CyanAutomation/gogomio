@@ -214,38 +214,45 @@ func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 	}
 }
 
-// TestFrameBufferWriteWithNilStats ensures NewFrameBuffer initializes stats
-// when nil is provided and writes behave normally.
+// TestFrameBufferWriteWithNilStats ensures writes and reads behave normally
+// when NewFrameBuffer is asked to create its own stats collector.
 func TestFrameBufferWriteWithNilStats(t *testing.T) {
-	targetFPS := 0
-	fb := NewFrameBuffer(nil, targetFPS)
+	fb := NewFrameBuffer(nil, 0)
+	frame1 := []byte{0xAA, 0x01}
+	frame2 := []byte{0xBB, 0x02, 0x03}
 
-	if fb.stats == nil {
-		t.Fatal("stats is nil, want initialized StreamStats")
-	}
-
-	frame1 := []byte{0xAA}
-	frame2 := []byte{0xBB}
-
-	if _, err := fb.Write(frame1); err != nil {
+	n, err := fb.Write(frame1)
+	if err != nil {
 		t.Fatalf("first Write returned error: %v", err)
 	}
-	if _, err := fb.Write(frame2); err != nil {
+	if n != len(frame1) {
+		t.Fatalf("first Write returned %d bytes, want %d", n, len(frame1))
+	}
+	if gotSeq := fb.CurrentSequence(); gotSeq != 1 {
+		t.Fatalf("sequence after first Write is %d, want 1", gotSeq)
+	}
+	gotFrame, firstSeq := fb.WaitFrame(0, 0)
+	if !bytes.Equal(gotFrame, frame1) || firstSeq != 1 {
+		t.Fatalf("first WaitFrame returned frame %v at sequence %d, want %v at sequence 1", gotFrame, firstSeq, frame1)
+	}
+
+	n, err = fb.Write(frame2)
+	if err != nil {
 		t.Fatalf("second Write returned error: %v", err)
 	}
-
-	if gotSeq := fb.CurrentSequence(); gotSeq != 2 {
-		t.Fatalf("sequence is %d, want 2", gotSeq)
+	if n != len(frame2) {
+		t.Fatalf("second Write returned %d bytes, want %d", n, len(frame2))
+	}
+	if gotSeq := fb.CurrentSequence(); gotSeq != firstSeq+1 {
+		t.Fatalf("sequence after second Write is %d, want %d", gotSeq, firstSeq+1)
 	}
 
-	gotFrame := fb.GetFrame()
-	if !bytes.Equal(gotFrame, frame2) {
-		t.Fatalf("latest frame is %v, want %v", gotFrame, frame2)
+	if latest := fb.GetFrame(); !bytes.Equal(latest, frame2) {
+		t.Fatalf("latest frame is %v, want %v", latest, frame2)
 	}
-
-	count, _, _ := fb.stats.Snapshot()
-	if count != 2 {
-		t.Fatalf("stats frame count is %d, want 2", count)
+	gotFrame, secondSeq := fb.WaitFrame(0, firstSeq)
+	if !bytes.Equal(gotFrame, frame2) || secondSeq != 2 {
+		t.Fatalf("second WaitFrame returned frame %v at sequence %d, want %v at sequence 2", gotFrame, secondSeq, frame2)
 	}
 }
 
