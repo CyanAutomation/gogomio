@@ -31,8 +31,8 @@ type FrameBuffer struct {
 	waiterRegisteredHook func()
 }
 
-// NewFrameBuffer creates a new FrameBuffer.
-// targetFPS <= 0 means no throttling.
+// NewFrameBuffer creates a new FrameBuffer. If stats is nil, the buffer creates
+// its own StreamStats instance. targetFPS <= 0 means no throttling.
 func NewFrameBuffer(stats *StreamStats, targetFPS int) *FrameBuffer {
 	if stats == nil {
 		stats = NewStreamStats()
