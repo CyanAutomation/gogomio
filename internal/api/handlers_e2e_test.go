@@ -269,13 +269,15 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	// Create a camera that tracks active captures
 	cam := &captureLoopCountingCamera{}
 
-	fm := NewFrameManager(cam, &config.Config{
-		TargetFPS: 20,
-	})
+	testConfig := &config.Config{
+		TargetFPS:            20,
+		MaxStreamConnections: 1,
+	}
+	fm := NewFrameManager(cam, testConfig)
 	defer fm.Stop()
 
 	router := chi.NewRouter()
-	RegisterHandlers(router, fm, &config.Config{})
+	RegisterHandlers(router, fm, testConfig)
 
 	// Simulate a disconnecting client using a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -303,6 +305,9 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	select {
 	case <-writer.FirstBoundary():
 	case <-deadlockGuard.Done():
+		if statusCode := writer.GetStatusCode(); statusCode == http.StatusTooManyRequests {
+			t.Fatalf("stream request rejected with status %d", statusCode)
+		}
 		t.Fatal("timed out waiting for the first complete MJPEG boundary")
 	}
 
