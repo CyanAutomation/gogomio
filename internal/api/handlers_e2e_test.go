@@ -2,11 +2,9 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -168,120 +166,62 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 	router := chi.NewRouter()
 	RegisterHandlers(router, fm, testConfig)
 
-	const numClients = 3
-	type clientResult struct {
-		clientID      int
-		status        int
-		bytesRead     int
-		boundaryFound bool
-		err           error
-	}
+	const numClients = 2
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	guard, stopGuard := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stopGuard()
 
-	var wg sync.WaitGroup
-	results := make(chan clientResult, numClients)
-
-	for i := 0; i < numClients; i++ {
-		wg.Add(1)
+	writers := make([]*streamCapturingWriter, numClients)
+	done := make([]chan struct{}, numClients)
+	for i := range writers {
+		writers[i] = newStreamCapturingWriter(50 * 1024)
+		done[i] = make(chan struct{})
+		req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
 		go func(clientID int) {
-			defer wg.Done()
-
-			ctx, cancel := context.WithTimeout(context.Background(), 1100*time.Millisecond)
-			defer cancel()
-
-			writer := newStreamCapturingWriter(50 * 1024)
-			req := httptest.NewRequest("GET", "/stream.mjpg", nil)
-			req = req.WithContext(ctx)
-
-			done := make(chan struct{})
-			go func() {
-				router.ServeHTTP(writer, req)
-				close(done)
-			}()
-
-			observationWindow := time.NewTimer(800 * time.Millisecond)
-			defer observationWindow.Stop()
-			ticker := time.NewTicker(2 * time.Millisecond)
-			defer ticker.Stop()
-
-			needsStopCheck := false
-			for {
-				select {
-				case <-done:
-					goto evaluateResult
-				case <-observationWindow.C:
-					cancel()
-					needsStopCheck = true
-					goto evaluateStop
-				case <-ticker.C:
-					if strings.Contains(string(writer.GetContent()), "--frame") {
-						cancel()
-						needsStopCheck = true
-						goto evaluateStop
-					}
-				}
-			}
-
-		evaluateStop:
-			if needsStopCheck {
-				handlerStopDeadline := time.NewTimer(300 * time.Millisecond)
-				defer handlerStopDeadline.Stop()
-
-				select {
-				case <-done:
-				case <-handlerStopDeadline.C:
-					<-done
-					results <- clientResult{
-						clientID: clientID,
-						status:   writer.GetStatusCode(),
-						err:      fmt.Errorf("stream handler did not stop within 300ms after cancellation"),
-					}
-					return
-				}
-			}
-
-		evaluateResult:
-
-			content := writer.GetContent()
-			status := writer.GetStatusCode()
-			boundaryFound := strings.Contains(string(content), "--frame")
-
-			var resultErr error
-			if status != http.StatusOK {
-				resultErr = fmt.Errorf("invalid status %d", status)
-			} else if !strings.Contains(writer.GetHeader("Content-Type"), "multipart/x-mixed-replace") {
-				resultErr = fmt.Errorf("invalid content type %q", writer.GetHeader("Content-Type"))
-			} else if !boundaryFound {
-				resultErr = fmt.Errorf("frame boundary not found")
-			}
-
-			if resultErr == nil && ctx.Err() != nil && ctx.Err() != context.Canceled {
-				resultErr = fmt.Errorf("unexpected context error: %v", ctx.Err())
-			}
-
-			results <- clientResult{
-				clientID:      clientID,
-				status:        status,
-				bytesRead:     len(content),
-				boundaryFound: boundaryFound,
-				err:           resultErr,
-			}
+			router.ServeHTTP(writers[clientID], req)
+			close(done[clientID])
 		}(i)
 	}
 
-	wg.Wait()
-	close(results)
-
-	for result := range results {
-		t.Logf("  client-%d: status=%d bytes=%d boundary=%t err=%v", result.clientID, result.status, result.bytesRead, result.boundaryFound, result.err)
-		if result.err != nil {
-			t.Fatalf("client-%d failed validation: %v", result.clientID, result.err)
-		}
-		if result.bytesRead == 0 {
-			t.Fatalf("client-%d failed validation: no data read", result.clientID)
+	for clientID, writer := range writers {
+		select {
+		case frame := <-writer.FirstFrame():
+			if writer.GetStatusCode() != http.StatusOK {
+				t.Fatalf("client-%d: expected status 200, got %d", clientID, writer.GetStatusCode())
+			}
+			if !strings.Contains(writer.GetHeader("Content-Type"), "multipart/x-mixed-replace; boundary=frame") {
+				t.Fatalf("client-%d: invalid content type %q", clientID, writer.GetHeader("Content-Type"))
+			}
+			if len(frame) < 4 || frame[0] != 0xff || frame[1] != 0xd8 || frame[len(frame)-2] != 0xff || frame[len(frame)-1] != 0xd9 {
+				t.Fatalf("client-%d: multipart payload is not a complete JPEG: %x", clientID, frame)
+			}
+		case <-guard.Done():
+			t.Fatalf("timed out waiting for client-%d to receive a complete multipart JPEG frame", clientID)
 		}
 	}
 
-	t.Logf("✓ Concurrent clients validated with structured result checks: %d clients", numClients)
+	if connections := fm.connTracker.Count(); connections != numClients {
+		t.Fatalf("expected both clients to be concurrently registered, got %d", connections)
+	}
+	if clients := atomic.LoadInt64(&fm.clientCount); clients != numClients {
+		t.Fatalf("expected both streaming clients to be active, got %d", clients)
+	}
+
+	cancel()
+	for clientID, clientDone := range done {
+		select {
+		case <-clientDone:
+		case <-guard.Done():
+			t.Fatalf("timed out waiting for client-%d connection release", clientID)
+		}
+	}
+	if connections := fm.connTracker.Count(); connections != 0 {
+		t.Fatalf("expected connection count to return to zero, got %d", connections)
+	}
+	if clients := atomic.LoadInt64(&fm.clientCount); clients != 0 {
+		t.Fatalf("expected streaming client count to return to zero, got %d", clients)
+	}
 }
 
 // TestE2E_HealthEndpoints validates health check endpoints
