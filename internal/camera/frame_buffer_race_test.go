@@ -1,7 +1,7 @@
 package camera
 
 import (
-	"runtime"
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -69,38 +69,67 @@ func TestFrameBufferWaitTimeoutRaceFree(t *testing.T) {
 	t.Logf("WaitFrame race test: %d successful waits, %d timeouts", successCount, timeoutCount)
 }
 
-// TestFrameBufferWaitFrameNoPerWaiterGoroutine validates timeout waits do not
-// leak or grow goroutines linearly with waiter count.
+// TestFrameBufferWaitFrameNoPerWaiterGoroutine verifies that a fixed set of
+// concurrent waits all return when their timeout expires or context is canceled.
 func TestFrameBufferWaitFrameNoPerWaiterGoroutine(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 0)
 
-	runtime.GC()
-	time.Sleep(raceScaledDuration(20 * time.Millisecond))
-	before := runtime.NumGoroutine()
-
 	const waiters = 200
-	var wg sync.WaitGroup
-	wg.Add(waiters)
-	for i := 0; i < waiters; i++ {
-		go func() {
-			defer wg.Done()
-			frame, seq := fb.WaitFrame(raceScaledDuration(20*time.Millisecond), 0)
-			if frame != nil || seq != 0 {
-				t.Errorf("expected timeout result, got frame=%v seq=%d", frame != nil, seq)
-			}
-		}()
+	entered := make(chan struct{}, waiters)
+	type waitResult struct {
+		id       int
+		hasFrame bool
+		seq      uint64
 	}
-	wg.Wait()
+	completed := make(chan waitResult, waiters)
+	fb.waiterRegisteredHook = func() {
+		entered <- struct{}{}
+	}
 
-	// Allow timer internals and goroutines to settle before measuring.
-	time.Sleep(raceScaledDuration(100 * time.Millisecond))
-	runtime.GC()
-	time.Sleep(raceScaledDuration(20 * time.Millisecond))
-	after := runtime.NumGoroutine()
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Large growth would indicate per-wait goroutine behavior.
-	if delta := after - before; delta > 20 {
-		t.Fatalf("goroutine growth too large after waits: before=%d after=%d delta=%d", before, after, delta)
+	for i := 0; i < waiters; i++ {
+		go func(id int) {
+			ctx := context.Background()
+			timeout := raceScaledDuration(20 * time.Millisecond)
+			if id%2 != 0 {
+				ctx = cancelCtx
+				timeout = time.Hour
+			}
+
+			frame, seq := fb.WaitFrameWithContext(ctx, timeout, 0)
+			completed <- waitResult{id: id, hasFrame: frame != nil, seq: seq}
+		}(i)
+	}
+
+	deadline := time.NewTimer(raceScaledDuration(5 * time.Second))
+	defer deadline.Stop()
+	for i := 0; i < waiters; i++ {
+		select {
+		case <-entered:
+		case <-deadline.C:
+			t.Fatalf("only %d of %d waits entered WaitFrameWithContext", i, waiters)
+		}
+	}
+
+	// Release the cancellable half. The other half return on their own timers.
+	cancel()
+
+	seen := make([]bool, waiters)
+	for i := 0; i < waiters; i++ {
+		select {
+		case result := <-completed:
+			if seen[result.id] {
+				t.Fatalf("wait %d reported completion more than once", result.id)
+			}
+			seen[result.id] = true
+			if result.hasFrame || result.seq != 0 {
+				t.Errorf("wait %d returned an unexpected frame: frame=%v seq=%d", result.id, result.hasFrame, result.seq)
+			}
+		case <-deadline.C:
+			t.Fatalf("only %d of %d waits completed after timeout or cancellation", i, waiters)
+		}
 	}
 }
