@@ -208,75 +208,62 @@ func TestStreamStatsHighFrequency(t *testing.T) {
 	}
 }
 
-// TestFrameCountSinceMixedTimestamps tests counting only timestamps at/after threshold.
-func TestFrameCountSinceMixedTimestamps(t *testing.T) {
-	stats := NewStreamStats()
+func TestFrameCountSince(t *testing.T) {
+	const baseTime int64 = 1_000_000_000
 
-	baseTime := time.Now().UnixNano()
-	timestamps := []int64{
-		baseTime - 3_000_000,
-		baseTime - 2_000_000,
-		baseTime - 1_000_000,
-		baseTime,
-		baseTime + 1_000_000,
-	}
-	for _, ts := range timestamps {
-		stats.RecordFrame(ts)
-	}
-
-	count := stats.FrameCountSince(baseTime - 1_000_000)
-	if count != 3 {
-		t.Errorf("FrameCountSince returned %d, want 3", count)
-	}
-}
-
-// TestFrameCountSinceBoundaryEquality tests that threshold equality is included.
-func TestFrameCountSinceBoundaryEquality(t *testing.T) {
-	stats := NewStreamStats()
-
-	baseTime := time.Now().UnixNano()
-	timestamps := []int64{
-		baseTime - 2_000_000,
-		baseTime - 1_000_000,
-		baseTime,
-	}
-	for _, ts := range timestamps {
-		stats.RecordFrame(ts)
-	}
-
-	count := stats.FrameCountSince(baseTime - 1_000_000)
-	if count != 2 {
-		t.Errorf("FrameCountSince returned %d, want 2", count)
-	}
-}
-
-// TestFrameCountSinceNoDoubleCounting ensures each timestamp is counted once.
-func TestFrameCountSinceNoDoubleCounting(t *testing.T) {
-	stats := NewStreamStats()
-
-	baseTime := time.Now().UnixNano()
-	timestamps := []int64{
-		baseTime - 2_000_000,
-		baseTime - 1_000_000,
-		baseTime,
-		baseTime + 1_000_000,
-	}
-	for _, ts := range timestamps {
-		stats.RecordFrame(ts)
+	tests := []struct {
+		name       string
+		timestamps []int64
+		since      int64
+		want       int64
+	}{
+		{
+			name:       "counts only recorded frames at or after the threshold",
+			timestamps: []int64{baseTime - 3, baseTime - 2, baseTime - 1, baseTime, baseTime + 1},
+			since:      baseTime - 1,
+			want:       3,
+		},
+		{
+			name:       "includes recorded frames equal to the threshold",
+			timestamps: []int64{baseTime - 2, baseTime - 1, baseTime},
+			since:      baseTime - 1,
+			want:       2,
+		},
+		{
+			name:       "counts repeated timestamps as distinct recorded frames",
+			timestamps: []int64{baseTime - 1, baseTime, baseTime, baseTime},
+			since:      baseTime,
+			want:       3,
+		},
+		{
+			name:  "returns zero when no frames have been recorded",
+			since: baseTime,
+			want:  0,
+		},
+		{
+			name: "counts only frames retained after ring-buffer wraparound",
+			timestamps: func() []int64 {
+				timestamps := make([]int64, 35)
+				for i := range timestamps {
+					timestamps[i] = baseTime + int64(i)
+				}
+				return timestamps
+			}(),
+			since: baseTime,
+			want:  30,
+		},
 	}
 
-	count := stats.FrameCountSince(baseTime - 1_000_000)
-	if count != 3 {
-		t.Errorf("FrameCountSince returned %d, want 3", count)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stats := NewStreamStats()
+			for _, timestamp := range tt.timestamps {
+				stats.RecordFrame(timestamp)
+			}
 
-// TestFrameCountSinceEmptyRingReturnsZero ensures empty timestamps return zero.
-func TestFrameCountSinceEmptyRingReturnsZero(t *testing.T) {
-	stats := NewStreamStats()
-
-	count := stats.FrameCountSince(time.Now().UnixNano() - 1_000_000)
-	if count != 0 {
-		t.Errorf("FrameCountSince returned %d, want 0", count)
+			if got := stats.FrameCountSince(tt.since); got != tt.want {
+				t.Errorf("FrameCountSince(%d) = %d, want %d", tt.since, got, tt.want)
+			}
+		})
 	}
 }
