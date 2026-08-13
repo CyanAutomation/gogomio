@@ -1287,6 +1287,80 @@ func TestStreamFrameReturnsPromptlyOnFrameManagerStop(t *testing.T) {
 	}
 }
 
+func TestStopStreamOldTeardownDoesNotUncountOrStopNewSession(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
+	fm := newFrameManager(&captureLoopCountingCamera{}, cfg, 20*time.Millisecond)
+	t.Cleanup(fm.Stop)
+	waitForClients := func(want int64) {
+		t.Helper()
+		deadline := time.Now().Add(testDuration(testConditionTimeout))
+		for atomic.LoadInt64(&fm.clientCount) != want {
+			if time.Now().After(deadline) {
+				t.Fatalf("client count = %d, want %d", atomic.LoadInt64(&fm.clientCount), want)
+			}
+			time.Sleep(testConditionInterval)
+		}
+	}
+
+	oldErr := make(chan error, 1)
+	go func() {
+		oldErr <- fm.StreamFrame(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil), cfg.MaxStreamConnections)
+	}()
+	waitForClients(1)
+	oldSession := fm.currentStreamSession()
+
+	stopDone := make(chan struct{})
+	go func() {
+		handleStopStream(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/v1/api/stream/stop", nil), fm)
+		close(stopDone)
+	}()
+
+	deadline := time.Now().Add(testDuration(testConditionTimeout))
+	for fm.currentStreamSession() == oldSession {
+		if time.Now().After(deadline) {
+			t.Fatal("stop endpoint did not rotate the stream session")
+		}
+		time.Sleep(testConditionInterval)
+	}
+
+	newCtx, cancelNew := context.WithCancel(context.Background())
+	newErr := make(chan error, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(newCtx)
+		newErr <- fm.StreamFrame(httptest.NewRecorder(), req, cfg.MaxStreamConnections)
+	}()
+
+	select {
+	case <-oldErr:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("old stream did not disconnect after stop endpoint")
+	}
+	select {
+	case <-stopDone:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("stop endpoint did not return")
+	}
+	waitForClients(1)
+	waitForCaptureState(t, fm, true)
+	time.Sleep(2 * fm.idleStopDelay)
+	if got := atomic.LoadInt64(&fm.clientCount); got != 1 {
+		t.Fatalf("new session client count = %d, want 1", got)
+	}
+	fm.captureMu.Lock()
+	captureStarted := fm.captureStarted
+	fm.captureMu.Unlock()
+	if !captureStarted {
+		t.Fatal("old handler's deferred decrement stopped the new session capture")
+	}
+
+	cancelNew()
+	select {
+	case <-newErr:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("new stream did not disconnect")
+	}
+}
+
 func TestFrameManagerStopRaceWithDisconnectDecrementDoesNotPanic(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
 	cam := &captureLoopCountingCamera{}
