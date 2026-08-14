@@ -208,32 +208,43 @@ func TestInitializeCamera_MockStartFailure(t *testing.T) {
 	}
 }
 
-func TestLogGoroutineStatsWithDeps_LogsOneTickAndStops(t *testing.T) {
-	var logBuffer bytes.Buffer
-	logger := log.New(&logBuffer, "", 0)
-	tickerCh := make(chan time.Time)
+func TestLogGoroutineStatsWithDeps_RecordsOneTickAndStops(t *testing.T) {
+	tickerCh := make(chan time.Time, 1)
 	stopCh := make(chan struct{})
 	exited := make(chan struct{})
+	recordedCounts := make(chan int, 2)
 
 	go func() {
 		defer close(exited)
-		logGoroutineStatsWithDeps(tickerCh, logger, stopCh)
+		logGoroutineStatsWithDeps(tickerCh, func(count int) {
+			recordedCounts <- count
+		}, stopCh)
 	}()
 
 	tickerCh <- time.Now()
-	close(stopCh)
-	<-exited
+	select {
+	case count := <-recordedCounts:
+		if count < 0 {
+			t.Fatalf("expected a non-negative goroutine count, got %d", count)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected one goroutine count after a tick")
+	}
 
-	logs := strings.TrimSpace(logBuffer.String())
-	if logs == "" {
-		t.Fatalf("expected one goroutine stats log line, got empty logs")
+	close(stopCh)
+	select {
+	case <-exited:
+	case <-time.After(time.Second):
+		t.Fatal("goroutine stats worker did not stop")
 	}
-	lines := strings.Split(logs, "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected exactly one goroutine stats log line, got %d: %q", len(lines), logs)
-	}
-	if !strings.Contains(lines[0], "📊 Goroutines:") {
-		t.Fatalf("expected log line to contain goroutine stats prefix, got %q", lines[0])
+
+	// The channel remains writable after shutdown to prove attempted later ticks
+	// cannot result in another telemetry record.
+	tickerCh <- time.Now()
+	select {
+	case count := <-recordedCounts:
+		t.Fatalf("expected no records after shutdown, got %d", count)
+	default:
 	}
 }
 

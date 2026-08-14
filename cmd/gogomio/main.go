@@ -283,30 +283,32 @@ func logGoroutineStats() {
 	defer ticker.Stop()
 	done := make(chan struct{})
 	defer close(done)
-	logGoroutineStatsWithDeps(ticker.C, log.Default(), done)
-}
-
-func logGoroutineStatsWithDeps(tickerCh <-chan time.Time, logger *log.Logger, done <-chan struct{}) {
-	if logger == nil {
-		logger = log.Default()
-	}
 
 	var lastCount int
+	logGoroutineStatsWithDeps(ticker.C, func(count int) {
+		delta := count - lastCount
+		deltaStr := ""
+		if delta > 0 {
+			deltaStr = fmt.Sprintf(" (+%d)", delta)
+		} else if delta < 0 {
+			deltaStr = fmt.Sprintf(" (%d)", delta)
+		}
+		log.Printf("📊 Goroutines: %d%s", count, deltaStr)
+		lastCount = count
+	}, done)
+}
+
+func logGoroutineStatsWithDeps(tickerCh <-chan time.Time, recordCount func(int), done <-chan struct{}) {
+	if recordCount == nil {
+		recordCount = func(int) {}
+	}
+
 	for {
 		select {
 		case <-done:
 			return
 		case <-tickerCh:
-			count := runtime.NumGoroutine()
-			delta := count - lastCount
-			deltaStr := ""
-			if delta > 0 {
-				deltaStr = fmt.Sprintf(" (+%d)", delta)
-			} else if delta < 0 {
-				deltaStr = fmt.Sprintf(" (%d)", delta)
-			}
-			logger.Printf("📊 Goroutines: %d%s", count, deltaStr)
-			lastCount = count
+			recordCount(runtime.NumGoroutine())
 		}
 	}
 }
