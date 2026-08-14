@@ -248,6 +248,23 @@ func TestLogGoroutineStatsWithDeps_RecordsOneTickAndStops(t *testing.T) {
 	}
 }
 
+func TestLogGoroutineStats_StopsWhenDoneIsClosed(t *testing.T) {
+	done := make(chan struct{})
+	exited := make(chan struct{})
+
+	go func() {
+		defer close(exited)
+		logGoroutineStats(done)
+	}()
+
+	close(done)
+	select {
+	case <-exited:
+	case <-time.After(time.Second):
+		t.Fatal("goroutine stats logger did not stop")
+	}
+}
+
 // TestServerInitialization_CameraStartup tests that server initializes camera properly
 func TestServerInitialization_CameraStartup(t *testing.T) {
 	cfg := &config.Config{
