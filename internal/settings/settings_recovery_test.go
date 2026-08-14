@@ -98,6 +98,31 @@ func TestConcurrentManagersDeleteAndSetManyUseLatestDiskContents(t *testing.T) {
 	}
 }
 
+func TestClearRemovesLatestDiskContents(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	clearer := NewManager(settingsPath)
+	writer := NewManager(settingsPath)
+
+	if err := writer.SetMany(map[string]interface{}{"written-after-load": "value"}); err != nil {
+		t.Fatalf("write settings from second manager: %v", err)
+	}
+	if err := clearer.Clear(); err != nil {
+		t.Fatalf("clear settings: %v", err)
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read cleared settings: %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(content, &got); err != nil {
+		t.Fatalf("decode cleared settings: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Clear retained settings written by another manager: %v", got)
+	}
+}
+
 // TestSettingsCorruptionRecovery tests that corrupted JSON is recovered from backup
 func TestSettingsCorruptionRecovery(t *testing.T) {
 	// Create temporary directory
