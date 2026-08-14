@@ -112,9 +112,6 @@ func startServer() {
 		log.Printf("ℹ️  pprof profiling disabled (set MIO_ENABLE_PPROF=true to enable)")
 	}
 
-	// Log goroutine count periodically
-	go logGoroutineStats()
-
 	// Setup HTTP server with security timeouts
 	addr := app.listener.Addr().String()
 
@@ -125,6 +122,9 @@ func startServer() {
 
 	shutdownCtx, cancelShutdown := newShutdownContext(context.Background(), sigChan)
 	defer cancelShutdown()
+
+	// Log goroutine count until graceful shutdown begins.
+	go logGoroutineStats(shutdownCtx.Done())
 
 	go func() {
 		<-shutdownCtx.Done()
@@ -277,12 +277,9 @@ func initializeCameraWithLogger(
 }
 
 // logGoroutineStats logs goroutine count periodically to track potential leaks
-// logGoroutineStats logs goroutine count periodically to track potential leaks
-func logGoroutineStats() {
+func logGoroutineStats(done <-chan struct{}) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-	done := make(chan struct{})
-	defer close(done)
 
 	var lastCount int
 	logGoroutineStatsWithDeps(ticker.C, func(count int) {
