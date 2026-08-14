@@ -941,11 +941,8 @@ func TestRateLimiterEvictsStaleEntries(t *testing.T) {
 	now = now.Add(4 * window)
 	limiter.cleanupStale()
 
-	limiter.mu.Lock()
-	_, exists := limiter.requests[staleIP]
-	limiter.mu.Unlock()
-	if exists {
-		t.Fatalf("expected stale IP entry %q to be evicted", staleIP)
+	if got := limiter.entryCount(); got != 0 {
+		t.Fatalf("expected stale IP entry %q to be evicted, got %d entries", staleIP, got)
 	}
 
 	if got := request(); got != http.StatusOK {
@@ -955,7 +952,10 @@ func TestRateLimiterEvictsStaleEntries(t *testing.T) {
 
 func TestRateLimiterManyUniqueIPsKeepsBehaviorAndCleansUp(t *testing.T) {
 	window := 25 * time.Millisecond
-	limiter := NewRateLimiter(2, window)
+	now := time.Date(2026, time.August, 12, 12, 0, 0, 0, time.UTC)
+	limiter := newRateLimiterWithClock(2, window, func() time.Time { return now })
+	const activeIP = "198.51.100.1"
+	const expiredIP = "198.51.100.2"
 
 	for i := 0; i < 500; i++ {
 		ip := "198.51.100." + strconv.Itoa(i)
@@ -964,38 +964,49 @@ func TestRateLimiterManyUniqueIPsKeepsBehaviorAndCleansUp(t *testing.T) {
 		}
 	}
 
-	if !limiter.Allow("198.51.100.1") {
+	if !limiter.Allow(activeIP) {
 		t.Fatalf("expected second request for repeated ip to be allowed")
 	}
-	if limiter.Allow("198.51.100.1") {
+	if limiter.Allow(activeIP) {
 		t.Fatalf("expected third request for repeated ip to be rate limited")
 	}
 
-	limiter.mu.Lock()
-	startSize := len(limiter.requests)
-	limiter.mu.Unlock()
+	startSize := limiter.entryCount()
 	if startSize < 500 {
 		t.Fatalf("expected at least 500 entries, got %d", startSize)
 	}
 
-	time.Sleep(4 * window)
-
-	for i := 0; i < 24; i++ {
-		ip := "203.0.113." + strconv.Itoa(i)
-		if !limiter.Allow(ip) {
-			t.Fatalf("expected cleanup trigger request for %s to be allowed", ip)
-		}
+	// Both clients' request windows have expired, so an expired client receives
+	// a fresh allowance.
+	now = now.Add(2 * window)
+	if !limiter.Allow(expiredIP) {
+		t.Fatalf("expected expired client to be accepted again")
 	}
 
-	limiter.mu.Lock()
-	sizeAfterCleanup := len(limiter.requests)
-	limiter.mu.Unlock()
+	// Refresh activeIP shortly before cleanup, exhaust its allowance, and leave
+	// it within its current window.
+	now = now.Add(window + window/2)
+	if !limiter.Allow(activeIP) || !limiter.Allow(activeIP) {
+		t.Fatalf("expected active client to receive its full refreshed allowance")
+	}
+	if limiter.Allow(activeIP) {
+		t.Fatalf("expected active client to remain limited after its refreshed allowance")
+	}
+
+	// At four windows, untouched clients are stale while the recently active
+	// clients are not. Run cleanup explicitly so no wall-clock sleep or
+	// request-driven scan ordering affects the assertion.
+	now = now.Add(window / 2)
+	limiter.cleanupStale()
+	sizeAfterCleanup := limiter.entryCount()
 	if sizeAfterCleanup >= startSize {
 		t.Fatalf("expected stale entries to shrink map size, before=%d after=%d", startSize, sizeAfterCleanup)
 	}
 
-	if !limiter.Allow("198.51.100.1") {
-		t.Fatalf("expected old key to be treated as new after eviction")
+	// activeIP was retained, including its allowance state; cleanup must not
+	// accidentally recreate it with a fresh allowance.
+	if limiter.Allow(activeIP) {
+		t.Fatalf("expected active client to retain its exhausted allowance")
 	}
 }
 
