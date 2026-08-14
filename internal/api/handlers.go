@@ -979,14 +979,25 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	return false
 }
 
-// cleanupStale synchronously runs one bounded stale-entry cleanup pass.
+// cleanupStale synchronously removes all entries that are stale at the current
+// clock time. Production requests continue to use bounded cleanup passes; this
+// explicit trigger exists for deterministic maintenance and tests.
 func (rl *RateLimiter) cleanupStale() {
 	now := rl.now()
 
 	rl.mu.Lock()
-	rl.evictStaleLocked(now, rateLimiterEvictScanLimit)
+	rl.evictStaleLocked(now, len(rl.requests))
 	rl.lastEvict = now
 	rl.mu.Unlock()
+}
+
+// entryCount reports the number of tracked clients without exposing the
+// limiter's internal synchronization or request bookkeeping.
+func (rl *RateLimiter) entryCount() int {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	return len(rl.requests)
 }
 
 func (rl *RateLimiter) evictStaleLocked(now time.Time, scanLimit int) {
