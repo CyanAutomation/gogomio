@@ -41,25 +41,19 @@ func (m *Manager) Set(key string, value interface{}) error {
 	return m.SetMany(map[string]interface{}{key: value})
 }
 
-// SetMany stores multiple key-value pairs and persists them as a single atomic batch.
-// In-memory data is only updated after a successful persist.
+// SetMany merges multiple key-value pairs into the latest settings on disk and
+// persists them as a single atomic batch. In-memory data is only updated after
+// a successful persist.
 func (m *Manager) SetMany(values map[string]interface{}) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.data == nil {
-		m.data = make(map[string]interface{})
-	}
-
-	updated := make(map[string]interface{}, len(m.data)+len(values))
-	for key, value := range m.data {
-		updated[key] = value
-	}
-	for key, value := range values {
-		updated[key] = value
-	}
-
-	if err := m.persistData(updated); err != nil {
+	updated, err := m.mutateSettings(func(latest map[string]interface{}) {
+		for key, value := range values {
+			latest[key] = value
+		}
+	})
+	if err != nil {
 		return fmt.Errorf("batch persist failed: %w", err)
 	}
 
@@ -151,18 +145,15 @@ func cloneJSONLikeValue(value interface{}) interface{} {
 	}
 }
 
-// Delete removes a key from settings.
+// Delete removes only the requested key from the latest settings on disk.
 func (m *Manager) Delete(key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	updated := make(map[string]interface{}, len(m.data))
-	for existingKey, value := range m.data {
-		updated[existingKey] = value
-	}
-	delete(updated, key)
-
-	if err := m.persistData(updated); err != nil {
+	updated, err := m.mutateSettings(func(latest map[string]interface{}) {
+		delete(latest, key)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -170,18 +161,66 @@ func (m *Manager) Delete(key string) error {
 	return nil
 }
 
-// Clear removes all settings.
+// Clear intentionally replaces all settings, including keys written by other
+// managers since this manager last loaded the file.
 func (m *Manager) Clear() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	updated := make(map[string]interface{})
-	if err := m.persistData(updated); err != nil {
+	updated, err := m.mutateSettings(func(latest map[string]interface{}) {
+		for k := range latest {
+			delete(latest, k)
+		}
+	})
+	if err != nil {
 		return err
 	}
 
 	m.data = updated
 	return nil
+}
+
+// mutateSettings performs a complete read-modify-write transaction while the
+// cross-process settings lock is held. The returned map is the exact state
+// committed to disk.
+func (m *Manager) mutateSettings(mutate func(map[string]interface{})) (map[string]interface{}, error) {
+	if err := m.ensureSettingsDir(); err != nil {
+		return nil, err
+	}
+
+	var updated map[string]interface{}
+	err := m.withSettingsLock(func() error {
+		latest := make(map[string]interface{})
+		data, err := os.ReadFile(m.filePath)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read settings file: %w", err)
+		}
+		if err == nil {
+			if err := json.Unmarshal(data, &latest); err != nil {
+				return fmt.Errorf("failed to decode settings file: %w", err)
+			}
+			if latest == nil {
+				latest = make(map[string]interface{})
+			}
+		}
+
+		mutate(latest)
+		encoded, err := json.MarshalIndent(latest, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal settings: %w", err)
+		}
+		if err := m.writeSettingsUnlocked(encoded); err != nil {
+			return err
+		}
+		updated = latest
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("✓ Settings: persisted %d settings", len(updated))
+	return updated, nil
 }
 
 // persist writes current settings to disk atomically with backup.
@@ -196,13 +235,8 @@ func (m *Manager) persist() error {
 //     writing, and renaming the new settings file.
 //   - Processes that do not honor this advisory lock may still race with writes.
 func (m *Manager) persistData(settings map[string]interface{}) error {
-	// Create directory if needed
-	dir := filepath.Dir(m.filePath)
-	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			log.Printf("❌ Settings: failed to create settings directory: %v", err)
-			return fmt.Errorf("failed to create settings directory: %w", err)
-		}
+	if err := m.ensureSettingsDir(); err != nil {
+		return err
 	}
 
 	// Marshal to JSON
@@ -213,59 +247,76 @@ func (m *Manager) persistData(settings map[string]interface{}) error {
 	}
 
 	if err := m.withSettingsLock(func() error {
-
-		// Create backup of existing file before writing new one
-		if fileInfo, err := os.Stat(m.filePath); err == nil && fileInfo.Size() > 0 {
-			backupFile := m.filePath + ".bak"
-			if err := m.copyFile(m.filePath, backupFile); err != nil {
-				log.Printf("⚠️  Settings: could not create backup, proceeding anyway: %v", err)
-				// Don't fail here - backup is nice-to-have, not critical
-			}
-		}
-
-		// Atomic write: write to uniquely named temp file in same directory then rename.
-		tmp, err := os.CreateTemp(dir, filepath.Base(m.filePath)+".*.tmp")
-		if err != nil {
-			log.Printf("❌ Settings: failed to create temp settings file: %v", err)
-			return fmt.Errorf("failed to create temp settings file: %w", err)
-		}
-		tempFile := tmp.Name()
-		cleanupTemp := true
-		defer func() {
-			if cleanupTemp {
-				_ = os.Remove(tempFile)
-			}
-		}()
-
-		if _, err := tmp.Write(data); err != nil {
-			_ = tmp.Close()
-			log.Printf("❌ Settings: failed to write temp settings file: %v", err)
-			return fmt.Errorf("failed to write temp settings file: %w", err)
-		}
-
-		if err := tmp.Sync(); err != nil {
-			_ = tmp.Close()
-			log.Printf("❌ Settings: failed to sync temp settings file: %v", err)
-			return fmt.Errorf("failed to sync temp settings file: %w", err)
-		}
-
-		if err := tmp.Close(); err != nil {
-			log.Printf("❌ Settings: failed to close temp settings file: %v", err)
-			return fmt.Errorf("failed to close temp settings file: %w", err)
-		}
-
-		if err := os.Rename(tempFile, m.filePath); err != nil {
-			log.Printf("❌ Settings: failed to rename settings file: %v", err)
-			return fmt.Errorf("failed to rename settings file: %w", err)
-		}
-
-		cleanupTemp = false
-		return nil
+		return m.writeSettingsUnlocked(data)
 	}); err != nil {
 		return err
 	}
 
 	log.Printf("✓ Settings: persisted %d settings", len(settings))
+	return nil
+}
+
+func (m *Manager) ensureSettingsDir() error {
+	dir := filepath.Dir(m.filePath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Printf("❌ Settings: failed to create settings directory: %v", err)
+			return fmt.Errorf("failed to create settings directory: %w", err)
+		}
+	}
+	return nil
+}
+
+// writeSettingsUnlocked backs up and atomically replaces the settings file.
+// The caller must hold the settings file lock.
+func (m *Manager) writeSettingsUnlocked(data []byte) error {
+	dir := filepath.Dir(m.filePath)
+	// Create backup of existing file before writing new one
+	if fileInfo, err := os.Stat(m.filePath); err == nil && fileInfo.Size() > 0 {
+		backupFile := m.filePath + ".bak"
+		if err := m.copyFile(m.filePath, backupFile); err != nil {
+			log.Printf("⚠️  Settings: could not create backup, proceeding anyway: %v", err)
+			// Don't fail here - backup is nice-to-have, not critical
+		}
+	}
+
+	// Atomic write: write to uniquely named temp file in same directory then rename.
+	tmp, err := os.CreateTemp(dir, filepath.Base(m.filePath)+".*.tmp")
+	if err != nil {
+		log.Printf("❌ Settings: failed to create temp settings file: %v", err)
+		return fmt.Errorf("failed to create temp settings file: %w", err)
+	}
+	tempFile := tmp.Name()
+	cleanupTemp := true
+	defer func() {
+		if cleanupTemp {
+			_ = os.Remove(tempFile)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		log.Printf("❌ Settings: failed to write temp settings file: %v", err)
+		return fmt.Errorf("failed to write temp settings file: %w", err)
+	}
+
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		log.Printf("❌ Settings: failed to sync temp settings file: %v", err)
+		return fmt.Errorf("failed to sync temp settings file: %w", err)
+	}
+
+	if err := tmp.Close(); err != nil {
+		log.Printf("❌ Settings: failed to close temp settings file: %v", err)
+		return fmt.Errorf("failed to close temp settings file: %w", err)
+	}
+
+	if err := os.Rename(tempFile, m.filePath); err != nil {
+		log.Printf("❌ Settings: failed to rename settings file: %v", err)
+		return fmt.Errorf("failed to rename settings file: %w", err)
+	}
+
+	cleanupTemp = false
 	return nil
 }
 
