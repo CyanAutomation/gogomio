@@ -5,8 +5,98 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
+
+func TestConcurrentManagersSetManyMergeLatestDiskContents(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	first := NewManager(settingsPath)
+	second := NewManager(settingsPath)
+
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	go func() {
+		ready.Done()
+		<-start
+		errs <- first.SetMany(map[string]interface{}{"first": "one"})
+	}()
+	go func() {
+		ready.Done()
+		<-start
+		errs <- second.SetMany(map[string]interface{}{"second": "two"})
+	}()
+	ready.Wait()
+	close(start)
+
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent SetMany failed: %v", err)
+		}
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read final settings: %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(content, &got); err != nil {
+		t.Fatalf("decode final settings: %v", err)
+	}
+	if got["first"] != "one" || got["second"] != "two" {
+		t.Fatalf("concurrent updates were not merged: %v", got)
+	}
+}
+
+func TestConcurrentManagersDeleteAndSetManyUseLatestDiskContents(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	seed := NewManager(settingsPath)
+	if err := seed.SetMany(map[string]interface{}{"remove": "me", "keep": "yes"}); err != nil {
+		t.Fatalf("seed settings: %v", err)
+	}
+
+	deleter := NewManager(settingsPath)
+	updater := NewManager(settingsPath)
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var ready sync.WaitGroup
+	ready.Add(2)
+	go func() {
+		ready.Done()
+		<-start
+		errs <- deleter.Delete("remove")
+	}()
+	go func() {
+		ready.Done()
+		<-start
+		errs <- updater.SetMany(map[string]interface{}{"added": "now"})
+	}()
+	ready.Wait()
+	close(start)
+
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("concurrent mutation failed: %v", err)
+		}
+	}
+
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read final settings: %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(content, &got); err != nil {
+		t.Fatalf("decode final settings: %v", err)
+	}
+	if _, exists := got["remove"]; exists {
+		t.Fatalf("deleted key was restored: %v", got)
+	}
+	if got["keep"] != "yes" || got["added"] != "now" {
+		t.Fatalf("update or existing key was lost: %v", got)
+	}
+}
 
 // TestSettingsCorruptionRecovery tests that corrupted JSON is recovered from backup
 func TestSettingsCorruptionRecovery(t *testing.T) {
