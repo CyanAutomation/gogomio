@@ -168,8 +168,8 @@ func (m *Manager) Clear() error {
 	defer m.mu.Unlock()
 
 	updated, err := m.mutateSettings(func(latest map[string]interface{}) {
-		for k := range latest {
-			delete(latest, k)
+		for key := range latest {
+			delete(latest, key)
 		}
 	})
 	if err != nil {
