@@ -3,7 +3,7 @@ module github.com/CyanAutomation/gogomio
 go 1.25.0
 
 require (
-	github.com/go-chi/chi/v5 v5.3.1
+	github.com/go-chi/chi/v5 v5.3.2
 	github.com/spf13/cobra v1.10.2
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag v1.16.6
