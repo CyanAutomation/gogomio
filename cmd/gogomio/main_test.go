@@ -303,6 +303,22 @@ func TestServerInitialization_CameraStartup(t *testing.T) {
 	}
 }
 
+func TestInitializeApplicationDoesNotSetGlobalWriteTimeoutForMJPEG(t *testing.T) {
+	cfg := &config.Config{Resolution: [2]int{640, 480}, BindHost: "127.0.0.1", Port: 0, TargetFPS: 24, FPS: 24, JPEGQuality: 90, MaxStreamConnections: 1}
+	app, _, err := initializeApplication(cfg, applicationDependencies{
+		newRealCamera: func() camera.Camera { return &fakeCamera{} },
+		newMockCamera: func() camera.Camera { return &fakeCamera{} },
+		listen:        net.Listen,
+	})
+	if err != nil {
+		t.Fatalf("initializeApplication: %v", err)
+	}
+	defer app.cleanup()
+	if app.server.WriteTimeout != 0 {
+		t.Fatalf("WriteTimeout = %s; long-lived MJPEG responses require no global write deadline", app.server.WriteTimeout)
+	}
+}
+
 // TestServerInitialization_ErrorHandling tests graceful error handling during startup
 func TestServerInitialization_ErrorHandling(t *testing.T) {
 	cfg := &config.Config{

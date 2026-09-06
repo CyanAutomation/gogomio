@@ -54,6 +54,8 @@ steps:
       - DOCKER_BUILDKIT=1
     args:
       - build
+      - --file
+      - Dockerfile.demo
       - --progress
       - auto
       - --platform

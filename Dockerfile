@@ -20,7 +20,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 
 # Download dependencies (cached until go.mod/go.sum change)
-RUN go mod download
+RUN /usr/local/go/bin/go mod download
 
 # Install C toolchain required for -race (CGO) test builds
 # Install jq for robust JSON parsing in test failure summaries
@@ -33,10 +33,10 @@ COPY . .
 RUN set -eu; \
     mkdir -p /tmp/test-logs; \
     status=0; \
-    for pkg in $(go list ./...); do \
+    for pkg in $(/usr/local/go/bin/go list ./...); do \
       safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g'); \
       log_file="/tmp/test-logs/${safe_pkg}.jsonl"; \
-      if ! CGO_ENABLED=1 go test -race -json "$pkg" | tee "$log_file" > /dev/null; then \
+      if ! CGO_ENABLED=1 /usr/local/go/bin/go test -race -json "$pkg" | tee "$log_file" > /dev/null; then \
         status=1; \
         jq -rs '(map(select(.Action == "fail" and (.Test != null))) | .[0]) as $fail | if $fail then "FAIL: \($fail.Test)" else empty end' "$log_file"; \
       fi; \
@@ -44,12 +44,12 @@ RUN set -eu; \
     test "$status" -eq 0
 
 # Install swag CLI and generate Swagger docs
-RUN go install github.com/swaggo/swag/cmd/swag@latest && \
+RUN /usr/local/go/bin/go install github.com/swaggo/swag/cmd/swag@v1.16.6 && \
     /go/bin/swag init -g cmd/gogomio/main.go
 
 # Build the binary with version information
 # Use go build with optimization flags
-RUN CGO_ENABLED=0 go build \
+RUN CGO_ENABLED=0 /usr/local/go/bin/go build \
     -ldflags="-s -w -X main.Version=${VERSION}" \
     -o /build/gogomio \
     ./cmd/gogomio
@@ -82,20 +82,17 @@ RUN set -eu; \
     \
     mkdir -p /etc/apt/keyrings; \
     \
-    wget -qO - https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
-    gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
-    curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key 2>/dev/null | \
-    gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg 2>/dev/null || \
-    echo "WARNING: GPG key unavailable"; \
+    curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | \
+    gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg; \
     \
-    printf "Types: deb deb-src\nURIs: http://archive.raspberrypi.org/debian\nSuites: bookworm\nComponents: main\nSigned-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg\n" > /etc/apt/sources.list.d/raspi.sources; \
+    printf "Types: deb\nURIs: https://archive.raspberrypi.org/debian\nSuites: bookworm\nComponents: main\nSigned-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg\n" > /etc/apt/sources.list.d/raspi.sources; \
     \
-    apt-get update --quiet 2>/dev/null || true; \
+    apt-get update --quiet; \
     \
-    apt-get install -y --quiet --no-install-recommends ffmpeg 2>/dev/null || true; \
+    apt-get install -y --quiet --no-install-recommends ffmpeg; \
     apt-get install -y --quiet --no-install-recommends libcamera-apps 2>/dev/null || \
     apt-get install -y --quiet --no-install-recommends rpicam-apps 2>/dev/null || \
-    echo "WARNING: libcamera/rpicam unavailable"; \
+    (echo "ERROR: libcamera/rpicam unavailable" >&2; exit 1); \
     \
     apt-get purge -y --quiet gnupg wget || true; \
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raspi.sources
