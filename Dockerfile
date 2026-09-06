@@ -66,6 +66,7 @@ FROM debian:bookworm
 ARG VERSION
 ARG INSTALL_FFMPEG
 ARG PORT
+ARG TARGETARCH
 
 # Image metadata labels
 LABEL org.opencontainers.image.title="Motion In Ocean" \
@@ -73,28 +74,26 @@ LABEL org.opencontainers.image.title="Motion In Ocean" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.authors="CyanAutomation" \
       org.opencontainers.image.source="https://github.com/CyanAutomation/gogomio" \
-      org.opencontainers.image.arch="arm64"
+      org.opencontainers.image.arch="${TARGETARCH}"
 
-# Setup Raspberry Pi repository and install libcamera-apps (suppress verbose apt output)
+# Install generic runtime dependencies on every image. Native Raspberry Pi
+# camera tooling only exists in the arm64 package repository, so do not add it
+# to the amd64 variant used for development and Cloud Run.
 RUN set -eu; \
     apt-get update --quiet; \
-    apt-get install -y --quiet --no-install-recommends ca-certificates curl gnupg wget tzdata; \
-    \
-    mkdir -p /etc/apt/keyrings; \
-    \
-    curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | \
-    gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg; \
-    \
-    printf "Types: deb\nURIs: https://archive.raspberrypi.org/debian\nSuites: bookworm\nComponents: main\nSigned-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg\n" > /etc/apt/sources.list.d/raspi.sources; \
-    \
-    apt-get update --quiet; \
-    \
-    apt-get install -y --quiet --no-install-recommends ffmpeg; \
-    apt-get install -y --quiet --no-install-recommends libcamera-apps 2>/dev/null || \
-    apt-get install -y --quiet --no-install-recommends rpicam-apps 2>/dev/null || \
-    (echo "ERROR: libcamera/rpicam unavailable" >&2; exit 1); \
-    \
-    apt-get purge -y --quiet gnupg wget || true; \
+    apt-get install -y --quiet --no-install-recommends ca-certificates curl ffmpeg tzdata; \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+      apt-get install -y --quiet --no-install-recommends gnupg; \
+      mkdir -p /etc/apt/keyrings; \
+      curl -fsSL https://archive.raspberrypi.org/debian/raspberrypi.gpg.key | \
+        gpg --dearmor -o /etc/apt/keyrings/raspberrypi-archive-keyring.gpg; \
+      printf "Types: deb\nURIs: https://archive.raspberrypi.org/debian\nSuites: bookworm\nComponents: main\nSigned-By: /etc/apt/keyrings/raspberrypi-archive-keyring.gpg\n" > /etc/apt/sources.list.d/raspi.sources; \
+      apt-get update --quiet; \
+      apt-get install -y --quiet --no-install-recommends libcamera-apps 2>/dev/null || \
+        apt-get install -y --quiet --no-install-recommends rpicam-apps 2>/dev/null || \
+        (echo "ERROR: arm64 image requires libcamera-apps or rpicam-apps" >&2; exit 1); \
+      apt-get purge -y --quiet gnupg; \
+    fi; \
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raspi.sources
 
 # Create non-root user with explicit umask
