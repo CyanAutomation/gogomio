@@ -50,7 +50,7 @@ For the canonical documentation map and archive policy, see [docs/README.md](doc
 - Real Pi camera (libcamera)
 - Prometheus metrics endpoint
 - Web UI streaming viewer
-- Advanced settings persistence  
+- Prometheus-compatible runtime metrics (`/metrics`)
 - Performance profiling for different Pi models
 
 ## Getting Started
