@@ -29,6 +29,41 @@ type Config struct {
 	TrustedProxyCIDRs    []string `json:"trusted_proxy_cidrs"`
 }
 
+const (
+	maxCaptureWidth  = 3840
+	maxCaptureHeight = 2160
+	maxCaptureFPS    = 120
+	maxConnections   = 100
+)
+
+// Validate rejects configurations that could exhaust camera, memory, or CPU
+// resources. LoadFromEnv retains backward-compatible defaults; callers must
+// validate before starting hardware or listeners.
+func (c *Config) Validate() error {
+	if c.Resolution[0] <= 0 || c.Resolution[1] <= 0 || c.Resolution[0] > maxCaptureWidth || c.Resolution[1] > maxCaptureHeight {
+		return fmt.Errorf("resolution must be between 1x1 and %dx%d, got %dx%d", maxCaptureWidth, maxCaptureHeight, c.Resolution[0], c.Resolution[1])
+	}
+	if c.SensorMode[0] < 0 || c.SensorMode[1] < 0 || (c.SensorMode[0] == 0) != (c.SensorMode[1] == 0) {
+		return fmt.Errorf("sensor mode must be omitted or contain positive width and height")
+	}
+	if c.FPS <= 0 || c.FPS > maxCaptureFPS || c.TargetFPS <= 0 || c.TargetFPS > maxCaptureFPS {
+		return fmt.Errorf("fps and target fps must be between 1 and %d", maxCaptureFPS)
+	}
+	if c.JPEGQuality < 1 || c.JPEGQuality > 100 {
+		return fmt.Errorf("jpeg quality must be between 1 and 100")
+	}
+	if c.MaxStreamConnections <= 0 || c.MaxStreamConnections > maxConnections {
+		return fmt.Errorf("max stream connections must be between 1 and %d", maxConnections)
+	}
+	if c.Port < 0 || c.Port > 65535 {
+		return fmt.Errorf("port must be between 0 and 65535")
+	}
+	if strings.TrimSpace(c.BindHost) == "" {
+		return fmt.Errorf("bind host must not be empty")
+	}
+	return nil
+}
+
 // LoadFromEnv loads configuration from environment variables with defaults.
 func LoadFromEnv() *Config {
 	cfg := &Config{

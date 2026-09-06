@@ -544,3 +544,23 @@ func TestConfig_FrameTimeout_EdgeCases(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigValidateRejectsUnsafeCaptureBounds(t *testing.T) {
+	tests := []Config{
+		{Resolution: [2]int{0, 480}, FPS: 24, TargetFPS: 24, JPEGQuality: 90, MaxStreamConnections: 1, Port: 8000, BindHost: "0.0.0.0"},
+		{Resolution: [2]int{10000, 10000}, FPS: 24, TargetFPS: 24, JPEGQuality: 90, MaxStreamConnections: 1, Port: 8000, BindHost: "0.0.0.0"},
+		{Resolution: [2]int{640, 480}, FPS: 1000, TargetFPS: 24, JPEGQuality: 90, MaxStreamConnections: 1, Port: 8000, BindHost: "0.0.0.0"},
+	}
+	for _, cfg := range tests {
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("Validate() unexpectedly accepted unsafe configuration")
+		}
+	}
+}
+
+func TestConfigValidateAcceptsTypicalPiConfiguration(t *testing.T) {
+	cfg := Config{Resolution: [2]int{1920, 1080}, SensorMode: [2]int{2304, 1296}, FPS: 30, TargetFPS: 24, JPEGQuality: 90, MaxStreamConnections: 2, Port: 8000, BindHost: "0.0.0.0"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate(): %v", err)
+	}
+}

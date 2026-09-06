@@ -75,10 +75,8 @@ func (fb *FrameBuffer) WriteImmutable(buf []byte) (int, error) {
 	if fb.targetFrameInterval > 0 && !fb.lastFrameTime.IsZero() {
 		elapsed := now.Sub(fb.lastFrameTime)
 		if elapsed < fb.targetFrameInterval {
-			// Too soon, skip this frame but still notify waiters
-			// to prevent them from stalling during FPS limiting
-			close(fb.notifyCh)
-			fb.notifyCh = make(chan struct{})
+			// Too soon: there is no new sequence to consume, so waking every
+			// stream handler only creates lock contention and extra CPU work.
 			return size, nil
 		}
 	}
