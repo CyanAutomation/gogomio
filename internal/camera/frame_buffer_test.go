@@ -78,6 +78,22 @@ func TestFrameBufferFPSThrottling(t *testing.T) {
 	}
 }
 
+func TestFrameBufferThrottleDoesNotWakeWaitersWithoutANewFrame(t *testing.T) {
+	stats := NewStreamStats()
+	fb := NewFrameBuffer(stats, 10)
+	now := time.Unix(1700000000, 0)
+	fb.nowFn = func() time.Time { return now }
+	_, _ = fb.WriteImmutable([]byte{1})
+	oldNotify := fb.notifyCh
+	now = now.Add(time.Millisecond)
+	_, _ = fb.WriteImmutable([]byte{2})
+	select {
+	case <-oldNotify:
+		t.Fatal("throttled write woke waiters despite not publishing a frame")
+	default:
+	}
+}
+
 func TestFrameBufferFPSThrottlingWithClockJump(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 10)

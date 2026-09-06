@@ -83,6 +83,9 @@ func main() {
 func startServer() {
 	// Load configuration from environment variables
 	cfg := config.LoadFromEnv()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
 
 	log.Printf("🌊 Motion In Ocean - Go Edition v%s", Version)
 	log.Printf("Configuration: %s", cfg.String())
@@ -170,10 +173,12 @@ func initializeApplication(cfg *config.Config, deps applicationDependencies) (*a
 		router:       router,
 		listener:     listener,
 		server: &http.Server{
-			Addr:              listener.Addr().String(),
-			Handler:           router,
-			ReadTimeout:       15 * time.Second,
-			WriteTimeout:      15 * time.Second,
+			Addr:        listener.Addr().String(),
+			Handler:     router,
+			ReadTimeout: 15 * time.Second,
+			// MJPEG responses are intentionally long-lived. A server-wide write
+			// deadline would terminate healthy streams.
+			WriteTimeout:      0,
 			IdleTimeout:       60 * time.Second,
 			ReadHeaderTimeout: 5 * time.Second,
 		},

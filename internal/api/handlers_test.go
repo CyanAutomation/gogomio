@@ -321,8 +321,8 @@ func TestRegisteredEndpointResponses(t *testing.T) {
 			wantStatus: http.StatusOK,
 			assertBody: func(t *testing.T, body map[string]interface{}) {
 				t.Helper()
-				if body["status"] != "ok" || body["camera_ready"] != true {
-					t.Fatalf("expected healthy, ready status response, got %v", body)
+				if body["status"] != "idle" || body["health_status"] != "Idle" || body["camera_ready"] != true {
+					t.Fatalf("expected idle, ready status response, got %v", body)
 				}
 			},
 		},
@@ -371,6 +371,23 @@ func TestHealthEndpoint(t *testing.T) {
 
 	if status, ok := result["status"]; !ok || status != "ok" {
 		t.Errorf("expected status 'ok', got %v", status)
+	}
+}
+
+func TestOperationalMetricsAndRemovedSettingsRoute(t *testing.T) {
+	router, cam, _ := setupTestServer(t)
+	defer func() { _ = cam.Stop() }()
+
+	metrics := httptest.NewRecorder()
+	router.ServeHTTP(metrics, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if metrics.Code != http.StatusOK || !strings.Contains(metrics.Body.String(), "gogomio_frames_captured_total") {
+		t.Fatalf("metrics response = %d %q", metrics.Code, metrics.Body.String())
+	}
+
+	settings := httptest.NewRecorder()
+	router.ServeHTTP(settings, httptest.NewRequest(http.MethodPost, "/api/settings", strings.NewReader(`{"settings":{"brightness":80}}`)))
+	if settings.Code != http.StatusNotFound {
+		t.Fatalf("settings API status = %d, want %d", settings.Code, http.StatusNotFound)
 	}
 }
 

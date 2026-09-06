@@ -1104,6 +1104,9 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 	// Middleware
 	router.Use(corsMiddleware)
 	router.Use(loggingMiddleware)
+	// Apply limits consistently to supported and legacy routes. This prevents
+	// unbounded snapshot-triggered capture work on deprecated paths.
+	router.Use(rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs))
 
 	// Register web UI (must be before other handlers for proper routing)
 	web.RegisterStaticFiles(router)
@@ -1113,9 +1116,12 @@ func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
 
 	// Register API routes with versioning
 	router.Route("/v1", func(r chi.Router) {
-		// Apply rate limiting to v1 endpoints
-		r.Use(rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs))
 		registerV1Handlers(r, fm, cfg, startTime)
+	})
+
+	// Dependency-free Prometheus-compatible metrics for Pi deployments.
+	router.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		handlePrometheusMetrics(w, fm)
 	})
 
 	// Register unversioned legacy endpoints for backward compatibility
@@ -1179,19 +1185,6 @@ func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config,
 		handleStopStream(w, r, fm)
 	})
 
-	// Settings management endpoints
-	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		handleSettingsGet(w, r, fm)
-	})
-
-	router.Post("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		handleSettingsUpdate(w, r, fm)
-	})
-
-	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		handleSettingsUpdate(w, r, fm)
-	})
-
 	// Diagnostics endpoint
 	router.Get("/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		handleDiagnostics(w, r, fm, cfg, startTime)
@@ -1238,19 +1231,6 @@ func registerLegacyHandlers(router chi.Router, fm *FrameManager, cfg *config.Con
 
 	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
 		handleStopStream(w, r, fm)
-	})
-
-	// Settings management endpoints
-	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		handleSettingsGet(w, r, fm)
-	})
-
-	router.Post("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		handleSettingsUpdate(w, r, fm)
-	})
-
-	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
-		handleSettingsUpdate(w, r, fm)
 	})
 
 	// Diagnostics endpoint
@@ -1350,6 +1330,17 @@ func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 	}
 }
 
+func handlePrometheusMetrics(w http.ResponseWriter, fm *FrameManager) {
+	frames, _, fps := fm.streamStats.Snapshot()
+	consecutive, total, _ := fm.GetCaptureFailures()
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	_, _ = fmt.Fprintf(w, "# HELP gogomio_frames_captured_total Total frames published to the stream buffer.\n# TYPE gogomio_frames_captured_total counter\ngogomio_frames_captured_total %d\n", frames)
+	_, _ = fmt.Fprintf(w, "# HELP gogomio_fps_current Current observed frames per second.\n# TYPE gogomio_fps_current gauge\ngogomio_fps_current %g\n", fps)
+	_, _ = fmt.Fprintf(w, "# HELP gogomio_stream_connections Active MJPEG connections.\n# TYPE gogomio_stream_connections gauge\ngogomio_stream_connections %d\n", fm.connTracker.Count())
+	_, _ = fmt.Fprintf(w, "# HELP gogomio_capture_failures_total Capture failures.\n# TYPE gogomio_capture_failures_total counter\ngogomio_capture_failures_total %d\n", total)
+	_, _ = fmt.Fprintf(w, "# HELP gogomio_capture_failures_consecutive Consecutive capture failures.\n# TYPE gogomio_capture_failures_consecutive gauge\ngogomio_capture_failures_consecutive %d\n", consecutive)
+}
+
 // @Summary Get comprehensive health and diagnostics
 // @Description Returns all available health information, metrics, and diagnostics in a single request: status, uptime, FPS, frames captured, connections, error rates, restart count, frame sequence, and detailed failure tracking. Recommended for dashboards, monitoring systems, and troubleshooting. Note: more data than /v1/health or /v1/metrics/live, use appropriate endpoint for your use case.
 // @Tags Health
@@ -1371,6 +1362,10 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		status = "degraded"
 		message = "Camera is functioning but experiencing degradation"
 	}
+	if frameCount == 0 && fm.connTracker.Count() == 0 && status == "ok" {
+		status = "idle"
+		message = "Camera is ready; capture starts when a stream or snapshot is requested"
+	}
 
 	// Calculate error rate
 	var errorRate float64
@@ -1380,6 +1375,9 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 
 	// Determine health status
 	healthStatus := "Excellent"
+	if status == "idle" {
+		healthStatus = "Idle"
+	}
 	if errorRate > 5 {
 		healthStatus = "Degraded"
 		if status == "ok" {
@@ -1531,7 +1529,6 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, c
 // @Accept  json
 // @Produce json
 // @Success 200 {object} map[string]interface{} "Object containing all saved settings (example: {brightness: 100, contrast: 120})"
-// @Router /v1/api/settings [get]
 func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	settings := fm.settingsM.GetAll()
 
@@ -1586,8 +1583,6 @@ func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 // @Failure 400 {object} ErrorResponse "Invalid JSON or request format"
 // @Failure 500 {object} ErrorResponse "Failed to save settings to persistent storage"
 // @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Router /v1/api/settings [post]
-// @Router /v1/api/settings [put]
 func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	var req SettingsUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1645,9 +1640,9 @@ func writeErrorResponse(w http.ResponseWriter, statusCode int, message string, d
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// For now, just pass through
-		// In production, would log requests
+		started := time.Now()
 		next.ServeHTTP(w, r)
+		log.Printf("http_request method=%s path=%q remote=%q duration=%s", r.Method, r.URL.Path, sanitizeRemoteAddr(r.RemoteAddr), time.Since(started).Round(time.Millisecond))
 	})
 }
 
