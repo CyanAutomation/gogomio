@@ -50,9 +50,6 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ steps.baseline.outputs.run_id }}
 
-      - name: Download dependencies
-        run: go mod download
-
       - name: Run benchmarks
         id: run-benchmarks
         shell: bash

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/CyanAutomation/gogomio/internal/config"
-	"github.com/go-chi/chi/v5"
 )
 
 // E2E Tests — End-to-end HTTP streaming and endpoint validation
@@ -25,8 +24,7 @@ func TestE2E_StreamEndpointBasic(t *testing.T) {
 	})
 	defer fm.Stop()
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, &config.Config{
+	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{
 		MaxStreamConnections: 10,
 	})
 
@@ -121,8 +119,7 @@ func TestE2E_SnapshotEndpoint(t *testing.T) {
 	})
 	defer fm.Stop()
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, &config.Config{})
+	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{})
 
 	// Wait for frame to be captured
 	time.Sleep(50 * time.Millisecond)
@@ -163,8 +160,7 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 	fm := NewFrameManager(newStableFrameCamera(nil), testConfig)
 	defer fm.Stop()
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, testConfig)
+	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
 
 	const numClients = 2
 	ctx, cancel := context.WithCancel(context.Background())
@@ -231,8 +227,7 @@ func TestE2E_HealthEndpoints(t *testing.T) {
 	})
 	defer fm.Stop()
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, &config.Config{})
+	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{})
 
 	healthEndpoints := []struct {
 		path           string
@@ -276,8 +271,7 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	fm := NewFrameManager(cam, testConfig)
 	defer fm.Stop()
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, testConfig)
+	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
 
 	// Simulate a disconnecting client using a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -357,8 +351,7 @@ func TestE2E_ConfigEndpoint(t *testing.T) {
 	fm := NewFrameManager(newStableFrameCamera(nil), testConfig)
 	defer fm.Stop()
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, testConfig)
+	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
 
 	req := httptest.NewRequest("GET", "/api/config", nil)
 	writer := httptest.NewRecorder()

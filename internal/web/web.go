@@ -6,8 +6,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
 //go:embed *.html *.js
@@ -17,13 +15,9 @@ var webFS embed.FS
 var mioFS embed.FS
 
 // RegisterStaticFiles registers static file routes with the router.
-func RegisterStaticFiles(r *chi.Mux) {
+func RegisterStaticFiles(r *http.ServeMux) {
 	// Serve index.html for root path
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
+	r.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 
@@ -57,7 +51,7 @@ func RegisterStaticFiles(r *chi.Mux) {
 		return
 	}
 	mioHandler := http.FileServer(http.FS(mioSubFS))
-	r.Handle("/static/mio/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	r.Handle("/static/mio/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		http.StripPrefix("/static/mio/", mioHandler).ServeHTTP(w, req)
 	}))
