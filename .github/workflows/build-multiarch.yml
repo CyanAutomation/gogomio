@@ -25,7 +25,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      tags: ${{ steps.meta.outputs.tags }}
+      tag_names_csv: ${{ steps.meta.outputs.tag_names_csv }}
     permissions:
       # Required for `cache-to: type=gha` to upload BuildKit cache to GitHub Actions cache storage.
       actions: write
@@ -53,10 +53,13 @@ jobs:
           fi
 
           docker_tags="$(bash scripts/docker-tags.sh "$requested_tags")"
+          docker_tag_names_csv="$(printf '%s\n' "$docker_tags" | bash scripts/docker-tag-names.sh)"
           {
             echo 'tags<<EOF'
             printf '%s\n' "$docker_tags"
             echo EOF
+            # Do not pass the image namespace through a job output: it may match a secret.
+            printf 'tag_names_csv=%s\n' "$docker_tag_names_csv"
           } >> "$GITHUB_OUTPUT"
           printf 'Building tags (multi-arch and arm64-specific):\n%s\n' "$docker_tags"
 
@@ -83,7 +86,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     env:
-      IMAGE_TAGS: ${{ needs.build.outputs.tags }}
+      IMAGE_TAG_NAMES_CSV: ${{ needs.build.outputs.tag_names_csv }}
     
     steps:
       - name: Checkout
@@ -102,19 +105,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$IMAGE_TAGS" ]]; then
+          if [[ -z "$IMAGE_TAG_NAMES_CSV" ]]; then
             echo '::error::Build job did not provide any image tags.'
             exit 1
           fi
 
+          IFS=',' read -r -a image_tag_names <<<"$IMAGE_TAG_NAMES_CSV"
           verified=0
-          while IFS= read -r image; do
-            [[ -n "$image" ]] || continue
+          for image_tag in "${image_tag_names[@]}"; do
+            [[ -n "$image_tag" ]] || continue
+            image="cyanautomation/gogomio:$image_tag"
             echo "Verifying manifest for $image"
             manifest="$(docker buildx imagetools inspect --raw "$image")"
             python3 scripts/verify_docker_manifest.py <<<"$manifest"
             verified=$((verified + 1))
-          done <<<"$IMAGE_TAGS"
+          done
 
           if (( verified == 0 )); then
             echo '::error::No image manifests were verified.'
