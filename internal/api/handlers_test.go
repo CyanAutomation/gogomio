@@ -1003,7 +1003,9 @@ func TestRateLimiterManyUniqueIPsKeepsBehaviorAndCleansUp(t *testing.T) {
 	// Refresh activeIP shortly before cleanup, exhaust its allowance, and leave
 	// it within its current window.
 	now = now.Add(window + window/2)
-	if !limiter.Allow(activeIP) || !limiter.Allow(activeIP) {
+	allow1 := limiter.Allow(activeIP)
+	allow2 := limiter.Allow(activeIP)
+	if !allow1 || !allow2 {
 		t.Fatalf("expected active client to receive its full refreshed allowance")
 	}
 	if limiter.Allow(activeIP) {

@@ -1,48 +1,59 @@
 name: GoReleaser Build & Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version (e.g., v0.1.0)'
-        required: true
-        type: string
+  push:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   goreleaser:
     name: Build and Release Binaries
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: '~> v2'
-          args: release --clean
+      - name: Prepare release notes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 scripts/validate_release_tag.py "$RELEASE_TAG"; then
+            echo '::error title=Invalid release tag::Expected a v-prefixed Docker-compatible version with an optional valid prerelease.'
+            exit 1
+          fi
 
-      - name: Upload Release Artifacts
-        uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+          version="${RELEASE_TAG#v}"
+          release_notes="$RUNNER_TEMP/release-notes.md"
+          if ! awk -v version="$version" '
+            BEGIN { header = "## [" version "]" }
+            index($0, header) == 1 && (length($0) == length(header) || substr($0, length(header) + 1, 1) == " ") { in_section=1; next }
+            /^## \[/ && in_section { exit }
+            in_section { print }
+          ' CHANGELOG.md > "$release_notes" || [[ ! -s "$release_notes" ]]; then
+            git log -1 --pretty=format:%B > "$release_notes"
+          fi
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/*_checksums.txt
+          version: v2.18.0
+          args: release --clean --release-notes=${{ runner.TEMP }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
