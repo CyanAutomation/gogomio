@@ -43,6 +43,7 @@ This directory is organized around **canonical, current documentation** and a se
 
 ### Archive
 
+- [Historical golangci-lint analysis](./archive/GOLANGCI_LINT_ANALYSIS.md)
 - [Comprehensive Improvement Summary](./archive/COMPREHENSIVE_IMPROVEMENT_SUMMARY.md)
 - [Docker Deployment Summary](./archive/DOCKER_DEPLOYMENT_SUMMARY.md)
 - [Option 2 Implementation](./archive/OPTION2_IMPLEMENTATION.md)

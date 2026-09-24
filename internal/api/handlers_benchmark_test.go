@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/CyanAutomation/gogomio/internal/config"
-	"github.com/go-chi/chi/v5"
 )
 
 type discardResponseWriter struct{}
@@ -95,9 +94,9 @@ func BenchmarkStreamFixedFrames(b *testing.B) {
 	// Benchmark the stream endpoint without API-wide middleware. The production
 	// per-IP rate limit is intended for client requests, and benchmark iterations
 	// exceed it, which would measure 429 responses instead of streamed frames.
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	var streamErr error
-	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
 		streamErr = fm.StreamFrame(w, r, cfg.MaxStreamConnections)
 	})
 
