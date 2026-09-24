@@ -1,10 +1,9 @@
 # Motion In Ocean - Go Edition 🌊
 
-[![Go version: go.mod](https://img.shields.io/badge/Go-go.mod-blue)](go.mod)
-[![Tests](https://github.com/CyanAutomation/gogomio/actions/workflows/test.yml/badge.svg)](https://github.com/CyanAutomation/gogomio/actions/workflows/test.yml)
+[![Test](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml)
+[![Build Multi-Architecture Docker Image](https://github.com/CyanAutomation/gogomio/actions/workflows/build-multiarch.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/build-multiarch.yml)
+[![Benchmarks](https://github.com/CyanAutomation/gogomio/actions/workflows/benchmark.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/benchmark.yml)
 [![Coverage Status](https://codecov.io/gh/CyanAutomation/gogomio/graph/badge.svg)](https://codecov.io/gh/CyanAutomation/gogomio)
-[![Docker](https://img.shields.io/badge/Docker-multi--arch-blue)](./Dockerfile)
-[![License](https://img.shields.io/badge/license-BSD%203--Clause-blue)](./LICENSE)
 
 A Raspberry Pi CSI camera MJPEG streaming server written in Go. This is a high-performance, production-ready implementation of the Motion In Ocean project, focusing on the **client camera streaming mode**.
 
