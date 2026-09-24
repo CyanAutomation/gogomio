@@ -9,11 +9,12 @@ formatters:
     - gofmt
     - goimports
 
-issues:
-  exclude-rules:
-    # Exclude generated Swagger docs from linting
-    - path: ^docs/
-      linters:
-        - errcheck
-        - unused
-        - govet
+linters:
+  exclusions:
+    rules:
+      # Exclude generated Swagger docs from linting
+      - path: ^docs/
+        linters:
+          - errcheck
+          - unused
+          - govet
