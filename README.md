@@ -40,7 +40,7 @@ For the canonical documentation map and archive policy, see [docs/README.md](doc
 - ✅ Connection limiting (max concurrent streams)
 - ✅ Thread-safe frame buffering with condition variables
 - ✅ Real-time FPS calculation and health monitoring
-- ✅ Comprehensive API documentation with Swagger UI
+- ✅ OpenAPI reference with checked-in JSON and YAML specifications
 - ✅ Docker support (multi-arch: arm64/amd64)
 - ✅ 51+ unit and integration tests (TDD)
 
@@ -224,7 +224,8 @@ For complete CLI documentation, see [CLI Guide](docs/guides/CLI_GUIDE.md).
 
 ### API Documentation
 
-- **GET `/docs/index.html`** - Interactive Swagger UI with all API endpoints, request/response schemas, and try-it-out functionality
+- **GET `/docs/`** - API reference with links to the OpenAPI specifications
+- **GET `/docs/index.html`** - API reference page
 - **GET `/swagger.json`** - Raw OpenAPI 2.0 specification (JSON)
 - **GET `/swagger.yaml`** - Raw OpenAPI 2.0 specification (YAML)
 
@@ -321,7 +322,7 @@ curl http://localhost:8000/v1/health/detailed | jq
             │ GetFrame()
             ▼
 ┌─────────────────────────────────┐
-│   HTTP API Layer (Chi Router)   │
+│   HTTP API Layer (net/http)     │
 ├─────────────────────────────────┤
 │ /stream.mjpg    → MJPEG stream  │
 │ /snapshot.jpg   → JPEG frame    │
@@ -436,7 +437,7 @@ gogomio/
 ├── Dockerfile       # Multi-stage build
 ├── docker-compose.yml        # Real Pi configuration
 ├── docker-compose.mock.yml   # Development/testing
-├── go.mod & go.sum # Dependency management
+├── go.mod                   # Module and Go toolchain version
 └── README.md        # This file
 ```
 
@@ -467,7 +468,7 @@ docker-compose -f docker-compose.mock.yml up --build
 - **44+ unit tests** covering all core components
 - Race condition detection enabled
 - Mock camera for deterministic testing
-- HTTP integration tests with Chi router
+- HTTP integration tests using the Go standard library
 - Thread-safety tests for concurrent access
 
 Run tests:
@@ -544,7 +545,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 ## Dependencies
 
 - A Go toolchain compatible with the version declared in `go.mod` (currently Go 1.25)
-- `chi` - HTTP router
+- The Go application has no third-party Go module dependencies.
 - Runtime camera binaries (arm64 Raspberry Pi):
   - Preferred: `rpicam-vid` via `rpicam-apps`
   - Fallback: `libcamera-vid` via `libcamera-tools` / `libcamera-apps-lite`

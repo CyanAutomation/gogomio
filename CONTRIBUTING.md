@@ -51,13 +51,7 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 ### Local Environment
 
-1. **Install dependencies**:
-
-   ```bash
-   go mod download
-   ```
-
-2. **Set up pre-commit hook** (optional but recommended):
+1. **Set up pre-commit hook** (optional but recommended):
 
    ```bash
    git config core.hooksPath .githooks
@@ -84,7 +78,7 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 - **`cmd/gogomio/`** — Application entry point (main.go)
 - **`internal/camera/`** — Camera interfaces, frame buffering, mock camera
 - **`internal/api/`** — HTTP handlers, routing, middleware
-- **`internal/cli/`** — CLI commands (Cobra)
+- **`internal/cli/`** — CLI commands and command dispatch
 - **`internal/config/`** — Configuration management
 - **`internal/settings/`** — Persistent settings
 - **`internal/web/`** — Web UI and static assets
@@ -241,15 +235,16 @@ Use `gofmt` (most editors do this automatically):
 gofmt -w ./internal/camera
 ```
 
-### Linting
+### Static checks
 
-Linting is enforced in CI via `golangci-lint`. Run locally before pushing:
+CI runs the Go vet checks and verifies that tracked Go files are formatted. Run them locally before pushing:
 
 ```bash
-golangci-lint run ./...
+go vet ./...
+gofmt -w ./cmd ./internal ./docs/reference
 ```
 
-The project uses a [`.golangci.yml`](.golangci.yml) config with the default linters (`errcheck`, `govet`, `staticcheck`, `ineffassign`, `unused`) plus `gofmt`/`goimports` formatters. Fix any reported issues — the CI lint job will fail if they are present.
+The CI formatting check uses `gofmt -l` and fails if any tracked Go file needs formatting.
 
 ### Documentation
 

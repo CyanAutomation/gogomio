@@ -122,7 +122,7 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 | -------- | -------- | ---------- | ------- |
 | Standard directory structure | ✅ Met | `cmd/`, `internal/`, `scripts/`, `docs/` | Clear separation; follows Go conventions |
 | Config separated from code | ✅ Met | [internal/config/config.go](../../internal/config/config.go) | Environment-based config; not hardcoded |
-| Linting config exists | ⚠️ Partial | No `.golangci.yml` or linting in CI | Could add Go linting automation |
+| Static checks exist | ✅ Met | CI runs `go vet ./...` and checks tracked Go files with `gofmt -l` | Uses Go's built-in tools |
 | Type checking present | ✅ Met | Go's static typing + interfaces | [internal/camera/camera_interface.go](../../internal/camera/camera_interface.go) enforces contracts |
 | No oversized files | ✅ Met | Largest file ~500 lines | [handlers.go](../../internal/api/handlers.go) well-structured with clear concerns |
 
@@ -134,10 +134,10 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 
 | Signal | Status | Evidence | Notes |
 | -------- | -------- | ---------- | ------- |
-| Dependency manifest exists | ✅ Met | [go.mod](../../go.mod) | Lists all direct dependencies with versions |
-| Lockfile exists | ✅ Met | [go.sum](../../go.sum) | Complete lock file for reproducible builds |
-| Dependency automation configured | ❌ **NOT MET** | No Dependabot or renovate config | Manual update required |
-| Versions pinned | ✅ Met | All go.mod versions are pinned (e.g., `v1.23.0`, `v5.2.5`) | No wildcards; exact versions required |
+| Dependency manifest exists | ✅ Met | [go.mod](../../go.mod) | Declares the module and Go toolchain version; no third-party module requirements |
+| Lockfile exists | ✅ Not applicable | No third-party Go modules | No module checksums required |
+| Dependency automation configured | ✅ Met | [.github/dependabot.yml](../../.github/dependabot.yml) | Weekly GitHub Actions updates |
+| Versions pinned | ✅ Met | Go version declared in `go.mod` | No third-party module versions to pin |
 | CI permissions restricted | ⚠️ Partial | [build-multiarch.yml](../../.github/workflows/build-multiarch.yml) uses `contents: read` | Basic restrictions; could be more explicit |
 
 **Category Score: 3.5/5** | **Contribution: (3.5/5) × 10 = 7.0 points**  
@@ -232,7 +232,7 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 
 **Minor (-2 to -3 each)**
 
-- Broken dependencies: ✅ **Not triggered** — All dependencies install cleanly; go.sum is valid
+- Broken dependencies: ✅ **Not triggered** — The application has no third-party Go module requirements
 - No license: ✅ **Not triggered** — MIT license present
 - Stale repo: ✅ **Not triggered** — Active development in 2026
 - Generated artifacts committed: ✅ **Not triggered** — Clean repository; Docker builds outside repo
@@ -335,15 +335,11 @@ The following roadmap prioritizes improvements to close remaining gaps and maxim
 - **Score Impact**: +2 (Testing & Verification signal; improves reliability)
 - **Time**: 1–2 hours (configuration + first report)
 
-**8. Add Go Linting Configuration**
+**8. Go Static Checks**
 
-- **Current State**: No `.golangci.yml` or linting in CI
-- **Action**: Create [.golangci.yml](../../.golangci.yml) (not yet created) with:
-  - Standard Go linters (vet, staticcheck, errcheck)
-  - Custom rules for the project
-  - Add lint step to [test.yml workflow](../../.github/workflows/test.yml) (from task 5)
-- **Score Impact**: +2 (Codebase Maintainability signal)
-- **Time**: 1–2 hours
+- **Current State**: CI runs `go vet ./...` and checks formatting with `gofmt -l`.
+- **Action**: Keep using built-in Go checks; no additional linter dependency is planned.
+- **Score Impact**: Already represented in the maintainability score.
 
 ---
 

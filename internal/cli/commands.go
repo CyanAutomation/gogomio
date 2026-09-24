@@ -2,331 +2,320 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
-
-	"github.com/spf13/cobra"
+	"strings"
 )
 
-// RootCmd is the main entry point for the CLI
-var RootCmd = &cobra.Command{
-	Use:   "gogomio",
-	Short: "gogomio - Motion In Ocean streaming server",
-	Long:  "A high-performance MJPEG streaming server for Raspberry Pi CSI cameras",
+const rootHelp = `Usage: gogomio <command> [arguments]
+
+Commands:
+  status                 Show current streaming status
+  config [get [key]]     Show configuration or get a value
+  snapshot capture       Capture a frame to stdout
+  snapshot save PATH     Capture a frame to a file
+  health check           Check system health
+  health detailed        Show detailed health information
+  stream info            Show stream metrics
+  stream stop            Stop active streams
+  diagnostics            Show diagnostic information
+  settings get [key]     Show settings or get a value
+  settings set KEY=VALUE Update a setting
+  version                Show version information
+
+Use "gogomio <command> --help" for command help.`
+
+var commandHelp = map[string]string{
+	"config":           "Usage: gogomio config [get [key]]\nShow configuration or get a configuration value.",
+	"config get":       "Usage: gogomio config get [key]\nGet all configuration values or one configuration value.",
+	"snapshot":         "Usage: gogomio snapshot <capture|save PATH>\nCapture a frame from the camera.",
+	"snapshot capture": "Usage: gogomio snapshot capture\nCapture a frame and write it to stdout.",
+	"snapshot save":    "Usage: gogomio snapshot save PATH\nCapture a frame and save it to PATH.",
+	"health":           "Usage: gogomio health <check|detailed>\nCheck system health.",
+	"health check":     "Usage: gogomio health check\nPerform a quick health check.",
+	"health detailed":  "Usage: gogomio health detailed\nShow detailed health information.",
+	"stream":           "Usage: gogomio stream <info|stop>\nManage stream operations.",
+	"stream info":      "Usage: gogomio stream info\nShow stream metrics.",
+	"stream stop":      "Usage: gogomio stream stop\nStop active streams.",
+	"settings":         "Usage: gogomio settings <get [key]|set KEY=VALUE>\nGet or set persistent settings.",
+	"settings get":     "Usage: gogomio settings get [key]\nGet all settings or one setting value.",
+	"settings set":     "Usage: gogomio settings set KEY=VALUE\nSet a persistent setting.",
+	"status":           "Usage: gogomio status\nShow current streaming status.",
+	"diagnostics":      "Usage: gogomio diagnostics\nShow diagnostic information.",
+	"version":          "Usage: gogomio version\nShow version information.",
 }
 
-// Execute runs the CLI command
+// Execute runs the command line interface and exits non-zero when a command fails.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
+	if err := dispatch(os.Args[1:], os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// statusCmd represents the status command
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show current streaming status",
-	Long:  `Display current streaming status, FPS, resolution, and configuration`,
-	RunE: func(_ *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		status, err := client.GetStatus()
-		if err != nil {
-			return err
+func dispatch(args []string, output io.Writer) error {
+	if len(args) == 0 {
+		_, err := fmt.Fprintln(output, rootHelp)
+		return err
+	}
+
+	if args[0] == "help" {
+		return writeHelp(args[1:], output)
+	}
+	for i, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			return writeHelp(args[:i], output)
 		}
-		fmt.Println(FormatStatus(status))
+	}
+
+	command, rest := args[0], args[1:]
+	switch command {
+	case "status":
+		return runStatus(rest)
+	case "config":
+		if len(rest) == 0 {
+			return runConfig(rest)
+		}
+		if rest[0] != "get" {
+			return unknownSubcommand("config", rest[0])
+		}
+		return runConfigGet(rest[1:])
+	case "snapshot":
+		if len(rest) == 0 {
+			return missingSubcommand("snapshot", "capture, save")
+		}
+		switch rest[0] {
+		case "capture":
+			return runSnapshotCapture(rest[1:])
+		case "save":
+			return runSnapshotSave(rest[1:])
+		default:
+			return unknownSubcommand("snapshot", rest[0])
+		}
+	case "health":
+		if len(rest) == 0 {
+			return missingSubcommand("health", "check, detailed")
+		}
+		switch rest[0] {
+		case "check":
+			return runHealthCheck(rest[1:])
+		case "detailed":
+			return runHealthDetailed(rest[1:])
+		default:
+			return unknownSubcommand("health", rest[0])
+		}
+	case "stream":
+		if len(rest) == 0 {
+			return missingSubcommand("stream", "info, stop")
+		}
+		switch rest[0] {
+		case "info":
+			return runStreamInfo(rest[1:])
+		case "stop":
+			return runStreamStop(rest[1:])
+		default:
+			return unknownSubcommand("stream", rest[0])
+		}
+	case "diagnostics":
+		return runDiagnostics(rest)
+	case "settings":
+		if len(rest) == 0 {
+			return missingSubcommand("settings", "get, set")
+		}
+		switch rest[0] {
+		case "get":
+			return runSettingsGet(rest[1:])
+		case "set":
+			return runSettingsSet(rest[1:])
+		default:
+			return unknownSubcommand("settings", rest[0])
+		}
+	case "version":
+		return runVersion(rest)
+	default:
+		return fmt.Errorf("unknown command %q\n\n%s", command, rootHelp)
+	}
+}
+
+func writeHelp(target []string, output io.Writer) error {
+	if len(target) == 0 {
+		_, err := fmt.Fprintln(output, rootHelp)
+		return err
+	}
+	text, ok := commandHelp[strings.Join(target, " ")]
+	if !ok {
+		return fmt.Errorf("unknown help topic %q", strings.Join(target, " "))
+	}
+	_, err := fmt.Fprintln(output, text)
+	return err
+}
+
+func unknownSubcommand(parent, name string) error {
+	return fmt.Errorf("unknown %s subcommand %q", parent, name)
+}
+
+func missingSubcommand(parent, choices string) error {
+	return fmt.Errorf("%s requires a subcommand (%s)", parent, choices)
+}
+
+func requireOneArgument(command string, args []string) (string, error) {
+	if len(args) != 1 {
+		return "", fmt.Errorf("%s requires exactly one argument", command)
+	}
+	return args[0], nil
+}
+
+func runStatus(_ []string) error {
+	status, err := ClientFromEnv().GetStatus()
+	if err != nil {
+		return err
+	}
+	fmt.Println(FormatStatus(status))
+	return nil
+}
+
+func runConfig(_ []string) error {
+	config, err := ClientFromEnv().GetConfig()
+	if err != nil {
+		return err
+	}
+	fmt.Println(FormatConfig(config))
+	return nil
+}
+
+func runConfigGet(args []string) error {
+	config, err := ClientFromEnv().GetConfig()
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		for key, value := range config {
+			fmt.Printf("%s: %v\n", key, value)
+		}
 		return nil
-	},
+	}
+	value, exists := config[args[0]]
+	if !exists {
+		return fmt.Errorf("unknown config key: %s", args[0])
+	}
+	fmt.Println(value)
+	return nil
 }
 
-// configCmd represents the config command
-var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage configuration",
-	Long:  `Get or display configuration settings`,
-	RunE: func(_ *cobra.Command, args []string) error {
-		// Default to 'get' if no subcommand specified
-		client := ClientFromEnv()
-		config, err := client.GetConfig()
-		if err != nil {
-			return err
+func runSnapshotCapture(_ []string) error {
+	frame, err := ClientFromEnv().GetSnapshot()
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(frame)
+	return err
+}
+
+func runSnapshotSave(args []string) error {
+	path, err := requireOneArgument("snapshot save", args)
+	if err != nil {
+		return err
+	}
+	frame, err := ClientFromEnv().GetSnapshot()
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, frame, 0644); err != nil {
+		return fmt.Errorf("failed to save snapshot: %w", err)
+	}
+	fmt.Printf("Snapshot saved to %s\n", path)
+	return nil
+}
+
+func runHealthCheck(_ []string) error {
+	health, err := ClientFromEnv().GetHealth()
+	if err != nil {
+		return err
+	}
+	fmt.Println(FormatHealth(health))
+	return nil
+}
+
+func runHealthDetailed(_ []string) error {
+	health, err := ClientFromEnv().GetHealthDetailed()
+	if err != nil {
+		return err
+	}
+	fmt.Println(FormatHealthDetailed(health))
+	return nil
+}
+
+func runStreamInfo(_ []string) error {
+	metrics, err := ClientFromEnv().GetMetrics()
+	if err != nil {
+		return err
+	}
+	fmt.Println(FormatMetrics(metrics))
+	return nil
+}
+
+func runStreamStop(_ []string) error {
+	if err := ClientFromEnv().StopStream(); err != nil {
+		return err
+	}
+	fmt.Println("Streams stopped")
+	return nil
+}
+
+func runDiagnostics(_ []string) error {
+	diagnostics, err := ClientFromEnv().GetDiagnostics()
+	if err != nil {
+		return err
+	}
+	fmt.Println(FormatDiagnostics(diagnostics))
+	return nil
+}
+
+func runSettingsGet(args []string) error {
+	key := ""
+	if len(args) > 0 {
+		key = args[0]
+	}
+	settings, err := ClientFromEnv().GetSettings(key)
+	if err != nil {
+		return err
+	}
+	if key == "" {
+		settingsMap, ok := settings.(SettingsResponse)
+		if !ok {
+			return fmt.Errorf("unexpected settings response type: %T", settings)
 		}
-		fmt.Println(FormatConfig(config))
+		for name, value := range settingsMap {
+			fmt.Printf("%s: %v\n", name, value)
+		}
 		return nil
-	},
+	}
+	fmt.Printf("%v\n", settings)
+	return nil
 }
 
-// configGetCmd gets a specific config value
-var configGetCmd = &cobra.Command{
-	Use:   "get [key]",
-	Short: "Get a configuration value",
-	Long:  `Get a specific configuration value or all config if no key specified`,
-	RunE: func(_ *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-
-		config, err := client.GetConfig()
-		if err != nil {
-			return err
-		}
-
-		if len(args) == 0 {
-			// Display all config
-			for k, v := range config {
-				fmt.Printf("%s: %v\n", k, v)
-			}
-			return nil
-		}
-
-		key := args[0]
-		value, exists := config[key]
-		if !exists {
-			return fmt.Errorf("unknown config key: %s", key)
-		}
-
-		fmt.Println(value)
-		return nil
-	},
+func runSettingsSet(args []string) error {
+	arg, err := requireOneArgument("settings set", args)
+	if err != nil {
+		return err
+	}
+	key, value, found := strings.Cut(arg, "=")
+	if !found || key == "" {
+		return fmt.Errorf("invalid format, use KEY=VALUE")
+	}
+	if err := ClientFromEnv().SetSetting(key, value); err != nil {
+		return err
+	}
+	fmt.Printf("Setting '%s' updated to '%s'\n", key, value)
+	return nil
 }
 
-// snapshotCmd represents the snapshot command
-var snapshotCmd = &cobra.Command{
-	Use:   "snapshot",
-	Short: "Capture a snapshot",
-	Long:  `Capture a single frame from the camera`,
-}
-
-// snapshotCaptureCmd captures and outputs to stdout
-var snapshotCaptureCmd = &cobra.Command{
-	Use:   "capture",
-	Short: "Capture and output to stdout",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		frame, err := client.GetSnapshot()
-		if err != nil {
-			return err
-		}
-		_, _ = os.Stdout.Write(frame)
-		return nil
-	},
-}
-
-// snapshotSaveCmd captures and saves to file
-var snapshotSaveCmd = &cobra.Command{
-	Use:   "save [path]",
-	Short: "Capture and save to file",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		frame, err := client.GetSnapshot()
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(args[0], frame, 0644); err != nil {
-			return fmt.Errorf("failed to save snapshot: %w", err)
-		}
-		fmt.Printf("Snapshot saved to %s\n", args[0])
-		return nil
-	},
-}
-
-// healthCmd represents the health command
-var healthCmd = &cobra.Command{
-	Use:   "health",
-	Short: "Check system health",
-	Long:  `Display health status of the gogomio system`,
-}
-
-// healthCheckCmd performs a quick health check
-var healthCheckCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Perform a health check",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		health, err := client.GetHealth()
-		if err != nil {
-			return err
-		}
-		fmt.Println(FormatHealth(health))
-		return nil
-	},
-}
-
-// healthDetailedCmd shows detailed health information
-var healthDetailedCmd = &cobra.Command{
-	Use:   "detailed",
-	Short: "Show detailed health information",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		health, err := client.GetHealthDetailed()
-		if err != nil {
-			return err
-		}
-		fmt.Println(FormatHealthDetailed(health))
-		return nil
-	},
-}
-
-// streamCmd represents the stream command
-var streamCmd = &cobra.Command{
-	Use:   "stream",
-	Short: "Manage streaming",
-	Long:  `Manage streaming operations`,
-}
-
-// streamInfoCmd shows stream metrics
-var streamInfoCmd = &cobra.Command{
-	Use:   "info",
-	Short: "Show stream metrics",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		metrics, err := client.GetMetrics()
-		if err != nil {
-			return err
-		}
-		fmt.Println(FormatMetrics(metrics))
-		return nil
-	},
-}
-
-// streamStopCmd stops active streams
-var streamStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop active streams",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		if err := client.StopStream(); err != nil {
-			return err
-		}
-		fmt.Println("Streams stopped")
-		return nil
-	},
-}
-
-// diagnosticsCmd shows diagnostic information
-var diagnosticsCmd = &cobra.Command{
-	Use:   "diagnostics",
-	Short: "Show diagnostic information",
-	Long:  `Display comprehensive diagnostic information about the system`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		diag, err := client.GetDiagnostics()
-		if err != nil {
-			return err
-		}
-		fmt.Println(FormatDiagnostics(diag))
-		return nil
-	},
-}
-
-// settingsCmd represents the settings command
-var settingsCmd = &cobra.Command{
-	Use:   "settings",
-	Short: "Manage settings",
-	Long:  `Get or set persistent settings`,
-}
-
-// settingsGetCmd gets a setting value
-var settingsGetCmd = &cobra.Command{
-	Use:   "get [key]",
-	Short: "Get a setting value",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-
-		if len(args) == 0 {
-			settings, err := client.GetSettings("")
-			if err != nil {
-				return err
-			}
-			settingsMap, ok := settings.(SettingsResponse)
-			if !ok {
-				return fmt.Errorf("unexpected settings response type: %T", settings)
-			}
-			for k, v := range settingsMap {
-				fmt.Printf("%s: %v\n", k, v)
-			}
-			return nil
-		}
-
-		value, err := client.GetSettings(args[0])
-		if err != nil {
-			return err
-		}
-		fmt.Printf("%v\n", value)
-		return nil
-	},
-}
-
-// settingsSetCmd sets a setting value
-var settingsSetCmd = &cobra.Command{
-	Use:   "set KEY=VALUE",
-	Short: "Set a setting value",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Parse KEY=VALUE format
-		arg := args[0]
-		key, value := "", ""
-		for i, c := range arg {
-			if c == '=' {
-				key = arg[:i]
-				value = arg[i+1:]
-				break
-			}
-		}
-		if key == "" {
-			return fmt.Errorf("invalid format, use KEY=VALUE")
-		}
-
-		client := ClientFromEnv()
-		if err := client.SetSetting(key, value); err != nil {
-			return err
-		}
-		fmt.Printf("Setting '%s' updated to '%s'\n", key, value)
-		return nil
-	},
-}
-
-// versionCmd shows version information
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show version information",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := ClientFromEnv()
-		diag, err := client.GetDiagnostics()
-		if err != nil {
-			return err
-		}
-		fmt.Printf("gogomio version %s\n", diag.Version)
-		fmt.Printf("Build Time: %s\n", diag.BuildTime)
-		return nil
-	},
-}
-
-func init() {
-	// Add top-level commands
-	RootCmd.AddCommand(statusCmd)
-	RootCmd.AddCommand(configCmd)
-	RootCmd.AddCommand(snapshotCmd)
-	RootCmd.AddCommand(healthCmd)
-	RootCmd.AddCommand(streamCmd)
-	RootCmd.AddCommand(diagnosticsCmd)
-	RootCmd.AddCommand(settingsCmd)
-	RootCmd.AddCommand(versionCmd)
-
-	// Add config subcommands
-	configCmd.AddCommand(configGetCmd)
-
-	// Add snapshot subcommands
-	snapshotCmd.AddCommand(snapshotCaptureCmd)
-	snapshotCmd.AddCommand(snapshotSaveCmd)
-
-	// Add health subcommands
-	healthCmd.AddCommand(healthCheckCmd)
-	healthCmd.AddCommand(healthDetailedCmd)
-
-	// Add stream subcommands
-	streamCmd.AddCommand(streamInfoCmd)
-	streamCmd.AddCommand(streamStopCmd)
-
-	// Add settings subcommands
-	settingsCmd.AddCommand(settingsGetCmd)
-	settingsCmd.AddCommand(settingsSetCmd)
+func runVersion(_ []string) error {
+	diagnostics, err := ClientFromEnv().GetDiagnostics()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("gogomio version %s\n", diagnostics.Version)
+	fmt.Printf("Build Time: %s\n", diagnostics.BuildTime)
+	return nil
 }

@@ -98,11 +98,11 @@ Each skill is a specialized guide focusing on one area of complexity. Use skills
 
 ### 🎯 [Go CLI Design](./go-cli-design/SKILL.md)
 
-**Use when:** Building Cobra CLI commands, designing client-server interactions, formatting output for both humans and machines, or handling errors with actionable messages.
+**Use when:** Designing CLI commands, client-server interactions, human-readable output, and actionable errors.
 
 **Key patterns:**
 
-- Cobra command tree structure with Use, Short, Long, Example
+- Small command trees with a standard-library dispatcher and explicit help text
 - Global flags (`--server`, `--timeout`) with env var support
 - Dual output modes (`--json` flag for structured output)
 - Error messages that explain the cause and suggest next steps
@@ -119,25 +119,6 @@ Each skill is a specialized guide focusing on one area of complexity. Use skills
 
 ---
 
-### 🔍 [golangci-lint Analysis](./golangci-lint-analysis/SKILL.md)
-
-**Use when:** Performing static code analysis, detecting security vulnerabilities, enforcing code quality standards, finding performance issues, or preparing code for review.
-
-**Key patterns:**
-
-- Priority-based issue triage (P0 security → P3 style)
-- Comprehensive linter sets for different use cases (quick scan, quality check, full audit)
-- Security-focused analysis with gosec
-- Performance optimization with perfsprint, prealloc
-- Code maintainability with goconst, revive, dupl
-- `.golangci.yml` configuration for CI/CD integration
-
-**Critical problems this solves:**
-
-- Security vulnerabilities (missing timeouts, exposed endpoints, permission issues)
-- Magic strings repeated throughout codebase
-- Missing documentation on exported items
-- Context not propagated for cancellation
 - Performance issues (unnecessary allocations, inefficient string operations)
 - Code duplication and excessive complexity
 
@@ -210,7 +191,7 @@ Each skill follows a consistent format:
 | Adding camera backends, subprocess management | [Camera Integration Patterns](./camera-integration-patterns/SKILL.md) |
 | Optimizing for Pi, reducing memory, cross-compilation | [Embedded IoT Deployment](./embedded-iot-deployment/SKILL.md) |
 | Building CLI commands, client-server interactions | [Go CLI Design](./go-cli-design/SKILL.md) |
-| Running static analysis, finding code health issues | [golangci-lint Analysis](./golangci-lint-analysis/SKILL.md) |
+| Running static checks | `go vet ./...` and `gofmt -l` |
 
 **By technology:**
 
@@ -220,8 +201,7 @@ Each skill follows a consistent format:
 | HTTP, multipart, io.Writer | [HTTP Streaming Patterns](./http-streaming-patterns/SKILL.md) |
 | Subprocess, channels, error handling | [Camera Integration Patterns](./camera-integration-patterns/SKILL.md) |
 | Docker, GOOS/GOARCH, memory profiling | [Embedded IoT Deployment](./embedded-iot-deployment/SKILL.md) |
-| Cobra, HTTP client, flag parsing | [Go CLI Design](./go-cli-design/SKILL.md) |
-| golangci-lint, gosec, staticcheck, code quality | [golangci-lint Analysis](./golangci-lint-analysis/SKILL.md) |
+| Standard-library CLI dispatch, HTTP client, argument validation | [Go CLI Design](./go-cli-design/SKILL.md) |
 
 ---
 

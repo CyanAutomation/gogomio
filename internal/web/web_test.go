@@ -7,14 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 )
 
 // TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes verifies stable,
 // user-observable root-page requirements without pinning exact JS source text.
 func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -76,7 +74,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 
 // TestWebUINotFoundPath tests that non-root paths return 404
 func TestWebUINotFoundPath(t *testing.T) {
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
 	req, _ := http.NewRequest("GET", "/invalid-path", nil)
@@ -90,7 +88,7 @@ func TestWebUINotFoundPath(t *testing.T) {
 
 // TestWebUICacheHeaders verifies the root page has the expected cache policy directives and TTL.
 func TestWebUICacheHeaders(t *testing.T) {
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -114,7 +112,7 @@ func TestWebUICacheHeaders(t *testing.T) {
 }
 
 func TestMioStaticAssetsAreServed(t *testing.T) {
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
 	tests := []struct {
@@ -164,7 +162,7 @@ func TestMioStaticAssetsAreServed(t *testing.T) {
 }
 
 func TestLegacyMioStaticAssetsAreNotServed(t *testing.T) {
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
 	legacyAssets := []string{

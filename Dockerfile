@@ -16,15 +16,8 @@ ARG INSTALL_FFMPEG
 
 WORKDIR /build
 
-# Copy go mod files first for better caching
-COPY go.mod go.sum ./
-
-# Download dependencies (cached until go.mod/go.sum change)
-RUN /usr/local/go/bin/go mod download
-
-# Install C toolchain required for -race (CGO) test builds
-# Install jq for robust JSON parsing in test failure summaries
-RUN apk add --no-cache gcc musl-dev jq
+# Install C toolchain required for -race (CGO) test builds.
+RUN apk add --no-cache gcc musl-dev
 
 # Copy remaining source code
 COPY . .
@@ -35,17 +28,13 @@ RUN set -eu; \
     status=0; \
     for pkg in $(/usr/local/go/bin/go list ./...); do \
       safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g'); \
-      log_file="/tmp/test-logs/${safe_pkg}.jsonl"; \
-      if ! CGO_ENABLED=1 /usr/local/go/bin/go test -race -json "$pkg" | tee "$log_file" > /dev/null; then \
+      log_file="/tmp/test-logs/${safe_pkg}.log"; \
+      if ! CGO_ENABLED=1 /usr/local/go/bin/go test -race "$pkg" > "$log_file" 2>&1; then \
         status=1; \
-        jq -rs '(map(select(.Action == "fail" and (.Test != null))) | .[0]) as $fail | if $fail then "FAIL: \($fail.Test)" else empty end' "$log_file"; \
+        cat "$log_file"; \
       fi; \
     done; \
     test "$status" -eq 0
-
-# Install swag CLI and generate Swagger docs
-RUN /usr/local/go/bin/go install github.com/swaggo/swag/cmd/swag@v1.16.6 && \
-    /go/bin/swag init -g cmd/gogomio/main.go
 
 # Build the binary with version information
 # Use go build with optimization flags

@@ -343,7 +343,7 @@ __✅ One-command bootstrap__
 #### 3. Runtime Operability — __5/5__ ✅ (+15 points)
 
 __✅ Project starts successfully__  
-Defined entrypoints: server mode (no args → HTTP server) and CLI mode (Cobra subcommands → HTTP queries). Binary [cmd/gogomio/main.go](../../cmd/gogomio/main.go) runs immediately on `go run ./cmd/gogomio` or Docker startup.
+Defined entrypoints: server mode (no args → HTTP server) and CLI mode (standard-library command dispatch → HTTP queries). Binary [cmd/gogomio/main.go](../../cmd/gogomio/main.go) runs immediately on `go run ./cmd/gogomio` or Docker startup.
 
 __✅ Logs or output visible__  
 Console output present: frame buffer stats, FPS metrics, connection events logged to stdout. [internal/camera/stream_stats.go](../../internal/camera/stream_stats.go) calculates real-time metrics.
@@ -405,11 +405,11 @@ Well-organized: `cmd/gogomio/` (CLI entry point), `internal/camera/`, `internal/
 __✅ Config separated from code__  
 Config loaded from environment variables ([internal/config/config.go](../../internal/config/config.go)) and `.env` file, not hardcoded. Settings persisted to file ([internal/settings/settings.go](../../internal/settings/settings.go)) with OS-appropriate locking.
 
-__✅ Linting config exists__  
-[.golangci.yml](../../.golangci.yml) defines linter rules. CI includes `golangci-lint` job.
+__✅ Static checks present__
+CI runs `go vet ./...` and checks tracked Go files with `gofmt -l`.
 
 __✅ Type checking present__  
-Go is statically typed; all code type-safe by default. Compatible with Go 1.22+.
+Go is statically typed; all code type-safe by default. The module requires Go 1.25.
 
 __✅ No oversized files__  
 Largest files: [internal/api/handlers.go](../../internal/api/handlers.go) (~400 lines), [cmd/gogomio/main.go](../../cmd/gogomio/main.go) (~300 lines). All well under 1000-line threshold.
@@ -419,13 +419,13 @@ Largest files: [internal/api/handlers.go](../../internal/api/handlers.go) (~400 
 #### 7. Security & Dependency Hygiene — __5/5__ ✅ (+10 points)
 
 __✅ Dependency manifest exists__  
-[go.mod](../../go.mod) present with explicit module dependencies (Chi v5, Go 1.22+).
+[go.mod](../../go.mod) present; the application uses the Go standard library and has no third-party Go modules.
 
 __✅ Lockfile exists__  
-[go.sum](../../go.sum) present; all dependency hashes locked.
+No `go.sum` is needed because there are no third-party Go module requirements.
 
 __✅ Dependency automation configured__  
-[.github/dependabot.yml](../../.github/dependabot.yml) configured for weekly updates with grouped PRs: `gomod` (Go dependencies) and `github-actions`. Dependabot is enabled and automatically creates pull requests for updates.
+[.github/dependabot.yml](../../.github/dependabot.yml) configured for weekly GitHub Actions updates. Go module updates are not configured because the application has no third-party module requirements.
 
 __✅ Versions pinned__  
 Go version pinned to `1.22+`. Dependencies in `go.mod` use specific versions, not wildcards.
@@ -575,8 +575,8 @@ __Total Score Impact__: +7 points (base 86 → 100, final 93 → 100/100)
 
 ### Dependencies & Build Status
 
-__Go Version:__ 1.22+  
-__Key Dependencies:__ Chi v5 (HTTP router)  
+__Go Version:__ 1.25
+__Key Dependencies:__ Go standard library
 __Build:__ Multi-arch Docker images (linux/amd64, linux/arm64)  
 __CI Status:__ ✅ Passing (codecov ≥75% coverage gate)  
 __Last Release:__ v0.1.0 (2026-04-30)  
