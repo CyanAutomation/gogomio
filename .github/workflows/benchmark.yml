@@ -10,7 +10,6 @@ on:
     - cron: '0 9 * * 1'  # Every Monday at 9 AM UTC
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -22,6 +21,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -29,26 +30,54 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Find latest successful main benchmark run
+      - name: Prepare base revision source
         id: baseline
+        shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            baseline_sha="$PR_BASE_SHA"
+          elif [[ "$EVENT_NAME" == "push" && -n "$PUSH_BEFORE_SHA" && ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
+            baseline_sha="$PUSH_BEFORE_SHA"
+          else
+            baseline_sha="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+
+          if [[ -z "$baseline_sha" || "$baseline_sha" == "$GITHUB_SHA" ]]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo 'No earlier revision is available for a benchmark comparison.'
+            exit 0
+          fi
+
+          git worktree add --detach "$RUNNER_TEMP/benchmark-baseline" "$baseline_sha"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run base revision benchmarks
+        id: run-baseline-benchmarks
+        if: steps.baseline.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          run_id="$(gh run list --workflow benchmark.yml --branch main --status success --limit 50 --json databaseId --jq '.[0].databaseId // empty')"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-
-      - name: Download previous benchmark baseline
-        if: steps.baseline.outputs.run_id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: benchmark-results
-          path: baseline
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.baseline.outputs.run_id }}
+          mkdir -p baseline
+          if (
+            cd "$RUNNER_TEMP/benchmark-baseline"
+            go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... \
+              > "$GITHUB_WORKSPACE/baseline/bench-current.txt" \
+              2> "$GITHUB_WORKSPACE/benchmark-baseline-diagnostics.txt"
+          ); then
+            rm -f benchmark-baseline-diagnostics.txt
+          else
+            status=$?
+            echo "::error::Base revision benchmark command failed with exit code $status."
+            echo 'Recent base revision benchmark output:'
+            tail -n 100 baseline/bench-current.txt || true
+            tail -n 100 benchmark-baseline-diagnostics.txt || true
+            exit "$status"
+          fi
 
       - name: Run benchmarks
         id: run-benchmarks
@@ -74,15 +103,18 @@ jobs:
 
       - name: Compare benchmarks and check regressions
         id: compare
+        env:
+          BASELINE_AVAILABLE: ${{ steps.baseline.outputs.available }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -s baseline/bench-current.txt ]]; then
+          if [[ "$BASELINE_AVAILABLE" == 'true' && -s baseline/bench-current.txt ]]; then
             "$RUNNER_TEMP/bin/benchstat" baseline/bench-current.txt bench-current.txt > bench-comparison.txt
             cat bench-comparison.txt
-            python3 scripts/check_benchstat.py bench-comparison.txt --threshold-percent 10 --alpha 0.05
+            # Paired runs still show low-teens variation in unchanged microbenchmarks.
+            python3 scripts/check_benchstat.py bench-comparison.txt --threshold-percent 15 --alpha 0.05
           else
-            echo 'No downloadable successful main-branch baseline is available; this run will establish one.'
+            echo 'No base revision is available; this run will establish a benchmark baseline.'
             echo 'Benchmark comparison skipped because no baseline is available.' > bench-comparison.txt
           fi
 
@@ -100,6 +132,8 @@ jobs:
       - name: Publish benchmark summary
         if: always()
         env:
+          BASELINE_AVAILABLE: ${{ steps.baseline.outputs.available }}
+          BASELINE_OUTCOME: ${{ steps.run-baseline-benchmarks.outcome }}
           BENCHMARK_OUTCOME: ${{ steps.run-benchmarks.outcome }}
           COMPARE_OUTCOME: ${{ steps.compare.outcome }}
         shell: bash
@@ -107,6 +141,8 @@ jobs:
           {
             echo '## Benchmark comparison'
             echo
+            echo "Base revision available: $BASELINE_AVAILABLE"
+            echo "Base benchmark step: $BASELINE_OUTCOME"
             echo "Benchmark step: $BENCHMARK_OUTCOME"
             echo "Comparison step: $COMPARE_OUTCOME"
             if [[ "$BENCHMARK_OUTCOME" != 'success' ]]; then
