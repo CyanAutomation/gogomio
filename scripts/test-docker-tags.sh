@@ -29,6 +29,20 @@ assert_rejected() {
 
 assert_tags 'latest, 0.2.0-rc1' $'cyanautomation/gogomio:latest\ncyanautomation/gogomio:latest-arm64\ncyanautomation/gogomio:0.2.0-rc1\ncyanautomation/gogomio:0.2.0-rc1-arm64'
 assert_tags 'A_1,release.candidate-2' $'cyanautomation/gogomio:A_1\ncyanautomation/gogomio:A_1-arm64\ncyanautomation/gogomio:release.candidate-2\ncyanautomation/gogomio:release.candidate-2-arm64'
+image_tags="$(bash "$parser" 'latest,0.2.0-rc1')"
+tag_names_csv="$(printf '%s\n' "$image_tags" | bash "$repo_root/scripts/docker-tag-names.sh")"
+if [[ "$tag_names_csv" != 'latest,latest-arm64,0.2.0-rc1,0.2.0-rc1-arm64' ]]; then
+  printf 'Expected a single-line list of tag names, got: %q\n' "$tag_names_csv" >&2
+  exit 1
+fi
+if printf '%s\n' 'someone-else/gogomio:latest' | bash "$repo_root/scripts/docker-tag-names.sh" >/dev/null 2>&1; then
+  echo 'Expected tag-name serialization to reject another image repository.' >&2
+  exit 1
+fi
+if printf '%s\n' 'cyanautomation/gogomio:bad/tag' | bash "$repo_root/scripts/docker-tag-names.sh" >/dev/null 2>&1; then
+  echo 'Expected tag-name serialization to reject an invalid Docker tag.' >&2
+  exit 1
+fi
 max_tag="$(printf '%122s' '' | tr ' ' x)"
 assert_tags "$max_tag" "$(printf 'cyanautomation/gogomio:%s\ncyanautomation/gogomio:%s-arm64' "$max_tag" "$max_tag")"
 
