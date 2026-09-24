@@ -1185,6 +1185,17 @@ func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config,
 		handleStopStream(w, r, fm)
 	})
 
+	// Settings endpoints
+	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsGet(w, r, fm)
+	})
+	router.Post("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsUpdate(w, r, fm)
+	})
+	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+		handleSettingsUpdate(w, r, fm)
+	})
+
 	// Diagnostics endpoint
 	router.Get("/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		handleDiagnostics(w, r, fm, cfg, startTime)

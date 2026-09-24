@@ -40,9 +40,9 @@ jobs:
         Perform a conservative DRY-principle review of this repository.
 
       # Adjust these paths for each repository.
-      ALLOWLIST: src/**/*,scripts/**/*,test/**/*,tests/**/*
+      ALLOWLIST: cmd/**/*,internal/**/*,scripts/**/*
 
-      VALIDATION_COMMAND: npm run check
+      VALIDATION_COMMAND: go test ./...
 
     steps:
       - name: Validate Kaseki configuration
