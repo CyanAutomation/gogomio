@@ -3,8 +3,6 @@
 ARG GO_IMAGE=golang:1.25-alpine3.22
 FROM ${GO_IMAGE} AS build
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN /usr/local/go/bin/go mod download
 COPY . .
 RUN CGO_ENABLED=0 /usr/local/go/bin/go build -trimpath -ldflags="-s -w" -o /out/gogomio ./cmd/gogomio
 

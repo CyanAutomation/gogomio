@@ -305,6 +305,47 @@ func TestFormatJSON(t *testing.T) {
 	}
 }
 
+func TestDispatchHelp(t *testing.T) {
+	var output bytes.Buffer
+	if err := dispatch([]string{"--help"}, &output); err != nil {
+		t.Fatalf("dispatch help: %v", err)
+	}
+	for _, want := range []string{"Usage:", "status", "settings", "version"} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("help output does not contain %q: %s", want, output.String())
+		}
+	}
+}
+
+func TestDispatchSubcommandHelp(t *testing.T) {
+	var output bytes.Buffer
+	if err := dispatch([]string{"config", "get", "--help"}, &output); err != nil {
+		t.Fatalf("dispatch config get help: %v", err)
+	}
+	if !strings.Contains(output.String(), "Usage: gogomio config get [key]") {
+		t.Fatalf("unexpected help output: %s", output.String())
+	}
+}
+
+func TestDispatchUnknownCommand(t *testing.T) {
+	var output bytes.Buffer
+	err := dispatch([]string{"not-a-command"}, &output)
+	if err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("dispatch error = %v, want unknown command", err)
+	}
+}
+
+func TestDispatchRequiresArgumentsForSaveAndSet(t *testing.T) {
+	for _, args := range [][]string{{"snapshot", "save"}, {"settings", "set"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var output bytes.Buffer
+			if err := dispatch(args, &output); err == nil {
+				t.Fatalf("dispatch(%q) succeeded, want argument error", args)
+			}
+		})
+	}
+}
+
 func TestSettingsGetCmd_PrintsAllKeysAndSpecificValue(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/api/settings" {
@@ -318,7 +359,7 @@ func TestSettingsGetCmd_PrintsAllKeysAndSpecificValue(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	allOutput, err := captureStdout(func() error {
-		return settingsGetCmd.RunE(settingsGetCmd, []string{})
+		return runSettingsGet(nil)
 	})
 	if err != nil {
 		t.Fatalf("unexpected error running settings get all: %v", err)
@@ -331,7 +372,7 @@ func TestSettingsGetCmd_PrintsAllKeysAndSpecificValue(t *testing.T) {
 	}
 
 	brightnessOutput, err := captureStdout(func() error {
-		return settingsGetCmd.RunE(settingsGetCmd, []string{"brightness"})
+		return runSettingsGet([]string{"brightness"})
 	})
 	if err != nil {
 		t.Fatalf("unexpected error running settings get brightness: %v", err)
@@ -381,7 +422,7 @@ func TestStatusCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return statusCmd.RunE(statusCmd, []string{})
+		return runStatus(nil)
 	})
 	if err != nil {
 		t.Fatalf("status command failed: %v", err)
@@ -405,7 +446,7 @@ func TestStatusCmd_ServerError(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	_, err := captureStdout(func() error {
-		return statusCmd.RunE(statusCmd, []string{})
+		return runStatus(nil)
 	})
 	if err == nil {
 		t.Fatalf("expected error for server error response")
@@ -431,7 +472,7 @@ func TestConfigCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return configCmd.RunE(configCmd, []string{})
+		return runConfig(nil)
 	})
 	if err != nil {
 		t.Fatalf("config command failed: %v", err)
@@ -460,7 +501,7 @@ func TestConfigGetCmd(t *testing.T) {
 
 	// Test getting specific key
 	output, err := captureStdout(func() error {
-		return configGetCmd.RunE(configGetCmd, []string{"fps"})
+		return runConfigGet([]string{"fps"})
 	})
 	if err != nil {
 		t.Fatalf("config get command failed: %v", err)
@@ -484,7 +525,7 @@ func TestConfigGetCmd_InvalidKey(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	_, err := captureStdout(func() error {
-		return configGetCmd.RunE(configGetCmd, []string{"nonexistent"})
+		return runConfigGet([]string{"nonexistent"})
 	})
 	if err == nil {
 		t.Fatalf("expected error for nonexistent config key")
@@ -511,7 +552,7 @@ func TestHealthCheckCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return healthCheckCmd.RunE(healthCheckCmd, []string{})
+		return runHealthCheck(nil)
 	})
 	if err != nil {
 		t.Fatalf("health check command failed: %v", err)
@@ -541,7 +582,7 @@ func TestHealthDetailedCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return healthDetailedCmd.RunE(healthDetailedCmd, []string{})
+		return runHealthDetailed(nil)
 	})
 	if err != nil {
 		t.Fatalf("health detailed command failed: %v", err)
@@ -569,7 +610,7 @@ func TestSnapshotCaptureCmd(t *testing.T) {
 	// Capture stdout to verify JPEG is written
 	output, err := captureStdout(func() error {
 		// Redirect stdout to capture binary data
-		return snapshotCaptureCmd.RunE(snapshotCaptureCmd, []string{})
+		return runSnapshotCapture(nil)
 	})
 	if err != nil {
 		t.Fatalf("snapshot capture command failed: %v", err)
@@ -598,7 +639,7 @@ func TestSnapshotSaveCmd(t *testing.T) {
 	tmpFile := tmpDir + "/snapshot.jpg"
 
 	output, err := captureStdout(func() error {
-		return snapshotSaveCmd.RunE(snapshotSaveCmd, []string{tmpFile})
+		return runSnapshotSave([]string{tmpFile})
 	})
 	if err != nil {
 		t.Fatalf("snapshot save command failed: %v", err)
@@ -640,7 +681,7 @@ func TestDiagnosticsCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return diagnosticsCmd.RunE(diagnosticsCmd, []string{})
+		return runDiagnostics(nil)
 	})
 	if err != nil {
 		t.Fatalf("diagnostics command failed: %v", err)
@@ -677,7 +718,7 @@ func TestStreamInfoCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return streamInfoCmd.RunE(streamInfoCmd, []string{})
+		return runStreamInfo(nil)
 	})
 	if err != nil {
 		t.Fatalf("stream info command failed: %v", err)
@@ -704,7 +745,7 @@ func TestStreamStopCmd(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", server.URL)
 
 	output, err := captureStdout(func() error {
-		return streamStopCmd.RunE(streamStopCmd, []string{})
+		return runStreamStop(nil)
 	})
 	if err != nil {
 		t.Fatalf("stream stop command failed: %v", err)
@@ -719,7 +760,7 @@ func TestClientConnectionError(t *testing.T) {
 	t.Setenv("GOGOMIO_URL", "http://localhost:1234") // Unused port
 
 	_, err := captureStdout(func() error {
-		return statusCmd.RunE(statusCmd, []string{})
+		return runStatus(nil)
 	})
 	if err == nil {
 		t.Fatalf("expected error when server is unreachable")

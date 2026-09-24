@@ -92,7 +92,7 @@ func TestRealCameraConcurrentStartLaunchesOnce(t *testing.T) {
 
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("bash", "-c", "sleep 30")
+		cmd := exec.Command("sh", "-c", "sleep 30")
 		if err := cmd.Start(); err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -174,7 +174,7 @@ func TestRealCameraStopCleansProcessFromBlockedLaunch(t *testing.T) {
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		close(launchStarted)
 		<-releaseLaunch
-		cmd := exec.Command("bash", "-c", "sleep 30")
+		cmd := exec.Command("sh", "-c", "sleep 30")
 		if err := cmd.Start(); err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -599,7 +599,7 @@ func TestRealCameraCaptureFrameReturnsBufferedLatest(t *testing.T) {
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("bash", "-c", "sleep 30")
+		cmd := exec.Command("sh", "-c", "sleep 30")
 		if err := cmd.Start(); err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -645,7 +645,7 @@ func TestRealCameraCaptureFrameTimeout(t *testing.T) {
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("bash", "-c", "sleep 30")
+		cmd := exec.Command("sh", "-c", "sleep 30")
 		if err := cmd.Start(); err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -678,7 +678,7 @@ func TestRealCameraStartDetectsEarlyBackendExit(t *testing.T) {
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("bash", "-c", "sleep 0.01")
+		cmd := exec.Command("sh", "-c", "sleep 0.01")
 		if err := cmd.Start(); err != nil {
 			return nil, nil, nil, nil, err
 		}
@@ -736,7 +736,7 @@ func TestRealCameraStartTimeoutMessageUsesStartupTimeout(t *testing.T) {
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
 		stdoutR, stdoutW := io.Pipe()
 		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("bash", "-c", "sleep 30")
+		cmd := exec.Command("sh", "-c", "sleep 30")
 		if err := cmd.Start(); err != nil {
 			return nil, nil, nil, nil, err
 		}

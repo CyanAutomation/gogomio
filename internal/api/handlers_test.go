@@ -16,7 +16,6 @@ import (
 
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
-	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -242,7 +241,7 @@ func (w *countingStreamWriter) BodyString() string {
 }
 
 // setupTestServer creates a test Chi router with API handlers
-func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config) {
+func setupTestServer(t *testing.T) (http.Handler, *camera.MockCamera, *config.Config) {
 	cfg := &config.Config{
 		Resolution:           [2]int{640, 480},
 		FPS:                  24,
@@ -259,11 +258,11 @@ func setupTestServer(t *testing.T) (*chi.Mux, *camera.MockCamera, *config.Config
 		t.Fatalf("Failed to start mock camera: %v", err)
 	}
 
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	frame := NewFrameManager(mockCam, cfg)
-	RegisterHandlers(router, frame, cfg)
+	handler := RegisterHandlers(router, frame, cfg)
 
-	return router, mockCam, cfg
+	return handler, mockCam, cfg
 }
 
 func TestRegisteredEndpointResponses(t *testing.T) {
@@ -277,8 +276,7 @@ func TestRegisteredEndpointResponses(t *testing.T) {
 	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
 	t.Cleanup(fm.Stop)
 
-	router := chi.NewRouter()
-	RegisterHandlers(router, fm, cfg)
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
 
 	tests := []struct {
 		path       string
@@ -391,6 +389,68 @@ func TestOperationalMetricsAndRemovedSettingsRoute(t *testing.T) {
 	}
 }
 
+func TestAPIReferenceRoutes(t *testing.T) {
+	router, cam, _ := setupTestServer(t)
+	defer func() { _ = cam.Stop() }()
+
+	for _, path := range []string{"/docs/", "/docs/index.html"} {
+		t.Run(path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+			}
+			if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+				t.Fatalf("content type = %q, want HTML", got)
+			}
+			for _, link := range []string{"/swagger.json", "/swagger.yaml"} {
+				if !strings.Contains(response.Body.String(), link) {
+					t.Errorf("docs page does not link to %s", link)
+				}
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		path        string
+		contentType string
+		want        string
+	}{
+		{path: "/swagger.json", contentType: "application/json", want: `"swagger": "2.0"`},
+		{path: "/swagger.yaml", contentType: "application/yaml", want: "swagger: \"2.0\""},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+			}
+			if got := response.Header().Get("Content-Type"); !strings.Contains(got, tc.contentType) {
+				t.Fatalf("content type = %q, want %q", got, tc.contentType)
+			}
+			if !strings.Contains(response.Body.String(), tc.want) {
+				t.Fatalf("response does not contain %q", tc.want)
+			}
+		})
+	}
+}
+
+func TestRouterRejectsUnsupportedMethod(t *testing.T) {
+	router, cam, _ := setupTestServer(t)
+	defer func() { _ = cam.Stop() }()
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/status", nil))
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
+	}
+	if !strings.Contains(response.Header().Get("Allow"), http.MethodGet) {
+		t.Fatalf("Allow header = %q, want GET", response.Header().Get("Allow"))
+	}
+}
+
 func TestReadyRoute(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -416,8 +476,7 @@ func TestReadyRoute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{}
 			fm := NewFrameManager(&readinessCamera{ready: tt.ready}, cfg)
-			router := chi.NewRouter()
-			RegisterHandlers(router, fm, cfg)
+			router := RegisterHandlers(http.NewServeMux(), fm, cfg)
 
 			req := httptest.NewRequest(http.MethodGet, "/ready", nil)
 			w := httptest.NewRecorder()
@@ -815,9 +874,9 @@ func TestStreamingConnectionLimit(t *testing.T) {
 	}
 	defer func() { _ = mockCam.Stop() }()
 
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	frame := NewFrameManager(mockCam, cfg)
-	RegisterHandlers(router, frame, cfg)
+	routerHandler := RegisterHandlers(router, frame, cfg)
 
 	// First request should succeed
 	ctx1, cancel1 := context.WithCancel(context.Background())
@@ -826,14 +885,14 @@ func TestStreamingConnectionLimit(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		router.ServeHTTP(w1, req1)
+		routerHandler.ServeHTTP(w1, req1)
 	}()
 	waitForCaptureState(t, frame, true)
 
 	// Second request should be rejected (conn limit)
 	req2, _ := http.NewRequest("GET", "/stream.mjpg", nil)
 	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
+	routerHandler.ServeHTTP(w2, req2)
 
 	if w2.Code != http.StatusTooManyRequests {
 		t.Errorf("second connection status: got %d, want %d", w2.Code, http.StatusTooManyRequests)

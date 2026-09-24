@@ -13,13 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/CyanAutomation/gogomio/docs"
+	"github.com/CyanAutomation/gogomio/docs/reference"
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/CyanAutomation/gogomio/internal/settings"
 	"github.com/CyanAutomation/gogomio/internal/web"
-	"github.com/go-chi/chi/v5"
-	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // FrameManager coordinates camera capture and serves frames to HTTP clients.
@@ -770,7 +768,6 @@ func writeMultipartFrame(w http.ResponseWriter, contentLengthScratch *[]byte, fr
 }
 
 // CameraConfigResponse contains static camera configuration
-// @Description Static camera configuration including encoded output resolution, quality, and limits; resolution does not describe sensor field of view
 type CameraConfigResponse struct {
 	// Encoded output resolution in pixels [width, height]; does not describe sensor field of view
 	Resolution [2]int `json:"resolution"`
@@ -789,7 +786,6 @@ type CameraConfigResponse struct {
 }
 
 // LiveMetricsResponse contains dynamic, real-time metrics
-// @Description Current performance and connection metrics
 type LiveMetricsResponse struct {
 	// Current frames per second being delivered
 	FPSCurrent float64 `json:"fps_current" example:"29.8"`
@@ -812,7 +808,6 @@ type LiveMetricsResponse struct {
 }
 
 // HealthResponse is a quick health check response
-// @Description Quick health status (suitable for Kubernetes probes)
 type HealthResponse struct {
 	// Overall status: ok, degraded, error
 	Status string `json:"status" example:"ok"`
@@ -833,7 +828,6 @@ type HealthResponse struct {
 }
 
 // DetailedHealthResponse provides comprehensive health and metrics information
-// @Description Comprehensive health status with detailed metrics, error tracking, and diagnostics
 type DetailedHealthResponse struct {
 	// Overall status: ok, degraded, error
 	Status string `json:"status" example:"ok"`
@@ -1093,67 +1087,82 @@ func isTrustedProxy(ip net.IP, trustedProxyNets []*net.IPNet) bool {
 	return false
 }
 
-// RegisterHandlers registers all API endpoints with the Chi router.
-// RegisterHandlers registers all API routes with versioning support
-func RegisterHandlers(router *chi.Mux, fm *FrameManager, cfg *config.Config) {
+// RegisterHandlers registers the API routes and returns the middleware-wrapped handler.
+func RegisterHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Config) http.Handler {
 	startTime := time.Now()
 
 	// Create rate limiter: 100 requests per 10 seconds per IP
 	rateLimiter := NewRateLimiter(100, 10*time.Second)
 
-	// Middleware
-	router.Use(corsMiddleware)
-	router.Use(loggingMiddleware)
-	// Apply limits consistently to supported and legacy routes. This prevents
-	// unbounded snapshot-triggered capture work on deprecated paths.
-	router.Use(rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs))
-
 	// Register web UI (must be before other handlers for proper routing)
 	web.RegisterStaticFiles(router)
-
-	// Register Swagger UI
-	router.Get("/docs/*", httpSwagger.Handler())
+	registerOpenAPIRoutes(router)
 
 	// Register API routes with versioning
-	router.Route("/v1", func(r chi.Router) {
-		registerV1Handlers(r, fm, cfg, startTime)
-	})
+	registerV1Handlers(router, fm, cfg, startTime)
 
 	// Dependency-free Prometheus-compatible metrics for Pi deployments.
-	router.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
 		handlePrometheusMetrics(w, fm)
 	})
 
 	// Register unversioned legacy endpoints for backward compatibility
 	registerLegacyHandlers(router, fm, cfg, startTime)
+
+	// Apply limits consistently to all routes. This prevents unbounded
+	// snapshot-triggered capture work on deprecated paths.
+	handler := rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs)(router)
+	handler = loggingMiddleware(handler)
+	return corsMiddleware(handler)
+}
+
+func registerOpenAPIRoutes(router *http.ServeMux) {
+	docs := http.FileServer(http.FS(reference.Files))
+	router.Handle("GET /docs/", http.StripPrefix("/docs/", docs))
+	router.HandleFunc("GET /docs/index.html", serveReferenceFile("index.html", "text/html; charset=utf-8"))
+	router.HandleFunc("GET /swagger.json", serveReferenceFile("swagger.json", "application/json; charset=utf-8"))
+	router.HandleFunc("GET /swagger.yaml", serveReferenceFile("swagger.yaml", "application/yaml; charset=utf-8"))
+}
+
+func serveReferenceFile(name, contentType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		data, err := reference.Files.ReadFile(name)
+		if err != nil {
+			http.Error(w, "API reference unavailable", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_, _ = w.Write(data)
+	}
 }
 
 // registerV1Handlers registers all v1 API endpoints
-func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+func registerV1Handlers(router *http.ServeMux, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Health check endpoints
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, fm, startTime)
 	})
 
-	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/ready", func(w http.ResponseWriter, r *http.Request) {
 		handleReady(w, r, fm)
 	})
 
 	// New refactored config and metrics endpoints
-	router.Get("/config/camera", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/config/camera", func(w http.ResponseWriter, r *http.Request) {
 		handleCameraConfig(w, r, cfg)
 	})
 
-	router.Get("/metrics/live", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/metrics/live", func(w http.ResponseWriter, r *http.Request) {
 		handleLiveMetrics(w, r, fm, cfg, startTime)
 	})
 
-	router.Get("/health/detailed", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/health/detailed", func(w http.ResponseWriter, r *http.Request) {
 		handleDetailedHealth(w, r, fm, cfg, startTime)
 	})
 
 	// Stream endpoints
-	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
 		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
 			// Client disconnected or error occurred - this is normal
 			_ = err
@@ -1161,105 +1170,97 @@ func registerV1Handlers(router chi.Router, fm *FrameManager, cfg *config.Config,
 	})
 
 	// OctoPrint-compatible stream endpoint
-	router.Get("/webcam", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/webcam", func(w http.ResponseWriter, r *http.Request) {
 		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
 			// Client disconnected or error occurred - this is normal
 			_ = err
 		}
 	})
 
-	router.Get("/snapshot.jpg", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/snapshot.jpg", func(w http.ResponseWriter, r *http.Request) {
 		handleSnapshot(w, r, fm)
 	})
 
 	// API endpoints
-	router.Get("/api/config", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/config", func(w http.ResponseWriter, r *http.Request) {
 		handleAPIConfigure(w, r, fm, cfg, startTime)
 	})
 
-	router.Get("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/status", func(w http.ResponseWriter, r *http.Request) {
 		handleAPIStatus(w, r, fm, cfg, startTime)
 	})
 
-	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("POST /v1/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
 		handleStopStream(w, r, fm)
 	})
 
 	// Settings endpoints
-	router.Get("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsGet(w, r, fm)
 	})
-	router.Post("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("POST /v1/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsUpdate(w, r, fm)
 	})
-	router.Put("/api/settings", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("PUT /v1/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsUpdate(w, r, fm)
 	})
 
 	// Diagnostics endpoint
-	router.Get("/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		handleDiagnostics(w, r, fm, cfg, startTime)
 	})
 }
 
 // registerLegacyHandlers registers unversioned endpoints for backward compatibility
-func registerLegacyHandlers(router chi.Router, fm *FrameManager, cfg *config.Config, startTime time.Time) {
+func registerLegacyHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Health check endpoints
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, fm, startTime)
 	})
 
-	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
 		handleReady(w, r, fm)
 	})
 
 	// Stream endpoints
-	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
 		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
 			_ = err
 		}
 	})
 
 	// OctoPrint-compatible stream endpoint
-	router.Get("/webcam", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /webcam", func(w http.ResponseWriter, r *http.Request) {
 		if err := fm.StreamFrame(w, r, cfg.MaxStreamConnections); err != nil {
 			_ = err
 		}
 	})
 
-	router.Get("/snapshot.jpg", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /snapshot.jpg", func(w http.ResponseWriter, r *http.Request) {
 		handleSnapshot(w, r, fm)
 	})
 
 	// API endpoints
-	router.Get("/api/config", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		handleAPIConfigure(w, r, fm, cfg, startTime)
 	})
 
-	router.Get("/api/status", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		handleAPIStatus(w, r, fm, cfg, startTime)
 	})
 
-	router.Post("/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("POST /api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
 		handleStopStream(w, r, fm)
 	})
 
 	// Diagnostics endpoint
-	router.Get("/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
 		handleDiagnostics(w, r, fm, cfg, startTime)
 	})
 }
 
 // Handler functions
 
-// @Summary Quick health check (Kubernetes probe)
-// @Description Returns quick camera health status suitable for Kubernetes liveness probes. Returns 200 OK if running (regardless of camera state), and includes status, fps, uptime, and connection count. For detailed health with metrics, use /v1/health/detailed instead.
-// @Tags Health
-// @Accept  json
-// @Produce json
-// @Success 200 {object} HealthResponse "Camera status ok/degraded/error"
-// @Failure 503 {object} ErrorResponse "Service unavailable (should not occur in normal operation)"
-// @Router /v1/health [get]
 func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
 	_, _, fps := fm.streamStats.Snapshot()
 	_, _, degraded := fm.GetCaptureFailures()
@@ -1288,13 +1289,6 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 	}
 }
 
-// @Summary Get camera configuration
-// @Description Returns static camera configuration (encoded output resolution, FPS, quality settings, connection limits). Resolution does not describe the sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does not include runtime metrics; use /v1/metrics/live for current performance data.
-// @Tags Configuration
-// @Accept  json
-// @Produce json
-// @Success 200 {object} CameraConfigResponse "Static configuration settings"
-// @Router /v1/config/camera [get]
 func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
 	response := CameraConfigResponse{
 		Resolution:           cfg.Resolution,
@@ -1312,14 +1306,6 @@ func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Conf
 	}
 }
 
-// @Summary Get live performance metrics
-// @Description Returns current runtime performance metrics: frame rate, captured frames, stream connections, and frame sequence number. Lightweight and suitable for frequent polling (combine with rate limiting awareness). Use /v1/config/camera for static configuration values.
-// @Tags Metrics
-// @Accept  json
-// @Produce json
-// @Success 200 {object} LiveMetricsResponse "Current performance metrics"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Router /v1/metrics/live [get]
 func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	frameCount, _, fps := fm.streamStats.Snapshot()
 
@@ -1352,14 +1338,6 @@ func handlePrometheusMetrics(w http.ResponseWriter, fm *FrameManager) {
 	_, _ = fmt.Fprintf(w, "# HELP gogomio_capture_failures_consecutive Consecutive capture failures.\n# TYPE gogomio_capture_failures_consecutive gauge\ngogomio_capture_failures_consecutive %d\n", consecutive)
 }
 
-// @Summary Get comprehensive health and diagnostics
-// @Description Returns all available health information, metrics, and diagnostics in a single request: status, uptime, FPS, frames captured, connections, error rates, restart count, frame sequence, and detailed failure tracking. Recommended for dashboards, monitoring systems, and troubleshooting. Note: more data than /v1/health or /v1/metrics/live, use appropriate endpoint for your use case.
-// @Tags Health
-// @Accept  json
-// @Produce json
-// @Success 200 {object} DetailedHealthResponse "Complete health and metrics snapshot"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Router /v1/health/detailed [get]
 func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	frameCount, _, fps := fm.streamStats.Snapshot()
 	consecutiveFailures, totalFailures, degraded := fm.GetCaptureFailures()
@@ -1436,14 +1414,6 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	}
 }
 
-// @Summary Readiness probe (Kubernetes)
-// @Description Returns 200 only when camera is fully initialized and ready to stream. Returns 503 during startup. Suitable for Kubernetes readiness probes to control traffic routing. Use /v1/health for liveness checks instead.
-// @Tags Health
-// @Accept  json
-// @Produce json
-// @Success 200 {object} map[string]string "Status: ready"
-// @Failure 503 {object} map[string]string "Camera still initializing"
-// @Router /v1/ready [get]
 func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	if !fm.cam.IsReady() {
 		w.Header().Set("Content-Type", ContentTypeJSON)
@@ -1460,15 +1430,6 @@ func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	}
 }
 
-// @Summary Get current snapshot as JPEG
-// @Description Returns the latest captured video frame as a JPEG image. Suitable for web UI embedding, thumbnails, or periodic frame capture. Respects JPEG quality setting from /v1/config/camera. Returns 503 if camera not yet initialized.
-// @Tags Streaming
-// @Accept  json
-// @Produce image/jpeg
-// @Success 200 {file} binary "JPEG image data (raw binary, Content-Type: image/jpeg)"
-// @Failure 503 {object} ErrorResponse "Camera not ready or not initialized yet"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Router /v1/snapshot.jpg [get]
 func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	frame := fm.GetFrame()
 	if frame == nil {
@@ -1482,15 +1443,6 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	_, _ = w.Write(frame)
 }
 
-// @Summary Get configuration and metrics (DEPRECATED)
-// @Description **DEPRECATED in v0.1.0** - This endpoint mixes two concerns (static config + live metrics). **Migrate to**: Use /v1/config/camera for static settings, and /v1/metrics/live for performance metrics. Legacy endpoint will be removed in v0.3.0. See README for migration guide.
-// @Tags Configuration
-// @Accept  json
-// @Produce json
-// @Success 200 {object} map[string]interface{} "Contains all config + metrics fields (see examples)"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Deprecated true
-// @Router /v1/api/config [get]
 func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Deprecated: combines static config with live metrics
 	// Return a merged response for backward compatibility
@@ -1518,15 +1470,6 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 	}
 }
 
-// @Summary Get system status (DEPRECATED)
-// @Description **DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). Legacy endpoint will be removed in v0.3.0. See README for migration guide.
-// @Tags Health
-// @Accept  json
-// @Produce json
-// @Success 200 {object} DetailedHealthResponse "Complete health snapshot"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Deprecated true
-// @Router /v1/api/status [get]
 func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Deprecated: use /v1/health/detailed instead
 	handleDetailedHealth(w, r, fm, cfg, startTime)
@@ -1534,12 +1477,6 @@ func handleAPIStatus(w http.ResponseWriter, r *http.Request, fm *FrameManager, c
 
 // Settings handlers
 
-// @Summary Get all settings
-// @Description Retrieves all saved application settings as a JSON object. Settings can include brightness, contrast, saturation, and other camera-specific parameters. Returns empty object if no settings saved yet. Use PUT or POST with /v1/api/settings to update.
-// @Tags Settings
-// @Accept  json
-// @Produce json
-// @Success 200 {object} map[string]interface{} "Object containing all saved settings (example: {brightness: 100, contrast: 120})"
 func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	settings := fm.settingsM.GetAll()
 
@@ -1552,14 +1489,12 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request, fm *FrameManager)
 }
 
 // SettingsUpdateRequest represents a request body for updating settings
-// @Description Request body for updating multiple settings at once
 type SettingsUpdateRequest struct {
 	// Map of setting keys to values
 	Settings map[string]interface{} `json:"settings"`
 }
 
 // ErrorResponse is a standardized error response for all API errors
-// @Description Standard error response format for API errors
 type ErrorResponse struct {
 	// HTTP status code
 	Code int `json:"code" example:"400"`
@@ -1569,31 +1504,12 @@ type ErrorResponse struct {
 	Details string `json:"details,omitempty" example:"Settings map is empty"`
 }
 
-// @Summary Get comprehensive diagnostics (DEPRECATED)
-// @Description **DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). Provides complete system diagnostics including health status, metrics, error tracking, and failure statistics. Legacy endpoint will be removed in v0.3.0. See README for migration guide.
-// @Tags Diagnostics
-// @Accept  json
-// @Produce json
-// @Success 200 {object} DetailedHealthResponse "Complete health and diagnostics snapshot"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
-// @Deprecated true
-// @Router /v1/api/diagnostics [get]
 func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Deprecated: use /v1/health/detailed instead
 	w.Header().Set("Deprecation", "true")
 	handleDetailedHealth(w, r, fm, cfg, startTime)
 }
 
-// @Summary Update camera settings
-// @Description Updates one or more application settings (brightness, contrast, saturation, etc). Accepts POST and PUT requests. Only specified settings are updated; omitted settings are preserved. Returns updated settings. Settings persist across restarts.
-// @Tags Settings
-// @Accept  json
-// @Produce json
-// @Param   request body SettingsUpdateRequest true "Settings to update (example: {\"brightness\": 150, \"contrast\": 120})"
-// @Success 200 {object} map[string]string "Updated settings"
-// @Failure 400 {object} ErrorResponse "Invalid JSON or request format"
-// @Failure 500 {object} ErrorResponse "Failed to save settings to persistent storage"
-// @Failure 429 {object} ErrorResponse "Rate limit exceeded (100 req/10sec per IP)"
 func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	var req SettingsUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1613,13 +1529,6 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	})
 }
 
-// @Summary Stop stream capture
-// @Description Stops the camera stream capture and disconnects all clients
-// @Tags Streaming
-// @Accept  json
-// @Produce json
-// @Success 200 {object} map[string]string
-// @Router /v1/api/stream/stop [post]
 func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	log.Printf("🛑 API: Stop stream requested by client")
 

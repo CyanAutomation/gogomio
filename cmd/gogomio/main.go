@@ -1,29 +1,4 @@
-// GoGoMio API
-// @title GoGoMio API
-// @version 0.1.0
-// @description IP camera streaming and management API with MJPEG video streaming, real-time health monitoring, and camera configuration management. Designed for Raspberry Pi CSI cameras and compatible devices.
-// @description
-// @description ## Rate Limiting
-// @description All API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding this limit will receive HTTP 429 (Too Many Requests) responses.
-// @description
-// @description ## Authentication & Security
-// @description ⚠️ **IMPORTANT**: This API has no built-in authentication. It is designed for private/internal networks only.
-// @description - Do NOT expose this service directly to the internet
-// @description - Deploy behind a firewall, VPN, or reverse proxy with authentication
-// @description - Use HTTPS-terminating reverse proxy (nginx, Caddy, etc.) for HTTPS support
-// @description - See Security section in README.md for deployment guidelines
-// @description
-// @description ## API Versioning
-// @description - Current version: v0.1.0 (Preview/MVP)
-// @description - Endpoints follow semantic versioning at /v1/ path
-// @description - Legacy endpoints at / are maintained for backward compatibility but marked as deprecated
-// @contact.name GoGoMio Support
-// @contact.url https://github.com/CyanAutomation/gogomio
-// @license.name MIT
-// @license.url https://github.com/CyanAutomation/gogomio/blob/main/LICENSE
-// @host localhost:8000
-// @basePath /
-// @schemes http https
+// Package main wires the GoGoMio server and command-line client.
 package main
 
 import (
@@ -45,13 +20,12 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/cli"
 	"github.com/CyanAutomation/gogomio/internal/config"
-	"github.com/go-chi/chi/v5"
 )
 
 type application struct {
 	camera       camera.Camera
 	frameManager *api.FrameManager
-	router       chi.Router
+	router       *http.ServeMux
 	listener     net.Listener
 	server       *http.Server
 	cleanupOnce  sync.Once
@@ -156,9 +130,9 @@ func initializeApplication(cfg *config.Config, deps applicationDependencies) (*a
 		return nil, "", err
 	}
 
-	router := chi.NewRouter()
+	router := http.NewServeMux()
 	frameManager := api.NewFrameManager(cam, cfg)
-	api.RegisterHandlers(router, frameManager, cfg)
+	handler := api.RegisterHandlers(router, frameManager, cfg)
 
 	listener, err := deps.listen("tcp", cfg.AddressString())
 	if err != nil {
@@ -174,7 +148,7 @@ func initializeApplication(cfg *config.Config, deps applicationDependencies) (*a
 		listener:     listener,
 		server: &http.Server{
 			Addr:        listener.Addr().String(),
-			Handler:     router,
+			Handler:     handler,
 			ReadTimeout: 15 * time.Second,
 			// MJPEG responses are intentionally long-lived. A server-wide write
 			// deadline would terminate healthy streams.

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/CyanAutomation/gogomio/internal/config"
-	"github.com/go-chi/chi/v5"
 )
 
 // TestDiagnosticsErrorRateFromHandler verifies error_rate_percent via routed /api/diagnostics handler
@@ -41,8 +40,7 @@ func TestDiagnosticsErrorRateFromHandler(t *testing.T) {
 			atomic.StoreInt64(&fm.captureFailureTotal, tt.failureCount)
 			atomic.StoreInt64(&fm.consecutiveCaptureFailures, 0)
 
-			router := chi.NewRouter()
-			RegisterHandlers(router, fm, fm.cfg)
+			router := RegisterHandlers(http.NewServeMux(), fm, fm.cfg)
 
 			req, err := http.NewRequest(http.MethodGet, "/api/diagnostics", nil)
 			if err != nil {
@@ -103,8 +101,7 @@ func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 			atomic.StoreInt64(&fm.captureFailureTotal, tt.failureCount)
 			atomic.StoreInt64(&fm.consecutiveCaptureFailures, tt.consecutiveFailures)
 
-			router := chi.NewRouter()
-			RegisterHandlers(router, fm, fm.cfg)
+			router := RegisterHandlers(http.NewServeMux(), fm, fm.cfg)
 
 			req, err := http.NewRequest(http.MethodGet, "/api/diagnostics", nil)
 			if err != nil {
