@@ -55,7 +55,20 @@ jobs:
 
       - name: Run benchmarks
         id: run-benchmarks
-        run: go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... > bench-current.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          if go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... \
+            > bench-current.txt 2> benchmark-diagnostics.txt; then
+            rm -f benchmark-diagnostics.txt
+          else
+            status=$?
+            echo "::error::Benchmark command failed with exit code $status."
+            echo 'Recent benchmark output:'
+            tail -n 100 bench-current.txt || true
+            tail -n 100 benchmark-diagnostics.txt || true
+            exit "$status"
+          fi
 
       - name: Install benchstat
         run: |
@@ -77,23 +90,31 @@ jobs:
           fi
 
       - name: Upload benchmark results
-        if: always() && steps.run-benchmarks.outcome == 'success'
+        if: always() && steps.run-benchmarks.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-results
-          path: bench-current.txt
+          path: |
+            bench-current.txt
+            benchmark-diagnostics.txt
+          if-no-files-found: ignore
           retention-days: 90
 
       - name: Publish benchmark summary
         if: always()
         env:
+          BENCHMARK_OUTCOME: ${{ steps.run-benchmarks.outcome }}
           COMPARE_OUTCOME: ${{ steps.compare.outcome }}
         shell: bash
         run: |
           {
             echo '## Benchmark comparison'
             echo
+            echo "Benchmark step: $BENCHMARK_OUTCOME"
             echo "Comparison step: $COMPARE_OUTCOME"
+            if [[ "$BENCHMARK_OUTCOME" != 'success' ]]; then
+              echo 'Benchmark execution failed; see the Run benchmarks step and benchmark-results artifact.'
+            fi
             if [[ -f bench-comparison.txt ]]; then
               echo 'Detailed comparison is available in the job log.'
             elif [[ -f bench-current.txt ]]; then

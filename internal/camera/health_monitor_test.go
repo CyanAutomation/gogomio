@@ -204,7 +204,6 @@ func BenchmarkHealthMonitorStallCalculation(b *testing.B) {
 func BenchmarkHealthMonitorTickerCreation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		ticker := time.NewTicker(10 * time.Second)
-		<-ticker.C // Simulate one tick
 		ticker.Stop()
 	}
 }

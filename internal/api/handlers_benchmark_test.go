@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -72,6 +73,10 @@ func BenchmarkWriteMultipartFrameLegacy(b *testing.B) {
 }
 
 func BenchmarkStreamFixedFrames(b *testing.B) {
+	originalLogWriter := log.Writer()
+	log.SetOutput(io.Discard)
+	b.Cleanup(func() { log.SetOutput(originalLogWriter) })
+
 	const framesPerStream = 8
 
 	frame := bytes.Repeat([]byte{0xFF, 0xD8, 0xFF, 0xD9}, 16*1024/4)
