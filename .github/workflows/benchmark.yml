@@ -73,7 +73,7 @@ jobs:
       - name: Install benchstat
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da
+          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260211190930-8161c38c6cdc
 
       - name: Compare benchmarks and check regressions
         id: compare
