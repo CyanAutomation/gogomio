@@ -2,6 +2,8 @@ package settings
 
 import (
 	"encoding/json"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -329,6 +331,8 @@ func TestSettingsTimestampedArchive(t *testing.T) {
 
 // BenchmarkSettingsPersist benchmarks the persist operation
 func BenchmarkSettingsPersist(b *testing.B) {
+	silenceSettingsBenchmarkLogs(b)
+
 	tmpDir, _ := os.MkdirTemp("", "gogomio_bench_*")
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
@@ -344,6 +348,8 @@ func BenchmarkSettingsPersist(b *testing.B) {
 
 // BenchmarkSettingsLoad benchmarks the load operation
 func BenchmarkSettingsLoad(b *testing.B) {
+	silenceSettingsBenchmarkLogs(b)
+
 	tmpDir, _ := os.MkdirTemp("", "gogomio_bench_*")
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
@@ -356,6 +362,13 @@ func BenchmarkSettingsLoad(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = m.load()
 	}
+}
+
+func silenceSettingsBenchmarkLogs(b *testing.B) {
+	b.Helper()
+	originalLogWriter := log.Writer()
+	log.SetOutput(io.Discard)
+	b.Cleanup(func() { log.SetOutput(originalLogWriter) })
 }
 
 // TestSettingsRecoveryConcurrentWithWrite ensures recovery writes are serialized with concurrent persist writes.
