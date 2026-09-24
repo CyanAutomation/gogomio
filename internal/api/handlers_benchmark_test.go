@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -91,8 +92,14 @@ func BenchmarkStreamFixedFrames(b *testing.B) {
 	fm := NewFrameManager(newStableFrameCamera(frame), cfg)
 	b.Cleanup(func() { fm.Stop() })
 
+	// Benchmark the stream endpoint without API-wide middleware. The production
+	// per-IP rate limit is intended for client requests, and benchmark iterations
+	// exceed it, which would measure 429 responses instead of streamed frames.
 	router := chi.NewRouter()
-	RegisterHandlers(router, fm, cfg)
+	var streamErr error
+	router.Get("/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
+		streamErr = fm.StreamFrame(w, r, cfg.MaxStreamConnections)
+	})
 
 	b.SetBytes(streamBytes)
 	b.ReportMetric(framesPerStream, "frames/op")
@@ -104,7 +111,11 @@ func BenchmarkStreamFixedFrames(b *testing.B) {
 		// multipart boundary returns io.EOF, ending the handler deterministically.
 		writer := newStreamCapturingWriter(streamBytes)
 		req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil)
+		streamErr = nil
 		router.ServeHTTP(writer, req)
+		if streamErr != nil && !errors.Is(streamErr, io.EOF) {
+			b.Fatalf("stream handler failed: %v", streamErr)
+		}
 
 		if got := writer.GetBytesWritten(); got != streamBytes {
 			b.Fatalf("delivered %d bytes, want %d (%d complete frames)", got, streamBytes, framesPerStream)
