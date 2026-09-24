@@ -1,6 +1,11 @@
 name: Build Multi-Architecture Docker Image
 
 on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tags:
@@ -19,6 +24,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
     permissions:
       # Required for `cache-to: type=gha` to upload BuildKit cache to GitHub Actions cache storage.
       actions: write
@@ -27,48 +34,43 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Determine tags
+        id: meta
+        env:
+          INPUT_TAGS: ${{ inputs.tags }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            requested_tags="$INPUT_TAGS"
+          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            python3 scripts/validate_release_tag.py "$GITHUB_REF_NAME"
+            requested_tags="${GITHUB_REF_NAME},latest"
+          else
+            requested_tags=latest
+          fi
+
+          docker_tags="$(bash scripts/docker-tags.sh "$requested_tags")"
+          {
+            echo 'tags<<EOF'
+            printf '%s\n' "$docker_tags"
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+          printf 'Building tags (multi-arch and arm64-specific):\n%s\n' "$docker_tags"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Determine tags
-        id: meta
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAGS="${{ github.event.inputs.tags }}"
-          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            TAGS="$VERSION,latest"
-          else
-            TAGS="latest"
-          fi
-          
-          # Convert comma-separated tags to docker/metadata format (newline-separated for docker/build-push-action)
-          # Include both standard tags and arm64-specific tags for easy Raspberry Pi identification
-          DOCKER_TAGS=""
-          for tag in ${TAGS//,/ }; do
-            DOCKER_TAGS="${DOCKER_TAGS}cyanautomation/gogomio:$tag"$'\n'
-            # Add arm64-specific tag for Raspberry Pi convenience
-            DOCKER_TAGS="${DOCKER_TAGS}cyanautomation/gogomio:$tag-arm64"$'\n'
-          done
-          
-          # Remove trailing newline and save to output
-          DOCKER_TAGS="${DOCKER_TAGS%$'\n'}"
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$DOCKER_TAGS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "📦 Building tags (multi-arch + arm64-specific):"
-          echo "$DOCKER_TAGS"
-
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -80,24 +82,42 @@ jobs:
   verify:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      IMAGE_TAGS: ${{ needs.build.outputs.tags }}
     
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
       - name: Login to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Verify multi-arch manifest
+        shell: bash
         run: |
-          # For tag detection: use latest if no specific tag
-          TAG=${GITHUB_REF#refs/tags/}
-          if [[ "$TAG" == "refs/tags/v"* ]]; then
-            TAG=${TAG#v}
-          else
-            TAG="latest"
+          set -euo pipefail
+          if [[ -z "$IMAGE_TAGS" ]]; then
+            echo '::error::Build job did not provide any image tags.'
+            exit 1
           fi
-          
-          echo "🔍 Verifying manifest for: cyanautomation/gogomio:$TAG"
-          docker manifest inspect cyanautomation/gogomio:$TAG | jq '.manifests[] | "\(.platform.os)/\(.platform.architecture)"'
-          echo "✅ Multi-arch image verified successfully"
+
+          verified=0
+          while IFS= read -r image; do
+            [[ -n "$image" ]] || continue
+            echo "Verifying manifest for $image"
+            manifest="$(docker buildx imagetools inspect --raw "$image")"
+            python3 scripts/verify_docker_manifest.py <<<"$manifest"
+            verified=$((verified + 1))
+          done <<<"$IMAGE_TAGS"
+
+          if (( verified == 0 )); then
+            echo '::error::No image manifests were verified.'
+            exit 1
+          fi
+          echo "Verified $verified image manifest(s) for linux/amd64 and linux/arm64."

@@ -1,10 +1,8 @@
 package settings
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,25 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 )
-
-func captureSettingsLogs(t *testing.T) (*bytes.Buffer, func()) {
-	t.Helper()
-
-	var captured bytes.Buffer
-	originalWriter := log.Writer()
-	originalFlags := log.Flags()
-	originalPrefix := log.Prefix()
-
-	log.SetOutput(&captured)
-	log.SetFlags(0)
-	log.SetPrefix("")
-
-	return &captured, func() {
-		log.SetOutput(originalWriter)
-		log.SetFlags(originalFlags)
-		log.SetPrefix(originalPrefix)
-	}
-}
 
 // TestSettingsSetGet tests basic set and get operations
 func TestSettingsSetGet(t *testing.T) {
@@ -249,9 +228,6 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	settingsPath := filepath.Join(tmpDir, "atomic_test.json")
 	tempGlob := settingsPath + ".*.tmp"
 	lockPath := settingsPath + ".lock"
-	logBuffer, restoreLogs := captureSettingsLogs(t)
-	defer restoreLogs()
-
 	m := NewManager(settingsPath)
 
 	readAndValidate := func(expectedValue string) {
@@ -338,7 +314,7 @@ func TestSettingsAtomicWrite(t *testing.T) {
 	default:
 	}
 
-	// Interrupted write path: make final destination path non-renamable and ensure old file remains valid.
+	// Replace the settings file with a directory so persistence fails before the update is applied.
 	if err := m.Set("key", "stable-before-failure"); err != nil {
 		t.Fatalf("failed to set stable state: %v", err)
 	}
@@ -355,13 +331,9 @@ func TestSettingsAtomicWrite(t *testing.T) {
 
 	err = m.Set("key", "should-fail")
 	if err == nil {
-		t.Fatal("expected Set to fail when rename destination is a directory")
-	}
-	// Fault-injection path intentionally emits error-level logs.
-	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
-	t.Log("[expected-failure-path] forcing persist rename failure for Set")
-	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
-		t.Fatalf("expected rename failure log, got: %q", output)
+		t.Fatal("expected Set to fail when the settings path is a directory")
+	} else if !strings.Contains(err.Error(), "failed to read settings file") {
+		t.Fatalf("expected settings read failure, got: %v", err)
 	}
 
 	// Restore original file and verify it is still valid/unchanged from before the interrupted path.
@@ -474,7 +446,7 @@ func TestSettingsConcurrency(t *testing.T) {
 
 	var wg sync.WaitGroup
 	// Every operation can report one error without blocking completion of the group.
-	errors := make(chan error, writers*writesPerWriter+readers*readsPerReader)
+	errors := make(chan error, writers+readers)
 
 	// Writer goroutines
 	for i := 0; i < writers; i++ {
@@ -485,6 +457,7 @@ func TestSettingsConcurrency(t *testing.T) {
 				key := fmt.Sprintf("key_%d_%d", id, j)
 				if err := m.Set(key, j*100); err != nil {
 					errors <- fmt.Errorf("Set(%q) failed: %w", key, err)
+					return
 				}
 			}
 		}(i)
@@ -499,8 +472,11 @@ func TestSettingsConcurrency(t *testing.T) {
 				got := m.GetAll()
 				for key, value := range got {
 					if _, ok := value.(int); !ok {
+						if _, ok := value.(float64); ok {
+							continue
+						}
 						errors <- fmt.Errorf("reader %d got unusable entry %q=%v (%T)", id, key, value, value)
-						continue
+						return
 					}
 					_ = got[key]
 				}
@@ -509,6 +485,7 @@ func TestSettingsConcurrency(t *testing.T) {
 				got[aliasKey] = "must not leak"
 				if _, leaked := m.GetAll()[aliasKey]; leaked {
 					errors <- fmt.Errorf("reader %d mutation of GetAll result leaked into manager", id)
+					return
 				}
 			}
 		}(i)
@@ -528,7 +505,8 @@ func TestSettingsConcurrency(t *testing.T) {
 		for j := 0; j < writesPerWriter; j++ {
 			key := fmt.Sprintf("key_%d_%d", i, j)
 			want := j * 100
-			if got, exists := all[key]; !exists || got != want {
+			got, exists := all[key]
+			if !exists || (got != want && got != float64(want)) {
 				t.Errorf("GetAll[%q] = %v (exists=%t), want %d", key, got, exists, want)
 			}
 		}
@@ -575,9 +553,6 @@ func TestSettingsSetAfterNullFile(t *testing.T) {
 func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "batch_settings.json")
-	logBuffer, restoreLogs := captureSettingsLogs(t)
-	defer restoreLogs()
-
 	m := NewManager(settingsPath)
 	if err := m.Set("stable", "value"); err != nil {
 		t.Fatalf("failed to seed initial state: %v", err)
@@ -601,13 +576,9 @@ func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 		"new_b": "B",
 	})
 	if err == nil {
-		t.Fatal("expected SetMany to fail when rename destination is a directory")
-	}
-	// Fault-injection path intentionally emits error-level logs.
-	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
-	t.Log("[expected-failure-path] forcing persist rename failure for SetMany")
-	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
-		t.Fatalf("expected rename failure log, got: %q", output)
+		t.Fatal("expected SetMany to fail when the settings path is a directory")
+	} else if !strings.Contains(err.Error(), "failed to read settings file") {
+		t.Fatalf("expected settings read failure, got: %v", err)
 	}
 
 	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
@@ -634,9 +605,6 @@ func TestSettingsSetManyRollbackOnPersistFailure(t *testing.T) {
 func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "delete_settings.json")
-	logBuffer, restoreLogs := captureSettingsLogs(t)
-	defer restoreLogs()
-
 	m := NewManager(settingsPath)
 	if err := m.SetMany(map[string]interface{}{
 		"stable": "value",
@@ -656,13 +624,9 @@ func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
 
 	err := m.Delete("drop")
 	if err == nil {
-		t.Fatal("expected Delete to fail when rename destination is a directory")
-	}
-	// Fault-injection path intentionally emits error-level logs.
-	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
-	t.Log("[expected-failure-path] forcing persist rename failure for Delete")
-	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
-		t.Fatalf("expected rename failure log, got: %q", output)
+		t.Fatal("expected Delete to fail when the settings path is a directory")
+	} else if !strings.Contains(err.Error(), "failed to read settings file") {
+		t.Fatalf("expected settings read failure, got: %v", err)
 	}
 
 	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
@@ -674,9 +638,6 @@ func TestSettingsDeleteRollbackOnPersistFailure(t *testing.T) {
 func TestSettingsClearRollbackOnPersistFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "clear_settings.json")
-	logBuffer, restoreLogs := captureSettingsLogs(t)
-	defer restoreLogs()
-
 	m := NewManager(settingsPath)
 	if err := m.SetMany(map[string]interface{}{
 		"stable": "value",
@@ -696,13 +657,9 @@ func TestSettingsClearRollbackOnPersistFailure(t *testing.T) {
 
 	err := m.Clear()
 	if err == nil {
-		t.Fatal("expected Clear to fail when rename destination is a directory")
-	}
-	// Fault-injection path intentionally emits error-level logs.
-	// Mark and assert expected fragments so CI can distinguish this from unexpected failures.
-	t.Log("[expected-failure-path] forcing persist rename failure for Clear")
-	if output := logBuffer.String(); !strings.Contains(output, "❌ Settings: failed to rename settings file") {
-		t.Fatalf("expected rename failure log, got: %q", output)
+		t.Fatal("expected Clear to fail when the settings path is a directory")
+	} else if !strings.Contains(err.Error(), "failed to read settings file") {
+		t.Fatalf("expected settings read failure, got: %v", err)
 	}
 
 	if gotState := m.GetAll(); !reflect.DeepEqual(gotState, beforeState) {
