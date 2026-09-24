@@ -25,13 +25,11 @@ builds:
 
 archives:
   - id: gogomio
-    builds:
+    ids:
       - gogomio
     name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
+    formats:
+      - tar.gz
 
 checksum:
   name_template: "{{ .ProjectName }}_v{{ .Version }}_checksums.txt"
@@ -39,7 +37,7 @@ checksum:
 
 release:
   draft: false
-  prerelease: false
+  prerelease: auto
   name_template: "Release v{{ .Version }}"
   header: |
     ## GoGoMio {{ .Version }}
@@ -78,7 +76,7 @@ nfpms:
   - id: gogomio
     package_name: gogomio
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Arch }}.{{ .ConventionalFileName }}"
-    builds:
+    ids:
       - gogomio
     homepage: https://github.com/CyanAutomation/gogomio
     description: High-performance MJPEG streaming server for Raspberry Pi CSI cameras

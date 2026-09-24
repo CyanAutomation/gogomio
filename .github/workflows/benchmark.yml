@@ -1,9 +1,16 @@
 name: Benchmarks
 
 on:
+  pull_request:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9 AM UTC
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -14,108 +21,84 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # Full history for comparisons
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Cache Go modules
-        uses: actions/cache@v6
+      - name: Find latest successful main benchmark run
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="$(gh run list --workflow benchmark.yml --branch main --status success --limit 50 --json databaseId --jq '.[0].databaseId // empty')"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download previous benchmark baseline
+        if: steps.baseline.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          name: benchmark-results
+          path: baseline
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.baseline.outputs.run_id }}
 
       - name: Download dependencies
         run: go mod download
 
       - name: Run benchmarks
-        run: |
-          go test -bench=. -benchmem -benchtime=2s ./internal/camera ./internal/api > bench-current.txt
-          cat bench-current.txt
-
-      - name: Download previous benchmark
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: benchmark-results
-          path: ./
+        id: run-benchmarks
+        run: go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... > bench-current.txt
 
       - name: Install benchstat
-        run: go install golang.org/x/perf/cmd/benchstat@latest
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/perf/cmd/benchstat@v0.0.0-20260908200009-22c9c6c9d4da
 
-      - name: Compare benchmarks
+      - name: Compare benchmarks and check regressions
         id: compare
-        continue-on-error: true
+        shell: bash
         run: |
-          if [ -f bench-previous.txt ]; then
-            echo "## Benchmark Comparison" > bench-comparison.md
-            echo "" >> bench-comparison.md
-            echo '```' >> bench-comparison.md
-            /go/bin/benchstat bench-previous.txt bench-current.txt >> bench-comparison.md
-            echo '```' >> bench-comparison.md
-            cat bench-comparison.md
+          set -euo pipefail
+          if [[ -s baseline/bench-current.txt ]]; then
+            "$RUNNER_TEMP/bin/benchstat" baseline/bench-current.txt bench-current.txt > bench-comparison.txt
+            cat bench-comparison.txt
+            python3 scripts/check_benchstat.py bench-comparison.txt --threshold-percent 10 --alpha 0.05
           else
-            echo "No previous benchmark to compare. Storing baseline."
-            cp bench-current.txt bench-previous.txt
+            echo 'No downloadable successful main-branch baseline is available; this run will establish one.'
+            echo 'Benchmark comparison skipped because no baseline is available.' > bench-comparison.txt
           fi
 
-      - name: Check for regressions
-        id: regression
-        continue-on-error: true
-        run: |
-          if [ -f bench-previous.txt ]; then
-            # Extract performance deltas and fail if regression > 10%
-            output=$(/go/bin/benchstat bench-previous.txt bench-current.txt)
-            
-            # Check for significant regressions (>10%)
-            if echo "$output" | grep -qE '[0-9]+\.[0-9]+x'; then
-              echo "⚠️ Potential performance regression detected"
-              echo "regression_detected=true" >> $GITHUB_OUTPUT
-            else
-              echo "✅ No major performance regressions detected"
-              echo "regression_detected=false" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-      - name: Upload benchmark results as artifact
-        uses: actions/upload-artifact@v7
+      - name: Upload benchmark results
+        if: always() && steps.run-benchmarks.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-results
           path: bench-current.txt
           retention-days: 90
 
-      - name: Store benchmark in commit message
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish benchmark summary
+        if: always()
+        env:
+          COMPARE_OUTCOME: ${{ steps.compare.outcome }}
+        shell: bash
         run: |
-          echo "## Benchmark Results" > benchmark-summary.txt
-          echo "Date: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> benchmark-summary.txt
-          echo "Commit: ${{ github.sha }}" >> benchmark-summary.txt
-          echo "" >> benchmark-summary.txt
-          cat bench-current.txt >> benchmark-summary.txt
-          cat benchmark-summary.txt
-
-  benchmark-report:
-    name: Generate Benchmark Report
-    runs-on: ubuntu-latest
-    needs: benchmark
-    if: always()
-    timeout-minutes: 5
-
-    steps:
-      - name: Download benchmark artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: benchmark-results
-
-      - name: Display benchmark results
-        run: |
-          echo "=== Latest Benchmark Results ===" 
-          tail -20 bench-current.txt || echo "No benchmark results available yet"
+          {
+            echo '## Benchmark comparison'
+            echo
+            echo "Comparison step: $COMPARE_OUTCOME"
+            if [[ -f bench-comparison.txt ]]; then
+              echo 'Detailed comparison is available in the job log.'
+            elif [[ -f bench-current.txt ]]; then
+              echo 'The benchmark completed without a comparison report.'
+            else
+              echo 'No benchmark results were produced.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
