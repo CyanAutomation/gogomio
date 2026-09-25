@@ -425,11 +425,13 @@ If optimization is needed, **Strategy 2 (Direct Write)** offers best risk/reward
 
 ---
 
-## Performance Baselines (Continuous Tracking)
+## Performance Benchmarks and Regression Checks
 
-The following baselines are tracked continuously via [.github/workflows/benchmark.yml](../../.github/workflows/benchmark.yml) to detect performance regressions.
+The workflow compares each pull request against its base revision and each push to `main` against the previous revision. Scheduled and manually dispatched runs compare against the most recent successful benchmark artifact from `main`; the first run without an artifact establishes that baseline. Artifacts retain the raw current and baseline samples, comparison reports, and runner metadata for 90 days.
 
-### Current Baselines (April 2026)
+The values below are historical reference targets from April 2026. The workflow does not enforce these absolute values; its gate checks relative changes between two revisions or runs.
+
+### Reference Targets (April 2026)
 
 | Metric | Baseline | Threshold | Status |
 | -------- | ---------- | ----------- | -------- |
@@ -442,17 +444,16 @@ The following baselines are tracked continuously via [.github/workflows/benchmar
 ### Benchmark Commands
 
 ```bash
-# Run all benchmarks
-go test -bench=. -benchmem -benchtime=2s ./internal/camera ./internal/api
+# Run all benchmarks without running unit tests
+go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./...
 
 # Run frame buffer benchmarks only
-go test -bench=FrameBuffer -benchmem ./internal/camera
+go test -run='^$' -bench=FrameBuffer -benchmem ./internal/camera
 
 # Run handler benchmarks only
-go test -bench=Handler -benchmem ./internal/api
+go test -run='^$' -bench=Handler -benchmem ./internal/api
 
-# Compare with stored baseline
-go test -bench=. -benchmem ./internal/camera > current.txt
+# Compare two saved benchmark outputs
 benchstat baseline.txt current.txt
 ```
 
@@ -462,11 +463,11 @@ Benchmarks are run:
 
 - **Scheduled**: Weekly (every Monday 9 AM UTC)
 - **On-demand**: Via `workflow_dispatch` trigger
-- **On push**: To main branch (optional; can be disabled if too slow)
+- **On push**: To `main`
+- **On pull request**: Compared against the pull request base revision
 
-**Regression threshold**: >10% performance degradation triggers warning
-**Action**: If regression detected, investigate in related commit and optimize before merge
+The gate uses 10 samples per revision, a 15% change threshold, and a 0.05 significance level with Holm correction across recognized benchmark metrics. It accounts for direction: increases are regressions for time and allocation metrics, while decreases are regressions for throughput metrics. A detected regression fails the benchmark workflow. Unknown custom metrics are listed as unclassified and excluded from gating; the check fails closed if it finds no metrics with a configured direction.
 
 ### Historical Baselines
 
-- **v0.1.0 (April 2026)**: Baselines established; all metrics green
+- **v0.1.0 (April 2026)**: Reference measurements were recorded; automated history is retained as workflow artifacts for 90 days.
