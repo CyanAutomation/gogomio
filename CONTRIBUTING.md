@@ -359,7 +359,7 @@ Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
 
 4. **GitHub Actions triggers**:
    - `build-multiarch.yml` builds and pushes to Docker Hub
-   - `benchmark.yml` records baseline
+   - `benchmark.yml` compares benchmark samples on pull requests and main-branch pushes, with weekly and on-demand historical comparisons
    - Artifacts available in GitHub Releases
 
 ## Questions?
