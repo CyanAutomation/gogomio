@@ -14,7 +14,7 @@ This removes application module downloads from Docker builds and the normal buil
 
 - Raspberry Pi deployments use `rpicam-vid` or `libcamera-vid`; `ffmpeg` is the compatibility fallback. These tools provide access to camera drivers and codecs.
 - Docker and Docker Compose provide the supported deployment path. Buildx creates multi-architecture images.
-- GitHub Actions runs CI. GoReleaser packages binary releases, and Codecov publishes coverage reports.
+- GitHub Actions runs CI and stores coverage reports as workflow artifacts. GoReleaser packages binary releases.
 - The benchmark workflow installs `benchstat` on demand to compare benchmark results; it is a CI-only tool, not an application dependency.
 
 These tools have distinct delivery or hardware roles and are not duplicated by the in-process Go application.

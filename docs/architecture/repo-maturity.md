@@ -387,7 +387,7 @@ __✅ Build step exists__
 CI includes `go build` and Docker multi-arch build (amd64, arm64) via [scripts/build-multiarch.sh](../../scripts/build-multiarch.sh).
 
 __✅ Test step exists__  
-CI includes `go test ./... -v -race -coverprofile=coverage.out`; coverage uploaded to Codecov.
+CI includes `go test ./... -v -race -coverprofile=coverage.out`; coverage reports are retained as GitHub Actions artifacts.
 
 __✅ Artifact or package produced__  
 Docker images pushed to Docker Hub (multi-arch: `linux/amd64`, `linux/arm64`). [.goreleaser.yml](.goreleaser.yml) configured to build cross-platform binaries (Linux/macOS, amd64/arm64) and generate `.tar.gz` archives, `.deb`/`.rpm` packages, checksums, and release notes.
@@ -578,7 +578,7 @@ __Total Score Impact__: +7 points (base 86 → 100, final 93 → 100/100)
 __Go Version:__ 1.25
 __Key Dependencies:__ Go standard library
 __Build:__ Multi-arch Docker images (linux/amd64, linux/arm64)  
-__CI Status:__ ✅ Passing (codecov ≥75% coverage gate)  
+__CI Status:__ ✅ Passing (≥75% coverage gate)
 __Last Release:__ v0.1.0 (2026-04-30)  
 
 ⸻

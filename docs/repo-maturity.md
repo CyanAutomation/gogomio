@@ -308,7 +308,7 @@ The following roadmap prioritizes improvements to close remaining gaps and maxim
 - **Current State**: Only [.github/workflows/build-multiarch.yml](../../.github/workflows/build-multiarch.yml) exists; no test step
 - **Action**: Create [.github/workflows/test.yml](../../.github/workflows/test.yml) (not yet created) with:
   - `go test ./... -v -race -cover` on every push/PR
-  - Generate coverage report (use [codecov](https://codecov.io/) or similar)
+  - Generate a coverage report and store it as a CI artifact
   - Fail build if tests fail or race condition detected
   - Matrix builds for Go versions (1.22, 1.23)
 - **Score Impact**: +5 (Testing & Verification signal; CI/CD & Delivery signal)
@@ -325,13 +325,10 @@ The following roadmap prioritizes improvements to close remaining gaps and maxim
 - **Score Impact**: +2 (Security & Hygiene signal)
 - **Time**: 1 hour
 
-**7. Add Code Coverage Badge and Enforcement**
+**7. Maintain Code Coverage Enforcement**
 
-- **Current State**: Tests exist but no coverage reporting
-- **Action**: Integrate with [codecov.io](https://codecov.io/) or [codeclimate.com](https://codeclimate.com/):
-  - Add badge to [README.md](../../README.md)
-  - Set minimum coverage threshold (target: ≥75%)
-  - Fail PR if coverage drops
+- **Current State**: CI enforces a ≥75% coverage threshold and stores reports as artifacts
+- **Action**: Maintain the coverage threshold and artifact retention
 - **Score Impact**: +2 (Testing & Verification signal; improves reliability)
 - **Time**: 1–2 hours (configuration + first report)
 
