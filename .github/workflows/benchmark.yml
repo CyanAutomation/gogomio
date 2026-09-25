@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   benchmark:
@@ -30,39 +31,91 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Prepare base revision source
+      - name: Prepare comparison baseline
         id: baseline
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          mkdir -p baseline
+
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             baseline_sha="$PR_BASE_SHA"
           elif [[ "$EVENT_NAME" == "push" && -n "$PUSH_BEFORE_SHA" && ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
             baseline_sha="$PUSH_BEFORE_SHA"
           else
-            baseline_sha="$(git rev-parse HEAD^ 2>/dev/null || true)"
+            echo 'Looking for the latest successful main-branch benchmark artifact.'
+            if ! previous_run_id="$(gh run list \
+              --workflow benchmark.yml \
+              --branch main \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // empty')"; then
+              echo '::warning::Could not list previous benchmark runs; proceeding without a historical baseline.'
+              previous_run_id=''
+            fi
+
+            if [[ -n "$previous_run_id" ]]; then
+              if gh run download "$previous_run_id" \
+                --name benchmark-results \
+                --dir "$RUNNER_TEMP/previous-benchmark"; then
+                previous_benchmark="$RUNNER_TEMP/previous-benchmark/bench-current.txt"
+                if [[ -s "$previous_benchmark" ]]; then
+                  cp "$previous_benchmark" baseline/bench-current.txt
+                  previous_metadata="$RUNNER_TEMP/previous-benchmark/benchmark-metadata.txt"
+                  if [[ -s "$previous_metadata" ]]; then
+                    cp "$previous_metadata" baseline/benchmark-metadata.txt
+                    echo "Benchmark workflow run: $previous_run_id" >> baseline/benchmark-metadata.txt
+                  fi
+                  echo 'available=true' >> "$GITHUB_OUTPUT"
+                  echo 'source=artifact' >> "$GITHUB_OUTPUT"
+                  echo "run_id=$previous_run_id" >> "$GITHUB_OUTPUT"
+                  echo "Using benchmark artifact from run $previous_run_id."
+                  exit 0
+                fi
+              fi
+              echo "::warning::Run $previous_run_id has no usable benchmark-results artifact; proceeding without a historical baseline."
+            fi
+
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'source=none' >> "$GITHUB_OUTPUT"
+            echo 'No successful main-branch benchmark artifact is available; this run will establish one.'
+            exit 0
           fi
 
           if [[ -z "$baseline_sha" || "$baseline_sha" == "$GITHUB_SHA" ]]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
+            echo 'source=none' >> "$GITHUB_OUTPUT"
             echo 'No earlier revision is available for a benchmark comparison.'
             exit 0
           fi
 
           git worktree add --detach "$RUNNER_TEMP/benchmark-baseline" "$baseline_sha"
           echo "available=true" >> "$GITHUB_OUTPUT"
+          echo 'source=revision' >> "$GITHUB_OUTPUT"
+          echo "sha=$baseline_sha" >> "$GITHUB_OUTPUT"
 
       - name: Run base revision benchmarks
         id: run-baseline-benchmarks
-        if: steps.baseline.outputs.available == 'true'
+        if: steps.baseline.outputs.source == 'revision'
+        env:
+          BASELINE_SHA: ${{ steps.baseline.outputs.sha }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p baseline
+          {
+            echo "Commit: $BASELINE_SHA"
+            echo "Runner: $RUNNER_OS/$RUNNER_ARCH"
+            echo "Go toolchain: $(go version)"
+            echo "GOOS/GOARCH: $(go env GOOS)/$(go env GOARCH)"
+            echo "CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs || echo unknown)"
+          } > baseline/benchmark-metadata.txt
           if (
             cd "$RUNNER_TEMP/benchmark-baseline"
             go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... \
@@ -84,6 +137,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Ref: $GITHUB_REF"
+            echo "Event: $GITHUB_EVENT_NAME"
+            echo "Runner: $RUNNER_OS/$RUNNER_ARCH"
+            echo "Go toolchain: $(go version)"
+            echo "GOOS/GOARCH: $(go env GOOS)/$(go env GOARCH)"
+            echo "CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs || echo unknown)"
+          } > benchmark-metadata.txt
+
           if go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... \
             > bench-current.txt 2> benchmark-diagnostics.txt; then
             rm -f benchmark-diagnostics.txt
@@ -110,22 +173,28 @@ jobs:
           set -euo pipefail
           if [[ "$BASELINE_AVAILABLE" == 'true' && -s baseline/bench-current.txt ]]; then
             "$RUNNER_TEMP/bin/benchstat" baseline/bench-current.txt bench-current.txt > bench-comparison.txt
+            "$RUNNER_TEMP/bin/benchstat" -alpha=1 baseline/bench-current.txt bench-current.txt > bench-analysis.txt
             cat bench-comparison.txt
-            # Paired runs still show low-teens variation in unchanged microbenchmarks.
-            python3 scripts/check_benchstat.py bench-comparison.txt --threshold-percent 15 --alpha 0.05
+            python3 scripts/check_benchstat.py bench-analysis.txt
           else
-            echo 'No base revision is available; this run will establish a benchmark baseline.'
+            echo 'No comparison baseline is available; this run will establish one.'
             echo 'Benchmark comparison skipped because no baseline is available.' > bench-comparison.txt
           fi
 
       - name: Upload benchmark results
-        if: always() && steps.run-benchmarks.outcome != 'skipped'
+        if: always() && (steps.run-benchmarks.outcome != 'skipped' || steps.run-baseline-benchmarks.outcome != 'skipped')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-results
           path: |
             bench-current.txt
+            baseline/bench-current.txt
+            baseline/benchmark-metadata.txt
+            bench-comparison.txt
+            bench-analysis.txt
+            benchmark-metadata.txt
             benchmark-diagnostics.txt
+            benchmark-baseline-diagnostics.txt
           if-no-files-found: ignore
           retention-days: 90
 
@@ -133,6 +202,9 @@ jobs:
         if: always()
         env:
           BASELINE_AVAILABLE: ${{ steps.baseline.outputs.available }}
+          BASELINE_SOURCE: ${{ steps.baseline.outputs.source }}
+          BASELINE_SHA: ${{ steps.baseline.outputs.sha }}
+          BASELINE_RUN_ID: ${{ steps.baseline.outputs.run_id }}
           BASELINE_OUTCOME: ${{ steps.run-baseline-benchmarks.outcome }}
           BENCHMARK_OUTCOME: ${{ steps.run-benchmarks.outcome }}
           COMPARE_OUTCOME: ${{ steps.compare.outcome }}
@@ -141,15 +213,36 @@ jobs:
           {
             echo '## Benchmark comparison'
             echo
+            echo "Baseline source: ${BASELINE_SOURCE:-none}"
+            if [[ -n "${BASELINE_SHA:-}" ]]; then
+              echo "Baseline revision: $BASELINE_SHA"
+            fi
+            if [[ -n "${BASELINE_RUN_ID:-}" ]]; then
+              echo "Baseline workflow run: $BASELINE_RUN_ID"
+            fi
             echo "Base revision available: $BASELINE_AVAILABLE"
             echo "Base benchmark step: $BASELINE_OUTCOME"
             echo "Benchmark step: $BENCHMARK_OUTCOME"
             echo "Comparison step: $COMPARE_OUTCOME"
-            if [[ "$BENCHMARK_OUTCOME" != 'success' ]]; then
+            if [[ "$BASELINE_OUTCOME" == 'failure' ]]; then
+              echo 'Base revision benchmark execution failed; see that step and the benchmark-results artifact.'
+            elif [[ "$BENCHMARK_OUTCOME" != 'success' && "$BENCHMARK_OUTCOME" != 'skipped' ]]; then
               echo 'Benchmark execution failed; see the Run benchmarks step and benchmark-results artifact.'
             fi
+            if [[ "$COMPARE_OUTCOME" == 'failure' ]]; then
+              echo 'Regression comparison/check failed; inspect its log output and the benchmark-results artifact.'
+            elif [[ "$COMPARE_OUTCOME" == 'success' && "$BASELINE_AVAILABLE" == 'true' ]]; then
+              echo 'Regression check passed.'
+            fi
             if [[ -f bench-comparison.txt ]]; then
-              echo 'Detailed comparison is available in the job log.'
+              echo
+              echo '### benchstat'
+              echo
+              echo '```text'
+              cat bench-comparison.txt
+              echo '```'
+              echo
+              echo 'Detailed regression analysis and raw outputs are in the benchmark-results artifact.'
             elif [[ -f bench-current.txt ]]; then
               echo 'The benchmark completed without a comparison report.'
             else
