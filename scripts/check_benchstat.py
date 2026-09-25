@@ -21,13 +21,20 @@ HEADER_RE = re.compile(
 STATISTIC_RE = re.compile(
     r"\(p=(?P<p_value><\s*[0-9]+(?:\.[0-9]+)?|"
     r"[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\s+"
-    r"n=(?P<old_samples>[0-9]+)\+(?P<new_samples>[0-9]+)\)"
+    r"n=[0-9]+(?:\+[0-9]+)?\)"
 )
 DELTA_RE = re.compile(
     r"(?P<delta>[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+|Inf))%$"
 )
 
-LOWER_IS_BETTER = {"time/op", "b/op", "bytes/op", "allocs/op", "allocations/op"}
+LOWER_IS_BETTER = {
+    "time/op",
+    "sec/op",
+    "b/op",
+    "bytes/op",
+    "allocs/op",
+    "allocations/op",
+}
 HIGHER_IS_BETTER = {
     "b/s",
     "kb/s",
@@ -65,6 +72,19 @@ def parse_comparisons(report):
         if header is not None:
             metric = header.group("metric").lower()
             continue
+
+        # Newer benchstat releases render each comparison as a Unicode table,
+        # with headers such as "│ sec/op │ sec/op vs base │".
+        cells = [cell.strip() for cell in line.split("│")[1:-1]]
+        if len(cells) == 2:
+            candidate_metric = cells[0].lower()
+            if re.fullmatch(
+                re.escape(candidate_metric) + r"\s+vs\s+base",
+                cells[1],
+                re.IGNORECASE,
+            ):
+                metric = candidate_metric
+                continue
 
         statistic = STATISTIC_RE.search(line)
         if statistic is None or metric is None:

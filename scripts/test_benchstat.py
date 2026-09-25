@@ -30,6 +30,26 @@ ThroughputDown 100MB/s ± 1% 80MB/s ± 2% -20.00% (p=0.001 n=10+10)
         )
         self.assertEqual([item.metric for item in regressions], ["time/op", "mb/s"])
 
+    def test_parses_benchstat_box_table_headers_and_single_sample_counts(self):
+        report = """\
+goos: linux
+goarch: amd64
+│ baseline/bench-current.txt │ bench-current.txt │
+│           sec/op           │ sec/op vs base    │
+WriteMultipartFrame-4 24.73n ± 1% 24.79n ± 2% ~ (p=0.643 n=10)
+WriteMultipartFrameLegacy-4 168.8n ± 2% 174.3n ± 0% +20.00% (p=0.000 n=10)
+geomean 127.1n 127.7n +0.47%
+
+│ baseline/bench-current.txt │ bench-current.txt │
+│            B/op            │ B/op vs base      │
+WriteMultipartFrame-4 0.000 ± 0% 0.000 ± 0% ~ (p=1.000 n=10)
+"""
+
+        self.assertEqual(count_comparisons(report), 3)
+        regressions = find_regressions(report, threshold_percent=15.0, alpha=0.05)
+        self.assertEqual([item.line.split()[0] for item in regressions], ["WriteMultipartFrameLegacy-4"])
+        self.assertEqual([item.metric for item in regressions], ["sec/op"])
+
     def test_uses_holm_correction_across_comparable_rows(self):
         report = """\
 name old time/op new time/op delta
