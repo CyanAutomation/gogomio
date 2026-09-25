@@ -49,7 +49,7 @@ gofmt -w ./cmd ./internal ./docs/reference
 - **GC Impact**: <1ms pause per request (see [FRAME_BUFFER_GC_ANALYSIS.md](docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md))
 - **Connection tracking overhead**: <100μs per new connection
 
-Benchmark regression detection runs weekly via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml). See [docs/repo-maturity.md](docs/repo-maturity.md#phase-3-benchmark-tracking--regression-detection-15-hours) for benchmark tracking roadmap.
+Benchmark regression checks run on pull requests, pushes to `main`, weekly, and on demand via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml). The workflow compares against the PR/push base or the most recent successful main artifact and fails for a statistically significant regression above 15% after multiple-comparison correction. See [FRAME_BUFFER_GC_ANALYSIS.md](docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) for details.
 
 **CI/CD Note**: Tests run automatically on every push/PR via [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml). All tests must pass and coverage must be ≥75% to merge to `main`. Coverage is tracked on [Codecov](https://codecov.io/gh/CyanAutomation/gogomio). Benchmarks tracked via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml).
 
