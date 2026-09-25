@@ -44,15 +44,6 @@ jobs:
           echo "Total coverage: ${COVERAGE}%"
           awk -v cov="$COVERAGE" 'BEGIN { if (cov + 0 < 75) { print "Coverage " cov "% is below 75% threshold"; exit 1 } }'
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
-        with:
-          file: ./coverage.out
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-
       - name: Store coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
