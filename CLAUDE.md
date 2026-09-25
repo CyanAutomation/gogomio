@@ -51,7 +51,7 @@ gofmt -w ./cmd ./internal ./docs/reference
 
 Benchmark regression checks run on pull requests, pushes to `main`, weekly, and on demand via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml). The workflow compares against the PR/push base or the most recent successful main artifact and fails for a statistically significant regression above 15% after multiple-comparison correction. See [FRAME_BUFFER_GC_ANALYSIS.md](docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) for details.
 
-**CI/CD Note**: Tests run automatically on every push/PR via [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml). All tests must pass and coverage must be ≥75% to merge to `main`. Coverage is tracked on [Codecov](https://codecov.io/gh/CyanAutomation/gogomio). Benchmarks tracked via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml).
+**CI/CD Note**: The [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml) workflow runs tests weekly or on manual dispatch, enforces a ≥75% coverage threshold, and stores the coverage report as a GitHub Actions artifact. Benchmarks are tracked via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml).
 
 There is no Makefile. The repo uses standard Go tooling and GitHub Actions for multi-arch Docker builds via `./scripts/build-multiarch.sh`.
 
