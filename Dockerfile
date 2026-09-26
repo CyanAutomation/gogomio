@@ -13,6 +13,7 @@ FROM ${BUILDER_BASE_IMAGE} AS builder
 # Build arguments are available in this stage
 ARG VERSION
 ARG INSTALL_FFMPEG
+ARG TARGETARCH
 
 WORKDIR /build
 
@@ -22,19 +23,9 @@ RUN apk add --no-cache gcc musl-dev
 # Copy remaining source code
 COPY . .
 
-# Run tests to validate the build (output suppressed in GCB via --progress quiet)
-RUN set -eu; \
-    mkdir -p /tmp/test-logs; \
-    status=0; \
-    for pkg in $(/usr/local/go/bin/go list ./...); do \
-      safe_pkg=$(echo "$pkg" | sed 's/[^a-zA-Z0-9_-]/_/g'); \
-      log_file="/tmp/test-logs/${safe_pkg}.log"; \
-      if ! CGO_ENABLED=1 /usr/local/go/bin/go test -race "$pkg" > "$log_file" 2>&1; then \
-        status=1; \
-        cat "$log_file"; \
-      fi; \
-    done; \
-    test "$status" -eq 0
+# Go's ARM64 race runtime rejects 47-bit VMAs in some emulated build environments.
+# Run regular ARM64 tests here; the amd64 image path and CI still run with -race.
+RUN TARGETARCH="$TARGETARCH" sh scripts/run-docker-go-tests.sh
 
 # Build the binary with version information
 # Use go build with optimization flags
