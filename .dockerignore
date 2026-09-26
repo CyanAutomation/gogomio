@@ -47,7 +47,8 @@ __pycache__/
 .pytest_cache/
 
 # Project-specific
-scripts/
+scripts/*
+!scripts/run-docker-go-tests.sh
 mock/
 testdata/
 .githooks
