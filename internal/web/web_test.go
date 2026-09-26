@@ -2,7 +2,10 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"image/png"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,7 +37,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		`id="start-stream"`,
 		`id="stop-stream"`,
 		`id="diagnostics-btn"`,
-		`<script src="/static/aspect-ratio.js"></script>`,
+		`<script src="/static/aspect-ratio.js?v=`,
 	}
 
 	for _, hook := range runtimeHooks {
@@ -86,8 +89,8 @@ func TestWebUINotFoundPath(t *testing.T) {
 	}
 }
 
-// TestWebUICacheHeaders verifies the root page has the expected cache policy directives and TTL.
-func TestWebUICacheHeaders(t *testing.T) {
+// TestWebUIRevalidation verifies that the root document is always revalidated.
+func TestWebUIRevalidation(t *testing.T) {
 	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
@@ -100,14 +103,61 @@ func TestWebUICacheHeaders(t *testing.T) {
 	}
 
 	cacheControl := w.Header().Get("Cache-Control")
-	if !strings.Contains(cacheControl, "max-age=3600") {
-		t.Errorf("cache-control: got %q, want directive %q", cacheControl, "max-age=3600")
+	if cacheControl != "no-cache" {
+		t.Errorf("Cache-Control: got %q, want %q", cacheControl, "no-cache")
 	}
-	if !strings.Contains(cacheControl, "public") {
-		t.Errorf("cache-control: got %q, missing directive %q", cacheControl, "public")
+
+	data, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(cacheControl, "no-cache") {
-		t.Errorf("cache-control: got %q, should not include %q", cacheControl, "no-cache")
+	wantETag := etag(data)
+	if got := w.Header().Get("ETag"); got != wantETag {
+		t.Errorf("ETag: got %q, want %q", got, wantETag)
+	}
+
+	conditionalReq, _ := http.NewRequest("GET", "/", nil)
+	conditionalReq.Header.Set("If-None-Match", wantETag)
+	conditionalResponse := httptest.NewRecorder()
+	router.ServeHTTP(conditionalResponse, conditionalReq)
+	if conditionalResponse.Code != http.StatusNotModified {
+		t.Errorf("conditional status code: got %d, want 304", conditionalResponse.Code)
+	}
+	if conditionalResponse.Body.Len() != 0 {
+		t.Errorf("conditional response body: got %d bytes, want none", conditionalResponse.Body.Len())
+	}
+}
+
+func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
+	index, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assets := []struct {
+		url  string
+		file string
+		fs   fs.ReadFileFS
+	}{
+		{url: "/static/aspect-ratio.js", file: "aspect-ratio.js", fs: webFS},
+		{url: "/static/mio/mio_pose_idle.png", file: "mio/mio_pose_idle.png", fs: mioFS},
+		{url: "/static/mio/mio_pose_sleeping.png", file: "mio/mio_pose_sleeping.png", fs: mioFS},
+		{url: "/static/mio/mio_pose_curious.png", file: "mio/mio_pose_curious.png", fs: mioFS},
+		{url: "/static/mio/mio_pose_happy.png", file: "mio/mio_pose_happy.png", fs: mioFS},
+		{url: "/static/mio/mio_pose_concerned.png", file: "mio/mio_pose_concerned.png", fs: mioFS},
+		{url: "/static/mio/mio_pose_angry.png", file: "mio/mio_pose_angry.png", fs: mioFS},
+		{url: "/static/mio/mio_pose_looking.png", file: "mio/mio_pose_looking.png", fs: mioFS},
+	}
+	for _, asset := range assets {
+		data, err := asset.fs.ReadFile(asset.file)
+		if err != nil {
+			t.Fatalf("read %s: %v", asset.file, err)
+		}
+		sum := sha256.Sum256(data)
+		want := asset.url + "?v=" + hex.EncodeToString(sum[:])
+		if !bytes.Contains(index, []byte(want)) {
+			t.Errorf("index.html does not reference content-versioned URL %q", want)
+		}
 	}
 }
 
@@ -150,14 +200,25 @@ func TestMioStaticAssetsAreServed(t *testing.T) {
 				t.Errorf("decode response as PNG: %v", err)
 			}
 
-			cacheControl := w.Header().Get("Cache-Control")
-			if !strings.Contains(cacheControl, "public") || !strings.Contains(cacheControl, "max-age=86400") {
-				t.Errorf("Cache-Control: got %q, want public and max-age=86400", cacheControl)
-			}
-			if strings.Contains(cacheControl, "no-cache") {
-				t.Errorf("Cache-Control: got %q, should not include no-cache", cacheControl)
+			if cacheControl := w.Header().Get("Cache-Control"); cacheControl != immutableCacheControl {
+				t.Errorf("Cache-Control: got %q, want %q", cacheControl, immutableCacheControl)
 			}
 		})
+	}
+}
+
+func TestAspectRatioScriptIsImmutable(t *testing.T) {
+	router := http.NewServeMux()
+	RegisterStaticFiles(router)
+
+	req, _ := http.NewRequest("GET", "/static/aspect-ratio.js?v=test", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code: got %d, want 200", w.Code)
+	}
+	if got := w.Header().Get("Cache-Control"); got != immutableCacheControl {
+		t.Errorf("Cache-Control: got %q, want %q", got, immutableCacheControl)
 	}
 }
 
