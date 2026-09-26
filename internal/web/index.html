@@ -669,7 +669,7 @@
 <body>
     <header>
         <div class="container" style="display: flex; align-items: center; justify-content: center; gap: 14px; padding-top: var(--spacing-sm); padding-bottom: var(--spacing-sm);">
-            <img src="/static/mio/mio_pose_idle.png" alt="MIO mascot" class="mio-header-avatar mio-blink">
+            <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO mascot" class="mio-header-avatar mio-blink">
             <div>
                 <h1>Motion In Ocean</h1>
                 <p class="subtitle">Live Streaming Camera — Go Edition</p>
@@ -688,10 +688,10 @@
                         <div style="text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
                             <div style="margin-bottom: var(--spacing-lg);">
                                 <div id="stream-spinner" style="display: none;">
-                                    <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png" alt="MIO is thinking" class="mio-state-image mio-pulse">
+                                    <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f" alt="MIO is thinking" class="mio-state-image mio-pulse">
                                 </div>
                                 <div id="stream-idle">
-                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png" alt="MIO is resting" class="mio-state-image mio-blink">
+                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="MIO is resting" class="mio-state-image mio-blink">
                                 </div>
                             </div>
                             <p id="stream-placeholder-text" style="margin: 0; color: #aac8d8; font-size: var(--font-size-lg); font-weight: 500;">Ready to stream</p>
@@ -746,7 +746,7 @@
 
     <footer>
         <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-            <img src="/static/mio/mio_pose_idle.png" alt="" aria-hidden="true" style="width: 18px; height: 18px; object-fit: contain; opacity: 0.55;">
+            <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true" style="width: 18px; height: 18px; object-fit: contain; opacity: 0.55;">
             <p>Motion In Ocean v0.1.0-dev | Raspberry Pi Camera Streaming</p>
         </div>
     </footer>
@@ -765,7 +765,7 @@
         </div>
     </div>
 
-    <script src="/static/aspect-ratio.js"></script>
+    <script src="/static/aspect-ratio.js?v=c25586154aecec7c1570b7560b99e9f9067abdfa0a91408521805ffd987a1fb4"></script>
     <script>
         const DIAG_ICONS = {
             camera:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
@@ -804,37 +804,37 @@
                 this.poseResetTimer = null;
                 this.poseByState = {
                     idle: {
-                        src: "/static/mio/mio_pose_sleeping.png",
+                        src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
                         alt: "MIO is resting",
                         animationClass: "mio-blink",
                     },
                     loading: {
-                        src: "/static/mio/mio_pose_curious.png",
+                        src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
                         alt: "MIO is curious",
                         animationClass: "mio-pulse",
                     },
                     success: {
-                        src: "/static/mio/mio_pose_happy.png",
+                        src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
                         alt: "MIO is happy",
                         animationClass: "mio-float",
                     },
                     warning: {
-                        src: "/static/mio/mio_pose_concerned.png",
+                        src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
                         alt: "MIO is concerned",
                         animationClass: "mio-pulse",
                     },
                     running: {
-                        src: "/static/mio/mio_pose_curious.png",
+                        src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
                         alt: "MIO is attentive",
                         animationClass: "mio-pulse",
                     },
                     error: {
-                        src: "/static/mio/mio_pose_angry.png",
+                        src: "/static/mio/mio_pose_angry.png?v=45102660b30cef3f208fd7d2663fc9064f421c69dc0a165837c9c52408acc52b",
                         alt: "MIO is distressed",
                         animationClass: "mio-pulse",
                     },
                     looking: {
-                        src: "/static/mio/mio_pose_looking.png",
+                        src: "/static/mio/mio_pose_looking.png?v=004b22d5f48e070762791074142e83cd84314f158005aa5ebf35a5cf64ff9ea6",
                         alt: "MIO is scanning",
                         animationClass: "mio-float",
                     },
