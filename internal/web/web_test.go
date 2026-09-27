@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -241,5 +242,44 @@ func TestLegacyMioStaticAssetsAreNotServed(t *testing.T) {
 		if w.Code != http.StatusNotFound {
 			t.Errorf("legacy asset %q status code: got %d, want 404", asset, w.Code)
 		}
+		assertNotPubliclyCacheable(t, w.Header().Get("Cache-Control"))
+	}
+}
+
+func TestMioStaticAssetRedirectIsNotPubliclyCacheable(t *testing.T) {
+	router := http.NewServeMux()
+	RegisterStaticFiles(router)
+
+	req, _ := http.NewRequest("GET", "/static/mio/mio_pose_idle.png/", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMovedPermanently {
+		t.Fatalf("status code: got %d, want %d", w.Code, http.StatusMovedPermanently)
+	}
+	assertNotPubliclyCacheable(t, w.Header().Get("Cache-Control"))
+}
+
+func assertNotPubliclyCacheable(t *testing.T, cacheControl string) {
+	t.Helper()
+	public := false
+	positiveMaxAge := false
+	for _, directive := range strings.Split(strings.ToLower(cacheControl), ",") {
+		directive = strings.TrimSpace(directive)
+		if directive == "public" {
+			public = true
+			continue
+		}
+		value, found := strings.CutPrefix(directive, "max-age=")
+		if !found {
+			continue
+		}
+		maxAge, err := strconv.ParseInt(strings.Trim(value, `"`), 10, 64)
+		if err == nil && maxAge > 0 {
+			positiveMaxAge = true
+		}
+	}
+	if public && positiveMaxAge {
+		t.Errorf("Cache-Control %q marks a non-200 response public with a positive max-age", cacheControl)
 	}
 }

@@ -7,9 +7,8 @@ import (
 	"encoding/hex"
 	"io/fs"
 	"log"
-	"mime"
 	"net/http"
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -20,6 +19,32 @@ var webFS embed.FS
 var mioFS embed.FS
 
 const immutableCacheControl = "public, max-age=31536000, immutable"
+
+type successfulFileCacheWriter struct {
+	http.ResponseWriter
+	cacheSuccessfulResponse bool
+	wroteHeader             bool
+}
+
+func (w *successfulFileCacheWriter) WriteHeader(statusCode int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+	if statusCode == http.StatusOK && w.cacheSuccessfulResponse {
+		w.Header().Set("Cache-Control", immutableCacheControl)
+	} else {
+		w.Header().Set("Cache-Control", "no-store")
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *successfulFileCacheWriter) Write(data []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(data)
+}
 
 func etag(data []byte) string {
 	sum := sha256.Sum256(data)
@@ -77,15 +102,18 @@ func RegisterStaticFiles(r *http.ServeMux) {
 		log.Printf("Error creating mio sub-filesystem: %v", err)
 		return
 	}
+	mioHandler := http.StripPrefix("/static/mio/", http.FileServer(http.FS(mioSubFS)))
 	r.Handle("/static/mio/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Resolve the name the same way as net/http's file server: clean it from
+		// a synthetic root so that .. elements cannot escape mioSubFS.
 		name := strings.TrimPrefix(req.URL.Path, "/static/mio/")
-		data, err := fs.ReadFile(mioSubFS, name)
-		if err != nil {
-			http.NotFound(w, req)
-			return
-		}
-		w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(name)))
-		w.Header().Set("Cache-Control", immutableCacheControl)
-		_, _ = w.Write(data)
+		name = strings.TrimPrefix(path.Clean("/"+name), "/")
+		info, statErr := fs.Stat(mioSubFS, name)
+		cacheSuccessfulResponse := statErr == nil && info != nil && !info.IsDir()
+
+		mioHandler.ServeHTTP(&successfulFileCacheWriter{
+			ResponseWriter:          w,
+			cacheSuccessfulResponse: cacheSuccessfulResponse,
+		}, req)
 	}))
 }
