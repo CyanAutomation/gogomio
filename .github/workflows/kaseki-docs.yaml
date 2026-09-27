@@ -19,11 +19,13 @@ concurrency:
 jobs:
   docs_sweep:
     name: Run Kaseki documentation sweep
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Kaseki allows a run to last three hours; leave time for preflight and final status.
     timeout-minutes: 200
     # Configure KASEKI_API_TOKEN as a secret and KASEKI_BASE_URL as an
-    # environment variable. Restrict deployments to main and require a reviewer.
+    # environment variable. The job-level ref guard restricts use to main;
+    # no reviewer approval is required.
     environment: kaseki-agent
     env:
       KASEKI_BASE_URL: ${{ vars.KASEKI_BASE_URL }}

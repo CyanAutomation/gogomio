@@ -9,8 +9,35 @@ permissions:
   contents: read
 
 jobs:
+  verify-release:
+    name: Validate and Test Release Source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/validate_release_tag.py "$RELEASE_TAG"
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go vet and race tests
+        run: |
+          go vet ./...
+          go test ./... -race
+
   goreleaser:
     name: Build and Release Binaries
+    needs: verify-release
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -34,11 +61,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! python3 scripts/validate_release_tag.py "$RELEASE_TAG"; then
-            echo '::error title=Invalid release tag::Expected a v-prefixed Docker-compatible version with an optional valid prerelease.'
-            exit 1
-          fi
-
           version="${RELEASE_TAG#v}"
           release_notes="$RUNNER_TEMP/release-notes.md"
           if ! awk -v version="$version" '
@@ -54,6 +76,6 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: v2.18.0
-          args: release --clean --release-notes=${{ runner.TEMP }}/release-notes.md
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
