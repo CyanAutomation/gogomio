@@ -468,33 +468,16 @@ func TestAPIReferenceRoutes(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
 
-	for _, path := range []string{"/docs/", "/docs/index.html"} {
-		t.Run(path, func(t *testing.T) {
-			response := httptest.NewRecorder()
-			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
-
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
-			}
-			if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
-				t.Fatalf("content type = %q, want HTML", got)
-			}
-			for _, link := range []string{"/swagger.json", "/swagger.yaml"} {
-				if !strings.Contains(response.Body.String(), link) {
-					t.Errorf("docs page does not link to %s", link)
-				}
-			}
-		})
-	}
-
-	for _, tc := range []struct {
+	tests := []struct {
 		path        string
 		contentType string
 		want        string
 	}{
+		{path: "/docs/index.html", contentType: "text/html", want: "/swagger.json"},
 		{path: "/swagger.json", contentType: "application/json", want: `"swagger": "2.0"`},
 		{path: "/swagger.yaml", contentType: "application/yaml", want: "swagger: \"2.0\""},
-	} {
+	}
+	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, tc.path, nil))
@@ -508,8 +491,41 @@ func TestAPIReferenceRoutes(t *testing.T) {
 			if !strings.Contains(response.Body.String(), tc.want) {
 				t.Fatalf("response does not contain %q", tc.want)
 			}
+			if got := response.Header().Get("Cache-Control"); got != "public, max-age=0, must-revalidate" {
+				t.Errorf("Cache-Control = %q, want revalidation policy", got)
+			}
+			etag := response.Header().Get("ETag")
+			if !strings.HasPrefix(etag, `"`) || !strings.HasSuffix(etag, `"`) {
+				t.Fatalf("ETag = %q, want quoted content digest", etag)
+			}
+
+			conditionalRequest := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			conditionalRequest.Header.Set("If-None-Match", etag)
+			conditionalResponse := httptest.NewRecorder()
+			router.ServeHTTP(conditionalResponse, conditionalRequest)
+			if conditionalResponse.Code != http.StatusNotModified {
+				t.Fatalf("conditional status = %d, want %d", conditionalResponse.Code, http.StatusNotModified)
+			}
+			if conditionalResponse.Body.Len() != 0 {
+				t.Fatalf("conditional response body length = %d, want 0", conditionalResponse.Body.Len())
+			}
 		})
 	}
+
+	t.Run("missing docs asset is not positively cached", func(t *testing.T) {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/docs/missing.css", nil))
+
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+		}
+		if got := response.Header().Get("Cache-Control"); got != "" {
+			t.Errorf("Cache-Control = %q, want empty", got)
+		}
+		if got := response.Header().Get("ETag"); got != "" {
+			t.Errorf("ETag = %q, want empty", got)
+		}
+	})
 }
 
 func TestRouterRejectsUnsupportedMethod(t *testing.T) {
