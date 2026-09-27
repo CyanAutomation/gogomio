@@ -28,10 +28,6 @@ definitions:
         description: Target FPS for frame buffer
         example: 30
         type: integer
-      timestamp_iso8601:
-        description: ISO8601 timestamp of this response
-        example: "2026-04-19T15:30:45Z"
-        type: string
     type: object
   api.DetailedHealthResponse:
     description: Comprehensive health status with detailed metrics, error tracking,
@@ -441,6 +437,9 @@ paths:
         FPS, quality settings, connection limits). Resolution does not describe the
         sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does
         not include runtime metrics; use /v1/metrics/live for current performance data.
+        Values are immutable until process restart. Responses include an ETag and
+        `Cache-Control: public, max-age=60, must-revalidate`; send If-None-Match to
+        revalidate a cached representation.
       produces:
       - application/json
       responses:
@@ -448,6 +447,8 @@ paths:
           description: Static configuration settings
           schema:
             $ref: '#/definitions/api.CameraConfigResponse'
+        "304":
+          description: Not Modified; empty body when If-None-Match matches
       summary: Get camera configuration
       tags:
       - Configuration
