@@ -579,6 +579,52 @@ func TestConfigEndpoint(t *testing.T) {
 	}
 }
 
+func TestCameraConfigCaching(t *testing.T) {
+	_, _, cfg := setupTestServer(t)
+
+	request := func(ifNoneMatch string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/v1/config/camera", nil)
+		req.Header.Set("If-None-Match", ifNoneMatch)
+		w := httptest.NewRecorder()
+		handleCameraConfig(w, req, cfg)
+		return w
+	}
+
+	first := request("")
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", first.Code)
+	}
+	if got, want := first.Header().Get("Cache-Control"), "public, max-age=60, must-revalidate"; got != want {
+		t.Errorf("Cache-Control = %q, want %q", got, want)
+	}
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("response missing ETag")
+	}
+	if strings.Contains(first.Body.String(), "timestamp_iso8601") {
+		t.Error("cacheable camera configuration contains request timestamp")
+	}
+
+	second := request("")
+	if got := second.Header().Get("ETag"); got != etag {
+		t.Errorf("ETag changed for identical process configuration: got %q, want %q", got, etag)
+	}
+	if got, want := second.Body.String(), first.Body.String(); got != want {
+		t.Errorf("configuration representation changed: got %q, want %q", got, want)
+	}
+
+	notModified := request(etag)
+	if notModified.Code != http.StatusNotModified {
+		t.Fatalf("expected status 304, got %d", notModified.Code)
+	}
+	if notModified.Body.Len() != 0 {
+		t.Errorf("304 response body = %q, want empty", notModified.Body.String())
+	}
+	if got := notModified.Header().Get("ETag"); got != etag {
+		t.Errorf("304 ETag = %q, want %q", got, etag)
+	}
+}
+
 func TestDeprecatedAPIStatusEndpointUsesRuntimeConfig(t *testing.T) {
 	router, cam, cfg := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
