@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -779,8 +780,6 @@ type CameraConfigResponse struct {
 	JPEGQuality int `json:"jpeg_quality" example:"85"`
 	// Maximum concurrent stream connections allowed
 	MaxStreamConnections int `json:"max_stream_connections" example:"5"`
-	// ISO8601 timestamp of this response
-	TimestampISO8601 string `json:"timestamp_iso8601" example:"2026-04-19T15:30:45Z"`
 	// API version
 	APIVersion string `json:"api_version" example:"1"`
 }
@@ -1290,20 +1289,45 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 }
 
 func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
+	// Runtime settings are stored separately and never mutate cfg, so these
+	// startup values are immutable for the lifetime of the process.
 	response := CameraConfigResponse{
 		Resolution:           cfg.Resolution,
 		FPS:                  cfg.FPS,
 		TargetFPS:            cfg.TargetFPS,
 		JPEGQuality:          cfg.JPEGQuality,
 		MaxStreamConnections: cfg.MaxStreamConnections,
-		TimestampISO8601:     time.Now().UTC().Format(time.RFC3339),
 		APIVersion:           "1",
 	}
 
-	w.Header().Set("Content-Type", ContentTypeJSON)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		_ = err
+	body, err := json.Marshal(response)
+	if err != nil {
+		writeErrorResponse(w, http.StatusInternalServerError, "Failed to serialize camera configuration", err.Error())
+		return
 	}
+	body = append(body, '\n')
+	digest := sha256.Sum256(body)
+	etag := fmt.Sprintf("\"%x\"", digest)
+
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.Header().Set("Cache-Control", "public, max-age=60, must-revalidate")
+	w.Header().Set("ETag", etag)
+	if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	_, _ = w.Write(body)
+}
+
+// ifNoneMatch performs the weak comparison required for GET If-None-Match.
+func ifNoneMatch(header, etag string) bool {
+	for _, candidate := range strings.Split(header, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || strings.TrimPrefix(candidate, "W/") == strings.TrimPrefix(etag, "W/") {
+			return true
+		}
+	}
+	return false
 }
 
 func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
