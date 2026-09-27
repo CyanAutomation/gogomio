@@ -109,7 +109,7 @@ func RegisterStaticFiles(r *http.ServeMux) {
 		name := strings.TrimPrefix(req.URL.Path, "/static/mio/")
 		name = strings.TrimPrefix(path.Clean("/"+name), "/")
 		info, statErr := fs.Stat(mioSubFS, name)
-		cacheSuccessfulResponse := statErr == nil && !info.IsDir()
+		cacheSuccessfulResponse := statErr == nil && info != nil && !info.IsDir()
 
 		mioHandler.ServeHTTP(&successfulFileCacheWriter{
 			ResponseWriter:          w,
