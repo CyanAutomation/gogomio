@@ -19,6 +19,7 @@ concurrency:
 jobs:
   dry_sweep:
     name: Run Kaseki DRY sweep
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     # Kaseki allows a run to last three hours; leave time for
@@ -26,7 +27,8 @@ jobs:
     timeout-minutes: 200
 
     # Configure KASEKI_API_TOKEN as a secret and KASEKI_BASE_URL as an
-    # environment variable.
+    # environment variable. The job-level ref guard restricts use to main;
+    # no reviewer approval is required.
     environment: kaseki-agent
 
     env:
