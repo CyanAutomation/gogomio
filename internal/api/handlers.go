@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"mime"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -1119,24 +1121,58 @@ func RegisterHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Confi
 }
 
 func registerOpenAPIRoutes(router *http.ServeMux) {
-	docs := http.FileServer(http.FS(reference.Files))
-	router.Handle("GET /docs/", http.StripPrefix("/docs/", docs))
-	router.HandleFunc("GET /docs/index.html", serveReferenceFile("index.html", "text/html; charset=utf-8"))
-	router.HandleFunc("GET /swagger.json", serveReferenceFile("swagger.json", "application/json; charset=utf-8"))
-	router.HandleFunc("GET /swagger.yaml", serveReferenceFile("swagger.yaml", "application/yaml; charset=utf-8"))
+	router.HandleFunc("GET /docs/", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/docs/")
+		if name == "" {
+			name = "index.html"
+		}
+		serveReferenceFile(w, r, name, referenceContentType(name))
+	})
+	router.HandleFunc("GET /swagger.json", func(w http.ResponseWriter, r *http.Request) {
+		serveReferenceFile(w, r, "swagger.json", "application/json; charset=utf-8")
+	})
+	router.HandleFunc("GET /swagger.yaml", func(w http.ResponseWriter, r *http.Request) {
+		serveReferenceFile(w, r, "swagger.yaml", "application/yaml; charset=utf-8")
+	})
 }
 
-func serveReferenceFile(name, contentType string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		data, err := reference.Files.ReadFile(name)
-		if err != nil {
-			http.Error(w, "API reference unavailable", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", contentType)
-		w.Header().Set("Cache-Control", "public, max-age=3600")
-		_, _ = w.Write(data)
+func serveReferenceFile(w http.ResponseWriter, r *http.Request, name, contentType string) {
+	data, err := reference.Files.ReadFile(name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
 	}
+
+	digest := sha256.Sum256(data)
+	etag := fmt.Sprintf(`"%x"`, digest)
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("ETag", etag)
+	// These URLs are not content-versioned, so clients must revalidate before
+	// reusing a stored response. Content-versioned URLs can instead use a long,
+	// immutable lifetime.
+	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	if requestETagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	_, _ = w.Write(data)
+}
+
+func referenceContentType(name string) string {
+	if contentType := mime.TypeByExtension(filepath.Ext(name)); contentType != "" {
+		return contentType
+	}
+	return "application/octet-stream"
+}
+
+func requestETagMatches(ifNoneMatch, etag string) bool {
+	for candidate := range strings.SplitSeq(ifNoneMatch, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "*" || strings.TrimPrefix(candidate, "W/") == etag {
+			return true
+		}
+	}
+	return false
 }
 
 // registerV1Handlers registers all v1 API endpoints
