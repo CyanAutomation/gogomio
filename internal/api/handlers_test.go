@@ -389,6 +389,81 @@ func TestOperationalMetricsAndRemovedSettingsRoute(t *testing.T) {
 	}
 }
 
+func TestDynamicGETRoutesDisableCaching(t *testing.T) {
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
+
+	paths := []string{
+		"/v1/health",
+		"/v1/ready",
+		"/v1/metrics/live",
+		"/v1/health/detailed",
+		"/metrics",
+		"/v1/api/config",
+		"/v1/api/status",
+		"/v1/api/settings",
+		"/v1/api/diagnostics",
+		"/health",
+		"/ready",
+		"/api/config",
+		"/api/status",
+		"/api/diagnostics",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+			}
+			if got := response.Header().Get("Cache-Control"); got != "no-store" {
+				t.Errorf("Cache-Control = %q, want %q", got, "no-store")
+			}
+		})
+	}
+}
+
+func TestUnsuccessfulDynamicGETRoutesDisableCaching(t *testing.T) {
+	cfg := &config.Config{MaxStreamConnections: 2}
+	fm := NewFrameManager(&readinessCamera{ready: false}, cfg)
+	t.Cleanup(fm.Stop)
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
+
+	tests := []struct {
+		path             string
+		wantCacheControl string
+	}{
+		{path: "/v1/ready", wantCacheControl: "no-store"},
+		{path: "/ready", wantCacheControl: "no-store"},
+		{path: "/v1/snapshot.jpg", wantCacheControl: "no-cache, no-store, must-revalidate"},
+		{path: "/snapshot.jpg", wantCacheControl: "no-cache, no-store, must-revalidate"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, tt.path, nil))
+
+			if response.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+			}
+			if got := response.Header().Get("Cache-Control"); got != tt.wantCacheControl {
+				t.Errorf("Cache-Control = %q, want %q", got, tt.wantCacheControl)
+			}
+		})
+	}
+}
+
 func TestAPIReferenceRoutes(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
