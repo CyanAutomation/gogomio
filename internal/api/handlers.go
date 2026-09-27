@@ -648,6 +648,12 @@ func (fm *FrameManager) GetClientImbalance() int64 {
 // StreamFrame writes frames to an HTTP response in MJPEG format.
 // Manages connection tracking and respects the configurable max connection limit.
 func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxConnections int) error {
+	// Set the stream's compatibility cache headers before any early response so
+	// connection-limit errors cannot be cached either.
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+
 	// Check connection limit
 	if !fm.connTracker.TryIncrement(maxConnections) {
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -673,9 +679,6 @@ func (fm *FrameManager) StreamFrame(w http.ResponseWriter, r *http.Request, maxC
 
 	// Set MJPEG headers
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Expires", "0")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("Connection", "close")
 
@@ -1101,9 +1104,9 @@ func RegisterHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Confi
 	registerV1Handlers(router, fm, cfg, startTime)
 
 	// Dependency-free Prometheus-compatible metrics for Pi deployments.
-	router.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /metrics", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handlePrometheusMetrics(w, fm)
-	})
+	}))
 
 	// Register unversioned legacy endpoints for backward compatibility
 	registerLegacyHandlers(router, fm, cfg, startTime)
@@ -1139,26 +1142,26 @@ func serveReferenceFile(name, contentType string) http.HandlerFunc {
 // registerV1Handlers registers all v1 API endpoints
 func registerV1Handlers(router *http.ServeMux, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Health check endpoints
-	router.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/health", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, fm, startTime)
-	})
+	}))
 
-	router.HandleFunc("GET /v1/ready", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/ready", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleReady(w, r, fm)
-	})
+	}))
 
 	// New refactored config and metrics endpoints
 	router.HandleFunc("GET /v1/config/camera", func(w http.ResponseWriter, r *http.Request) {
 		handleCameraConfig(w, r, cfg)
 	})
 
-	router.HandleFunc("GET /v1/metrics/live", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/metrics/live", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleLiveMetrics(w, r, fm, cfg, startTime)
-	})
+	}))
 
-	router.HandleFunc("GET /v1/health/detailed", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/health/detailed", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleDetailedHealth(w, r, fm, cfg, startTime)
-	})
+	}))
 
 	// Stream endpoints
 	router.HandleFunc("GET /v1/stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
@@ -1181,22 +1184,22 @@ func registerV1Handlers(router *http.ServeMux, fm *FrameManager, cfg *config.Con
 	})
 
 	// API endpoints
-	router.HandleFunc("GET /v1/api/config", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/config", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleAPIConfigure(w, r, fm, cfg, startTime)
-	})
+	}))
 
-	router.HandleFunc("GET /v1/api/status", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/status", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleAPIStatus(w, r, fm, cfg, startTime)
-	})
+	}))
 
 	router.HandleFunc("POST /v1/api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
 		handleStopStream(w, r, fm)
 	})
 
 	// Settings endpoints
-	router.HandleFunc("GET /v1/api/settings", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/settings", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsGet(w, r, fm)
-	})
+	}))
 	router.HandleFunc("POST /v1/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		handleSettingsUpdate(w, r, fm)
 	})
@@ -1205,21 +1208,21 @@ func registerV1Handlers(router *http.ServeMux, fm *FrameManager, cfg *config.Con
 	})
 
 	// Diagnostics endpoint
-	router.HandleFunc("GET /v1/api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /v1/api/diagnostics", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleDiagnostics(w, r, fm, cfg, startTime)
-	})
+	}))
 }
 
 // registerLegacyHandlers registers unversioned endpoints for backward compatibility
 func registerLegacyHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Health check endpoints
-	router.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /health", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleHealth(w, r, fm, startTime)
-	})
+	}))
 
-	router.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /ready", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleReady(w, r, fm)
-	})
+	}))
 
 	// Stream endpoints
 	router.HandleFunc("GET /stream.mjpg", func(w http.ResponseWriter, r *http.Request) {
@@ -1240,22 +1243,22 @@ func registerLegacyHandlers(router *http.ServeMux, fm *FrameManager, cfg *config
 	})
 
 	// API endpoints
-	router.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /api/config", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleAPIConfigure(w, r, fm, cfg, startTime)
-	})
+	}))
 
-	router.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /api/status", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleAPIStatus(w, r, fm, cfg, startTime)
-	})
+	}))
 
 	router.HandleFunc("POST /api/stream/stop", func(w http.ResponseWriter, r *http.Request) {
 		handleStopStream(w, r, fm)
 	})
 
 	// Diagnostics endpoint
-	router.HandleFunc("GET /api/diagnostics", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("GET /api/diagnostics", noStore(func(w http.ResponseWriter, r *http.Request) {
 		handleDiagnostics(w, r, fm, cfg, startTime)
-	})
+	}))
 }
 
 // Handler functions
@@ -1455,6 +1458,9 @@ func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 }
 
 func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
+	// Retain the stronger snapshot-specific directive for both images and
+	// camera-unavailable responses.
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	frame := fm.GetFrame()
 	if frame == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -1463,7 +1469,6 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	}
 
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	_, _ = w.Write(frame)
 }
 
@@ -1567,6 +1572,15 @@ func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) 
 }
 
 // Middleware
+
+// noStore prevents caches from retaining dynamic API responses, including
+// non-success responses written by the wrapped handler.
+func noStore(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	}
+}
 
 func writeErrorResponse(w http.ResponseWriter, statusCode int, message string, details string) {
 	w.Header().Set("Content-Type", ContentTypeJSON)
