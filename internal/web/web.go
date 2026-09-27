@@ -108,8 +108,10 @@ func RegisterStaticFiles(r *http.ServeMux) {
 		// a synthetic root so that .. elements cannot escape mioSubFS.
 		name := strings.TrimPrefix(req.URL.Path, "/static/mio/")
 		name = strings.TrimPrefix(path.Clean("/"+name), "/")
-		info, statErr := fs.Stat(mioSubFS, name)
-		cacheSuccessfulResponse := statErr == nil && info != nil && !info.IsDir()
+		cacheSuccessfulResponse := false
+		if info, statErr := fs.Stat(mioSubFS, name); statErr == nil && info != nil {
+			cacheSuccessfulResponse = !info.IsDir()
+		}
 
 		mioHandler.ServeHTTP(&successfulFileCacheWriter{
 			ResponseWriter:          w,
