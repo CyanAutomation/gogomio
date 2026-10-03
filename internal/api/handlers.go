@@ -1151,7 +1151,7 @@ func serveReferenceFile(w http.ResponseWriter, r *http.Request, name, contentTyp
 	// reusing a stored response. Content-versioned URLs can instead use a long,
 	// immutable lifetime.
 	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
-	if requestETagMatches(r.Header.Get("If-None-Match"), etag) {
+	if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -1163,16 +1163,6 @@ func referenceContentType(name string) string {
 		return contentType
 	}
 	return "application/octet-stream"
-}
-
-func requestETagMatches(ifNoneMatch, etag string) bool {
-	for candidate := range strings.SplitSeq(ifNoneMatch, ",") {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "*" || strings.TrimPrefix(candidate, "W/") == etag {
-			return true
-		}
-	}
-	return false
 }
 
 // registerV1Handlers registers all v1 API endpoints
