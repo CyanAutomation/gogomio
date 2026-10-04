@@ -1502,12 +1502,14 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 	// Deprecated: combines static config with live metrics
 	// Return a merged response for backward compatibility
 	frameCount, _, fps := fm.streamStats.Snapshot()
+	_, mockCamera := fm.cam.(*camera.MockCamera)
 
 	response := map[string]interface{}{
 		"resolution":                 cfg.Resolution,
 		"fps":                        cfg.FPS,
 		"target_fps":                 cfg.TargetFPS,
 		"jpeg_quality":               cfg.JPEGQuality,
+		"mock_camera":                mockCamera,
 		"max_stream_connections":     cfg.MaxStreamConnections,
 		"current_stream_connections": fm.connTracker.Count(),
 		"frames_captured":            frameCount,

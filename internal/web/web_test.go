@@ -64,7 +64,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	if !strings.Contains(body, "new StreamController();") {
 		t.Error("missing StreamController bootstrap initialization in root HTML")
 	}
-	if !strings.Contains(body, `id="diagnostics-btn" onclick="openDiagnosticsModal()"`) {
+	if !strings.Contains(body, `getElementById("diagnostics-btn").addEventListener("click", openDiagnosticsModal)`) {
 		t.Error("missing stable element-to-action linkage for diagnostics button")
 	}
 
@@ -74,6 +74,104 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	if !strings.Contains(body, "object-fit: contain;") {
 		t.Error("stream image must preserve the whole camera frame")
 	}
+}
+
+func TestWebUIUsesResponsiveReusableComponents(t *testing.T) {
+	index, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(index)
+
+	for _, want := range []string{
+		"<title>GoGoMio | Camera Dashboard</title>",
+		"<h1>GoGoMio</h1>",
+		"<main class=\"container\">",
+		"System Status",
+		"class=\"metric-card\"",
+		"button--secondary diagnostics-button\" id=\"diagnostics-btn\"",
+		"getElementById(\"diagnostics-btn\").addEventListener(\"click\", openDiagnosticsModal)",
+		"id=\"feed-mode-badge\" class=\"feed-mode-badge\" hidden",
+		"aria-label=\"Close diagnostics\"",
+		"@media (max-width: 480px)",
+		"prefers-reduced-motion: reduce",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing responsive UI contract %q", want)
+		}
+	}
+
+	if strings.Contains(body, "Settings & Stats") {
+		t.Error("dashboard heading should describe the read-only system status section")
+	}
+	if strings.Contains(body, "style=\"") {
+		t.Error("UI components should use shared CSS classes instead of inline styles")
+	}
+	for _, emoji := range []string{"📹", "⚙️", "📊", "▶️", "⏹️"} {
+		if strings.Contains(body, emoji) {
+			t.Errorf("UI should use the shared icon set instead of emoji %q", emoji)
+		}
+	}
+}
+
+func TestDashboardButtonSizingIsScopedToTheActionRow(t *testing.T) {
+	index, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := strings.SplitN(string(index), "</style>", 2)[0]
+
+	secondaryButton := cssRuleBody(t, css, ".button--secondary")
+	if strings.Contains(secondaryButton, "flex:") {
+		t.Error("button variant must not determine its layout size")
+	}
+	streamActions := cssRuleBody(t, css, ".stream-controls > .button")
+	if !strings.Contains(streamActions, "flex: 1") {
+		t.Error("only the stream action row should grow its paired buttons")
+	}
+
+	streamViewer := cssRuleBody(t, css, ".stream-viewer")
+	if !strings.Contains(streamViewer, "aspect-ratio: 4 / 3") {
+		t.Error("stream viewer should retain a fluid 4:3 aspect ratio")
+	}
+	if strings.Contains(streamViewer, "min-height: 360px") {
+		t.Error("stream viewer must not force a wider layout on small screens")
+	}
+}
+
+func TestDiagnosticsDialogHasAccessibleFocusManagement(t *testing.T) {
+	index, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(index)
+
+	for _, want := range []string{
+		`id="diagnostics-modal" class="modal-overlay" role="dialog" aria-modal="true"`,
+		`id="diagnostics-close" class="button button--icon" aria-label="Close diagnostics"`,
+		`document.getElementById("diagnostics-close").focus();`,
+		`diagnosticsReturnFocus.focus();`,
+		`modal.querySelectorAll('button, a[href], input, select, textarea`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing dialog accessibility contract %q", want)
+		}
+	}
+}
+
+func cssRuleBody(t *testing.T, css, selector string) string {
+	t.Helper()
+	marker := selector + " {"
+	start := strings.Index(css, marker)
+	if start < 0 {
+		t.Fatalf("missing CSS component rule %q", selector)
+	}
+	declarations := css[start+len(marker):]
+	end := strings.IndexByte(declarations, '}')
+	if end < 0 {
+		t.Fatalf("unterminated CSS component rule %q", selector)
+	}
+	return declarations[:end]
 }
 
 // TestWebUINotFoundPath tests that non-root paths return 404
