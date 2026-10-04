@@ -1,0 +1,229 @@
+name: Kaseki Sweep
+
+on:
+  workflow_call:
+    inputs:
+      sweep_name:
+        description: Short name shown in the job summary
+        required: true
+        type: string
+      allowlist:
+        description: Comma-separated set of paths Kaseki may change
+        required: true
+        type: string
+      validation_command:
+        description: Validation command Kaseki must run
+        required: true
+        type: string
+      task_prompt:
+        description: Instructions for this Kaseki sweep
+        required: true
+        type: string
+    secrets:
+      KASEKI_API_TOKEN:
+        description: Optional caller secret; the kaseki-agent environment secret is used when omitted
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    # Enforce the default branch here as well as in each caller so a future
+    # caller cannot accidentally run Kaseki against a feature branch.
+    if: github.ref == 'refs/heads/main'
+    name: Run Kaseki ${{ inputs.sweep_name }} sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    environment: kaseki-agent
+    env:
+      # Set the two URL variables to repository/environment values and the API
+      # token as a secret in kaseki-agent. Allowlist entries are exact DNS names,
+      # optionally with a port; wildcards are rejected by the validator.
+      KASEKI_BASE_URL: ${{ vars.KASEKI_BASE_URL }}
+      KASEKI_ALLOWED_HOSTS: ${{ vars.KASEKI_ALLOWED_HOSTS }}
+      REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+      REF: main
+      SWEEP_NAME: ${{ inputs.sweep_name }}
+      TASK_PROMPT: ${{ inputs.task_prompt }}
+      ALLOWLIST: ${{ inputs.allowlist }}
+      VALIDATION_COMMAND: ${{ inputs.validation_command }}
+    steps:
+      - name: Checkout workflow helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Validate Kaseki configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          validated_url="$(python3 scripts/validate_kaseki_url.py "$KASEKI_BASE_URL" "$KASEKI_ALLOWED_HOSTS")"
+          echo "KASEKI_BASE_URL=$validated_url" >> "$GITHUB_ENV"
+
+      - name: Verify controller health
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          curl --proto '=https' --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 20 \
+            --output "$response_file" "$KASEKI_BASE_URL/health"
+          jq -e '.status == "healthy"' "$response_file" >/dev/null
+          echo "Kaseki health check succeeded."
+
+      - name: Verify controller readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          curl --proto '=https' --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 20 \
+            --output "$response_file" "$KASEKI_BASE_URL/ready"
+          jq -e '.status == "ready"' "$response_file" >/dev/null
+          echo "Kaseki readiness check succeeded."
+
+      - name: Verify gateway connectivity and authentication
+        shell: bash
+        env:
+          KASEKI_API_TOKEN: ${{ secrets.KASEKI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${KASEKI_API_TOKEN:?Configure KASEKI_API_TOKEN in the kaseki-agent environment}"
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          curl --proto '=https' --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+            --output "$response_file" \
+            --header "Authorization: Bearer $KASEKI_API_TOKEN" \
+            "$KASEKI_BASE_URL/api/gateway-test?stage=1"
+          jq -e '.status == "ok"' "$response_file" >/dev/null
+          echo "Kaseki gateway authentication succeeded."
+
+      - name: Submit Kaseki sweep
+        id: submit
+        shell: bash
+        env:
+          KASEKI_API_TOKEN: ${{ secrets.KASEKI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${KASEKI_API_TOKEN:?Configure KASEKI_API_TOKEN in the kaseki-agent environment}"
+          idempotency_key="$(tr '[:upper:]' '[:lower:]' < /proc/sys/kernel/random/uuid)"
+          payload="$(
+            jq -n \
+              --arg repoUrl "$REPO_URL" \
+              --arg ref "$REF" \
+              --arg taskPrompt "$TASK_PROMPT" \
+              --arg validationCommand "$VALIDATION_COMMAND" \
+              --arg allowlist "$ALLOWLIST" \
+              --arg idempotencyKey "$idempotency_key" \
+              '{
+                repoUrl: $repoUrl,
+                ref: $ref,
+                taskMode: "patch",
+                publishMode: "pr",
+                timeoutSeconds: 10800,
+                idempotencyKey: $idempotencyKey,
+                changedFilesAllowlist: (
+                  $allowlist
+                  | split(",")
+                  | map(gsub("^\\s+|\\s+$"; ""))
+                  | map(select(length > 0))
+                ),
+                validationCommands: [$validationCommand],
+                goalCheck: { enabled: true, maxRetries: 1 },
+                taskPrompt: $taskPrompt
+              }'
+          )"
+
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          http_status="$(
+            curl --proto '=https' --silent --show-error --retry 3 --retry-all-errors --max-time 60 \
+              --output "$response_file" --write-out '%{http_code}' \
+              --request POST "$KASEKI_BASE_URL/api/runs" \
+              --header "Authorization: Bearer $KASEKI_API_TOKEN" \
+              --header "Content-Type: application/json" --data "$payload"
+          )"
+          if [[ ! "$http_status" =~ ^2 ]]; then
+            echo "::error title=Kaseki submission failed::Kaseki returned HTTP $http_status"
+            exit 1
+          fi
+
+          run_id="$(jq -er '.id' "$response_file")"
+          if [[ ${#run_id} -gt 128 || ${#run_id} -lt 1 || ! "$run_id" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "::error title=Invalid Kaseki run ID::Controller returned an invalid run ID"
+            exit 1
+          fi
+          output_delimiter="$(uuidgen)"
+          {
+            echo "run_id<<$output_delimiter"
+            echo "$run_id"
+            echo "$output_delimiter"
+          } >> "$GITHUB_OUTPUT"
+          echo "idempotency_key=$idempotency_key" >> "$GITHUB_OUTPUT"
+          echo "Kaseki $SWEEP_NAME sweep submitted."
+
+      - name: Wait for Kaseki completion
+        id: wait
+        shell: bash
+        env:
+          KASEKI_API_TOKEN: ${{ secrets.KASEKI_API_TOKEN }}
+          RUN_ID: ${{ steps.submit.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          : "${KASEKI_API_TOKEN:?Configure KASEKI_API_TOKEN in the kaseki-agent environment}"
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          for attempt in $(seq 1 185); do
+            curl --proto '=https' --fail-with-body --silent --show-error \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+              --output "$response_file" \
+              --header "Authorization: Bearer $KASEKI_API_TOKEN" \
+              "$KASEKI_BASE_URL/api/runs/$RUN_ID/status"
+            status="$(jq -er '.status' "$response_file")"
+            case "$status" in
+              completed)
+                echo "status=$status" >> "$GITHUB_OUTPUT"
+                echo "Kaseki status: completed"
+                exit 0
+                ;;
+              failed)
+                echo "status=$status" >> "$GITHUB_OUTPUT"
+                echo "Kaseki status: failed"
+                exit 1
+                ;;
+              queued|running)
+                echo "Kaseki status: $status"
+                sleep 60
+                ;;
+              *)
+                echo "::error title=Unexpected Kaseki status::Controller returned an unsupported status"
+                exit 1
+                ;;
+            esac
+          done
+          echo "::error title=Kaseki run timed out::No terminal status after 185 minutes"
+          exit 1
+
+      - name: Publish run details
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: ${{ steps.submit.outputs.run_id || 'not submitted' }}
+          FINAL_STATUS: ${{ steps.wait.outputs.status || 'not completed' }}
+        run: |
+          {
+            echo "## Kaseki $SWEEP_NAME sweep"
+            echo
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| Repository | \`$REPO_URL\` |"
+            echo "| Ref | \`$REF\` |"
+            echo "| Allowed paths | \`$ALLOWLIST\` |"
+            echo "| Validation | \`$VALIDATION_COMMAND\` |"
+            echo "| Kaseki run | \`$RUN_ID\` |"
+            echo "| Final status | \`$FINAL_STATUS\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
