@@ -595,6 +595,9 @@ func TestReadyRoute(t *testing.T) {
 func TestConfigEndpoint(t *testing.T) {
 	router, cam, cfg := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()
+	// The active camera remains a mock to model the startup fallback path even
+	// when mock mode was not explicitly requested in configuration.
+	cfg.MockCamera = false
 
 	req, _ := http.NewRequest("GET", "/api/config", nil)
 	w := httptest.NewRecorder()
@@ -658,6 +661,19 @@ func TestConfigEndpoint(t *testing.T) {
 				}
 				if int(maxConn) != cfg.MaxStreamConnections {
 					t.Errorf("max_stream_connections mismatch: %v vs %d", maxConn, cfg.MaxStreamConnections)
+				}
+			},
+		},
+		{
+			name: "active mock camera mode is exposed for the preview label",
+			check: func(t *testing.T, payload map[string]interface{}) {
+				t.Helper()
+				mockCamera, ok := payload["mock_camera"].(bool)
+				if !ok {
+					t.Fatalf("mock_camera has unexpected type or is missing: %T", payload["mock_camera"])
+				}
+				if !mockCamera {
+					t.Error("mock_camera is false even though the active camera is a mock fallback")
 				}
 			},
 		},
@@ -876,7 +892,7 @@ func TestIndexEndpoint(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, "<title>Motion In Ocean - Go Edition</title>") {
+	if !strings.Contains(body, "<title>GoGoMio | Camera Dashboard</title>") {
 		t.Fatalf("expected response body to contain embedded UI title marker")
 	}
 }
