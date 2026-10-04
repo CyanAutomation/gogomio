@@ -31,6 +31,35 @@ class ValidateKasekiURLTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(KasekiURLValidationError):
                 validate_base_url(value, "kaseki.example.test")
 
+    def test_rejects_encoded_parent_path_segments(self):
+        for path in (
+            "/../api",
+            "/%2e%2e/api",
+            "/%2E%2E/api",
+            "/%2e./api",
+            "/%2f../api",
+            "/%5c../api",
+            "/..\\api",
+            "/%252e%252e/api",
+            "/%25252e%25252e/api",
+        ):
+            with self.subTest(path=path), self.assertRaises(KasekiURLValidationError):
+                validate_base_url("https://kaseki.example.test{}".format(path), "kaseki.example.test")
+
+    def test_accepts_encoded_non_traversal_path(self):
+        self.assertEqual(
+            validate_base_url("https://kaseki.example.test/api%20v1", "kaseki.example.test"),
+            "https://kaseki.example.test/api%20v1",
+        )
+
+    def test_rejects_excessively_nested_path_encoding(self):
+        encoded_dot = "%2e"
+        for _ in range(20):
+            encoded_dot = encoded_dot.replace("%", "%25")
+        path = "/{}{}/api".format(encoded_dot, encoded_dot)
+        with self.assertRaises(KasekiURLValidationError):
+            validate_base_url("https://kaseki.example.test{}".format(path), "kaseki.example.test")
+
     def test_rejects_unlisted_hosts_and_malformed_allowlist(self):
         for value, allowed in (
             ("https://attacker.example.test", "kaseki.example.test"),
