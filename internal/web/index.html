@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Motion In Ocean - Go Edition</title>
+    <title>GoGoMio | Camera Dashboard</title>
     <style>
         /* ====== DESIGN SYSTEM ====== */
         :root {
@@ -45,6 +45,7 @@
             /* Surfaces */
             --color-surface: #ffffff;
             --color-surface-hover: #f8fafc;
+            --color-focus-ring: rgba(60, 125, 196, 0.35);
             
             /* Spacing */
             --spacing-xs: 4px;
@@ -122,6 +123,7 @@
             padding: var(--spacing-3xl);
             flex: 1;
             width: 100%;
+            min-width: 0;
         }
 
         /* ====== HEADER ====== */
@@ -152,6 +154,23 @@
             z-index: 2;
         }
 
+        .brand-lockup,
+        .footer-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-md);
+        }
+
+        .brand-lockup {
+            padding-top: var(--spacing-sm);
+            padding-bottom: var(--spacing-sm);
+        }
+
+        .brand-copy {
+            min-width: 0;
+        }
+
         h1 {
             font-size: 26px;
             font-weight: 700;
@@ -173,6 +192,10 @@
             margin-bottom: var(--spacing-3xl);
         }
 
+        .main-grid > * {
+            min-width: 0;
+        }
+
         @media (min-width: 1280px) {
             .main-grid {
                 grid-template-columns: 2.5fr 1fr;
@@ -180,25 +203,25 @@
         }
 
         /* ====== CARDS ====== */
-        .card {
+        .surface-panel {
             background: var(--color-surface);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
+        }
+
+        .card {
             border-top: 3px solid var(--mio-primary);
             padding: var(--spacing-2xl);
-            transition: all var(--transition-base);
             display: flex;
             flex-direction: column;
         }
 
-        .card:hover {
-            box-shadow: var(--shadow-xl);
-            border-top-color: var(--mio-dark);
+        .controls-section {
+            align-self: start;
         }
 
         /* ====== SECTION HEADERS ====== */
-        .video-section h2,
-        .controls-section h2 {
+        .section-title {
             font-size: var(--font-size-xl);
             font-weight: 600;
             margin-bottom: var(--spacing-xl);
@@ -211,22 +234,82 @@
         }
 
         /* ====== STREAM SECTION ====== */
-        #stream-container {
+        .stream-viewer {
+            position: relative;
+            width: 100%;
+            min-width: 0;
+            aspect-ratio: 4 / 3;
             background: linear-gradient(180deg, #1a3a4a 0%, #0d1e2b 100%);
             border-radius: var(--radius-md);
             overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 360px;
             margin-bottom: var(--spacing-lg);
             box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
-        #stream-img {
+        .stream-image {
             width: 100%;
             height: 100%;
             object-fit: contain;
+            display: block;
+        }
+
+        .stream-loading {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .stream-placeholder {
+            padding: var(--spacing-lg);
+        }
+
+        .stream-placeholder__pose {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .stream-placeholder__text {
+            margin: 0;
+            color: #d3e5ee;
+            font-size: var(--font-size-lg);
+            font-weight: 500;
+        }
+
+        .stream-placeholder__description {
+            margin: var(--spacing-md) 0 0;
+            color: #b6ceda;
+            font-size: var(--font-size-sm);
+        }
+
+        .stream-spinner {
+            display: none;
+        }
+
+        .is-hidden {
+            display: none !important;
+        }
+
+        .feed-mode-badge {
+            position: absolute;
+            top: var(--spacing-md);
+            right: var(--spacing-md);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 999px;
+            background: rgba(15, 26, 43, 0.78);
+            color: white;
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        [hidden] {
+            display: none !important;
         }
 
         .stream-status {
@@ -277,6 +360,11 @@
             display: flex;
             gap: var(--spacing-md);
             margin-bottom: var(--spacing-lg);
+        }
+
+        .stream-controls > .button {
+            flex: 1 1 0;
+            min-width: 0;
         }
 
         /* ====== FORM CONTROLS ====== */
@@ -410,7 +498,7 @@
             margin: var(--spacing-xl) 0;
         }
 
-        button {
+        .button {
             padding: var(--spacing-md) var(--spacing-xl);
             border: none;
             border-radius: var(--radius-sm);
@@ -426,76 +514,86 @@
             white-space: nowrap;
         }
 
-        .btn-primary {
+        .button--primary {
             background: var(--mio-secondary);
             color: white;
             box-shadow: var(--shadow-md);
-            flex: 1;
         }
 
-        .btn-primary:hover:not(:disabled) {
+        .button--primary:hover:not(:disabled) {
             background: var(--mio-dark);
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(42, 95, 138, 0.4);
         }
 
-        .btn-primary:active:not(:disabled) {
+        .button--primary:active:not(:disabled) {
             transform: translateY(0);
             box-shadow: var(--shadow-sm);
         }
 
-        .btn-secondary {
+        .button--secondary {
             background: var(--color-bg-secondary);
             color: var(--color-text);
             border: 1px solid var(--color-border);
-            flex: 1;
         }
 
-        .btn-secondary:hover:not(:disabled) {
+        .button--secondary:hover:not(:disabled) {
             background: var(--color-border);
             border-color: var(--color-primary-light);
         }
 
-        .btn-secondary:active:not(:disabled) {
+        .button--secondary:active:not(:disabled) {
             background: var(--color-bg-secondary);
         }
 
-        button:disabled {
+        .button--icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            padding: var(--spacing-sm);
+            color: var(--color-text-secondary);
+            background: transparent;
+        }
+
+        .button--icon:hover {
+            color: var(--color-text);
+            background: var(--color-surface-hover);
+        }
+
+        .button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             transform: none !important;
         }
 
-        button#diagnostics-btn {
+        .button:focus-visible {
+            outline: 3px solid var(--color-focus-ring);
+            outline-offset: 2px;
+        }
+
+        .diagnostics-button {
             width: 100%;
-            margin-top: var(--spacing-xl);
+            margin-top: var(--spacing-sm);
         }
 
         /* ====== STATS SECTION ====== */
         .stats {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: var(--spacing-md);
             margin-top: var(--spacing-xl);
             padding-top: var(--spacing-xl);
             border-top: 1px solid var(--color-border);
         }
 
-        .stat-item {
+        .metric-card {
             background: var(--color-bg-secondary);
             padding: var(--spacing-lg);
             border-radius: var(--radius-md);
             text-align: center;
             border: 1px solid var(--color-border);
-            transition: all var(--transition-base);
         }
 
-        .stat-item:hover {
-            border-color: var(--color-primary-light);
-            background: var(--color-surface);
-        }
-
-        .stat-label {
+        .metric-card__label {
             font-size: var(--font-size-xs);
             color: var(--color-text-secondary);
             margin-bottom: var(--spacing-sm);
@@ -504,10 +602,26 @@
             letter-spacing: 0.5px;
         }
 
-        .stat-value {
+        .metric-card__value {
             font-size: var(--font-size-2xl);
             font-weight: 700;
             color: var(--color-primary);
+        }
+
+        .metric-card__value--good {
+            color: var(--color-success);
+        }
+
+        .metric-card__value--success {
+            color: var(--color-success);
+        }
+
+        .metric-card__value--warning {
+            color: var(--color-warning);
+        }
+
+        .metric-card__value--error {
+            color: var(--color-error);
         }
 
         /* ====== MESSAGES ====== */
@@ -575,6 +689,18 @@
             font-size: var(--font-size-sm);
         }
 
+        .footer-content {
+            gap: var(--spacing-sm);
+        }
+
+        .footer-mascot {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            opacity: 0.55;
+            flex: 0 0 auto;
+        }
+
         /* ====== MIO MASCOT ====== */
         .mio-header-avatar {
             width: 56px;
@@ -611,14 +737,6 @@
 
         .mio-blink { animation: mioFloat 3s ease-in-out infinite, mioBlink 5s 1s ease-in-out infinite; }
 
-        #stream-spinner {
-            animation: none !important;
-            border: none !important;
-            width: auto !important;
-            height: auto !important;
-            border-radius: 0 !important;
-        }
-
         #stream-idle {
             display: block;
         }
@@ -637,10 +755,202 @@
             animation: fadeInUp 400ms 100ms cubic-bezier(0.4, 0, 0.2, 1) both;
         }
 
-        /* ====== MODAL POLISH ====== */
-        #diagnostics-modal {
+        /* ====== DIALOG COMPONENT ====== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-2xl);
+            background: rgba(15, 26, 43, 0.62);
             backdrop-filter: blur(4px);
             -webkit-backdrop-filter: blur(4px);
+        }
+
+        .modal-inner {
+            width: 100%;
+            max-width: 600px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: var(--spacing-3xl);
+            animation: modalEnter var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1) both;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-lg);
+            margin-bottom: var(--spacing-2xl);
+            padding-bottom: var(--spacing-lg);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .modal-title {
+            margin: 0;
+            color: var(--color-primary);
+            font-size: var(--font-size-xl);
+        }
+
+        .diagnostics-content {
+            display: grid;
+            gap: var(--spacing-lg);
+        }
+
+        .diagnostic-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--spacing-md);
+        }
+
+        .metric-card--success {
+            color: var(--color-success-dark);
+            background: var(--color-success-light);
+            border-color: var(--color-success);
+        }
+
+        .metric-card--warning {
+            color: var(--color-warning-dark);
+            background: var(--color-warning-light);
+            border-color: var(--color-warning);
+        }
+
+        .metric-card--error {
+            color: var(--color-error-dark);
+            background: var(--color-error-light);
+            border-color: var(--color-error);
+        }
+
+        .metric-card--status {
+            text-align: left;
+            border-width: 2px;
+        }
+
+        .metric-card--status .metric-card__label,
+        .metric-card--status .metric-card__value {
+            color: currentColor;
+        }
+
+        .metric-card--status .metric-card__value {
+            font-size: var(--font-size-xl);
+        }
+
+        .diagnostics-details {
+            padding-top: var(--spacing-lg);
+            border-top: 1px solid var(--color-border);
+        }
+
+        .diagnostics-subtitle {
+            margin: 0 0 var(--spacing-lg);
+            color: var(--color-text);
+            font-size: var(--font-size-lg);
+        }
+
+        .diagnostic-metric-list {
+            display: grid;
+            gap: var(--spacing-md);
+        }
+
+        .metric-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-lg);
+            padding: var(--spacing-md);
+            border-radius: var(--radius-md);
+            background: var(--color-bg-secondary);
+        }
+
+        .metric-row__label {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            min-width: 0;
+            color: var(--color-text-secondary);
+            font-weight: 500;
+        }
+
+        .metric-row__value {
+            flex: 0 0 auto;
+            color: var(--color-text);
+            font-size: var(--font-size-lg);
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .diagnostic-notice {
+            padding: var(--spacing-lg);
+            border-left: 4px solid var(--color-success);
+            border-radius: var(--radius-md);
+            color: var(--color-success-dark);
+            background: var(--color-success-light);
+        }
+
+        .diagnostic-notice--warning {
+            border-color: var(--color-warning);
+            color: var(--color-warning-dark);
+            background: var(--color-warning-light);
+        }
+
+        .diagnostic-notice--error {
+            border-color: var(--color-error);
+            color: var(--color-error-dark);
+            background: var(--color-error-light);
+        }
+
+        .diagnostic-notice p {
+            margin: var(--spacing-xs) 0 0;
+            font-size: var(--font-size-sm);
+        }
+
+        .refresh-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--spacing-sm);
+            color: var(--color-text-tertiary);
+            font-size: var(--font-size-xs);
+        }
+
+        .refresh-indicator .icon {
+            animation: spin 1.5s linear infinite;
+        }
+
+        .icon-library {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+        }
+
+        .icon {
+            width: 1.15em;
+            height: 1.15em;
+            flex: 0 0 auto;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .icon--small {
+            width: 1em;
+            height: 1em;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .modal-overlay.is-open {
+            display: flex;
+        }
+
+        body.modal-open {
+            overflow: hidden;
         }
 
         @keyframes modalEnter {
@@ -648,8 +958,123 @@
             to   { opacity: 1; transform: scale(1) translateY(0); }
         }
 
-        .modal-inner {
-            animation: modalEnter var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1) both;
+        @media (max-width: 640px) {
+            .container {
+                padding: var(--spacing-2xl);
+            }
+
+            .card {
+                padding: var(--spacing-lg);
+            }
+
+            .section-title {
+                gap: var(--spacing-sm);
+                font-size: var(--font-size-lg);
+            }
+
+            .stream-controls {
+                gap: var(--spacing-sm);
+            }
+
+            .stream-controls > .button {
+                gap: var(--spacing-xs);
+                padding-right: var(--spacing-sm);
+                padding-left: var(--spacing-sm);
+                font-size: var(--font-size-sm);
+            }
+
+            .metric-card {
+                padding: var(--spacing-md);
+            }
+
+            .metric-card__value {
+                font-size: clamp(1rem, 4.5vw, var(--font-size-2xl));
+                overflow-wrap: anywhere;
+            }
+
+            .modal-overlay {
+                padding: var(--spacing-md);
+            }
+
+            .modal-inner {
+                max-height: calc(100vh - 2 * var(--spacing-md));
+                padding: var(--spacing-lg);
+            }
+
+            .metric-row {
+                align-items: flex-start;
+                gap: var(--spacing-md);
+            }
+
+            .metric-row__value {
+                overflow-wrap: anywhere;
+            }
+
+            .footer-content {
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: var(--spacing-lg);
+            }
+
+            .brand-lockup {
+                gap: var(--spacing-sm);
+            }
+
+            .mio-header-avatar {
+                width: 48px;
+                height: 48px;
+            }
+
+            .subtitle {
+                font-size: var(--font-size-xs);
+            }
+        }
+
+        @media (max-width: 360px) {
+            .stream-placeholder {
+                padding: var(--spacing-sm);
+            }
+
+            .stream-placeholder__pose {
+                margin-bottom: var(--spacing-sm);
+            }
+
+            .stream-placeholder__pose .mio-state-image {
+                width: 88px;
+                height: 88px;
+            }
+
+            .stream-placeholder__description {
+                margin-top: var(--spacing-sm);
+                font-size: var(--font-size-xs);
+            }
+
+            .stream-controls {
+                flex-direction: column;
+            }
+
+            .stream-controls > .button {
+                width: 100%;
+            }
+
+            .diagnostic-summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
         }
 
         /* ====== ACCESSIBILITY ====== */
@@ -667,45 +1092,66 @@
     </style>
 </head>
 <body>
+    <svg class="icon-library" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+        <symbol id="icon-camera" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10 5-3v10l-5-3"></path></symbol>
+        <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3"></path><path d="M2 14h4m4-4h4m4 4h4"></path></symbol>
+        <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="m8 15 4-4 3 3 5-7"></path></symbol>
+        <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7z" fill="currentColor" stroke="none"></path></symbol>
+        <symbol id="icon-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" stroke="none"></rect></symbol>
+        <symbol id="icon-close" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"></path></symbol>
+        <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></symbol>
+        <symbol id="icon-quality" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"></path></symbol>
+        <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></symbol>
+        <symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7.1 7.1l1.7-1.7"></path></symbol>
+        <symbol id="icon-alert" viewBox="0 0 24 24"><path d="m10.3 3.9-8.5 14.2A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.9L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4m0 4h.01"></path></symbol>
+        <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 11v5m0-8h.01"></path></symbol>
+        <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"></path><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2"></path></symbol>
+    </svg>
+
     <header>
-        <div class="container" style="display: flex; align-items: center; justify-content: center; gap: 14px; padding-top: var(--spacing-sm); padding-bottom: var(--spacing-sm);">
+        <div class="container brand-lockup">
             <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO mascot" class="mio-header-avatar mio-blink">
-            <div>
-                <h1>Motion In Ocean</h1>
-                <p class="subtitle">Live Streaming Camera — Go Edition</p>
+            <div class="brand-copy">
+                <h1>GoGoMio</h1>
+                <p class="subtitle">Live camera streaming</p>
             </div>
         </div>
     </header>
 
-    <div class="container">
+    <main class="container">
 
         <div class="main-grid">
-            <div class="card video-section">
-                <h2>📹 Live Stream</h2>
-                <div id="stream-container">
-                    <img id="stream-img" alt="Live stream" style="display:none;">
-                    <div id="stream-loading">
-                        <div style="text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-                            <div style="margin-bottom: var(--spacing-lg);">
-                                <div id="stream-spinner" style="display: none;">
+            <section class="card surface-panel video-section" aria-labelledby="stream-title">
+                <h2 class="section-title" id="stream-title">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
+                    <span>Live Stream</span>
+                </h2>
+                <div id="stream-container" class="stream-viewer">
+                    <img id="stream-img" class="stream-image is-hidden" alt="Live camera stream">
+                    <div id="stream-loading" class="stream-loading">
+                        <div class="stream-placeholder">
+                            <div class="stream-placeholder__pose">
+                                <div id="stream-spinner" class="stream-spinner is-hidden">
                                     <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f" alt="MIO is thinking" class="mio-state-image mio-pulse">
                                 </div>
                                 <div id="stream-idle">
                                     <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="MIO is resting" class="mio-state-image mio-blink">
                                 </div>
                             </div>
-                            <p id="stream-placeholder-text" style="margin: 0; color: #aac8d8; font-size: var(--font-size-lg); font-weight: 500;">Ready to stream</p>
-                            <p id="stream-placeholder-desc" style="margin: var(--spacing-md) 0 0 0; color: #88aabb; font-size: var(--font-size-sm);">Hit Start to begin viewing</p>
+                            <p id="stream-placeholder-text" class="stream-placeholder__text">Ready to stream</p>
+                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Select Start Stream to begin viewing.</p>
                         </div>
                     </div>
+                    <span id="feed-mode-badge" class="feed-mode-badge" hidden>Simulated feed</span>
                 </div>
-                <div class="stream-controls">
-                    <button class="btn-primary" id="start-stream" aria-label="Start live stream">
-                        <span aria-hidden="true">▶️</span>
+                <div class="stream-controls" role="group" aria-label="Stream controls">
+                    <button type="button" class="button button--primary" id="start-stream" aria-label="Start live stream">
+                        <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
                         <span>Start Stream</span>
                     </button>
-                    <button class="btn-secondary" id="stop-stream" aria-label="Stop live stream" disabled>
-                        <span aria-hidden="true">⏹️</span>
+                    <button type="button" class="button button--secondary" id="stop-stream" aria-label="Stop live stream" disabled>
+                        <svg class="icon" aria-hidden="true"><use href="#icon-stop"></use></svg>
                         <span>Stop Stream</span>
                     </button>
                 </div>
@@ -713,53 +1159,61 @@
                     <span class="status-indicator inactive" id="status-indicator" aria-hidden="true"></span>
                     <span id="status-text">Stopped</span>
                 </div>
-            </div>
+            </section>
 
-            <div class="card controls-section">
-                <h2>⚙️ Settings & Stats</h2>
+            <section class="card surface-panel controls-section" aria-labelledby="status-title">
+                <h2 class="section-title" id="status-title">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+                    <span>System Status</span>
+                </h2>
 
                 <div id="message" class="message" role="alert" aria-live="assertive"></div>
 
-                <button class="btn-secondary" id="diagnostics-btn" onclick="openDiagnosticsModal()">📊 Diagnostics</button>
+                <button type="button" class="button button--secondary diagnostics-button" id="diagnostics-btn" aria-haspopup="dialog" aria-controls="diagnostics-modal">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>
+                    <span>Diagnostics</span>
+                </button>
 
-                <div class="stats">
-                    <div class="stat-item">
-                        <div class="stat-label">FPS</div>
-                        <div class="stat-value" id="stat-fps">--</div>
+                <div class="stats" aria-label="Current stream metrics">
+                    <div class="metric-card">
+                        <div class="metric-card__label">FPS</div>
+                        <div class="metric-card__value" id="stat-fps">--</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Resolution</div>
-                        <div class="stat-value" id="stat-resolution">--</div>
+                    <div class="metric-card">
+                        <div class="metric-card__label">Resolution</div>
+                        <div class="metric-card__value" id="stat-resolution">--</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Quality</div>
-                        <div class="stat-value" id="stat-quality">--</div>
+                    <div class="metric-card">
+                        <div class="metric-card__label">Quality</div>
+                        <div class="metric-card__value" id="stat-quality">--</div>
                     </div>
-                    <div class="stat-item">
-                        <div class="stat-label">Connections</div>
-                        <div class="stat-value" id="stat-connections">--</div>
+                    <div class="metric-card">
+                        <div class="metric-card__label">Connections</div>
+                        <div class="metric-card__value" id="stat-connections">--</div>
                     </div>
                 </div>
-            </div>
+            </section>
         </div>
-    </div>
+    </main>
 
-    <footer>
-        <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
-            <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true" style="width: 18px; height: 18px; object-fit: contain; opacity: 0.55;">
-            <p>Motion In Ocean v0.1.0-dev | Raspberry Pi Camera Streaming</p>
+    <footer class="site-footer">
+        <div class="container footer-content">
+            <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true" class="footer-mascot">
+            <p>GoGoMio · Raspberry Pi camera streaming</p>
         </div>
     </footer>
 
     <!-- Diagnostics Modal -->
-    <div id="diagnostics-modal" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 1000; align-items: center; justify-content: center; padding: var(--spacing-2xl);">
-        <div class="modal-inner" style="background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--spacing-3xl); max-width: 600px; width: 100%; box-shadow: var(--shadow-2xl); max-height: 85vh; overflow-y: auto;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-2xl); padding-bottom: var(--spacing-lg); border-bottom: 1px solid var(--color-border);">
-                <h2 id="diagnostics-title" style="margin: 0; color: var(--color-primary); font-size: var(--font-size-xl);">System Diagnostics</h2>
-                <button onclick="closeDiagnosticsModal()" style="background: none; border: none; font-size: var(--font-size-2xl); cursor: pointer; color: var(--color-text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; transition: all var(--transition-fast);" onmouseover="this.style.color='var(--color-text)'" onmouseout="this.style.color='var(--color-text-secondary)'">&times;</button>
+    <div id="diagnostics-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
+        <div class="modal-inner surface-panel">
+            <div class="modal-header">
+                <h2 id="diagnostics-title" class="modal-title">System Diagnostics</h2>
+                <button type="button" id="diagnostics-close" class="button button--icon" aria-label="Close diagnostics">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+                </button>
             </div>
-            
-            <div id="diagnostics-content" style="display: grid; gap: var(--spacing-lg);">
+
+            <div id="diagnostics-content" class="diagnostics-content">
                 <!-- Diagnostics will be populated here -->
             </div>
         </div>
@@ -767,19 +1221,24 @@
 
     <script src="/static/aspect-ratio.js?v=c25586154aecec7c1570b7560b99e9f9067abdfa0a91408521805ffd987a1fb4"></script>
     <script>
-        const DIAG_ICONS = {
-            camera:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
-            grid:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
-            quality: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`,
-            image:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
-            clock:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-            link:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
-            alert:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-            chart:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
-            uptime:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-            warning: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
-            info:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="vertical-align:-2px;margin-right:4px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-        };
+        const iconMarkup = (name) => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
+
+        function escapeHTML(value) {
+            return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+            })[character]);
+        }
+
+        function diagnosticMetric(label, value, icon, valueClass = "") {
+            return `<div class="metric-row">
+                <span class="metric-row__label">${iconMarkup(icon)}<span>${label}</span></span>
+                <span class="metric-row__value ${valueClass}">${escapeHTML(value)}</span>
+            </div>`;
+        }
 
         class StreamController {
             constructor() {
@@ -858,14 +1317,14 @@
 
             setLoadingPose(state = "loading") {
                 this.applyPoseToImage(this.spinnerImage, state);
-                this.spinnerElement.style.display = "inline-block";
-                this.idleElement.style.display = "none";
+                this.spinnerElement.classList.remove("is-hidden");
+                this.idleElement.classList.add("is-hidden");
             }
 
             setIdlePose(state = "idle") {
                 this.applyPoseToImage(this.idleImage, state);
-                this.spinnerElement.style.display = "none";
-                this.idleElement.style.display = "block";
+                this.spinnerElement.classList.add("is-hidden");
+                this.idleElement.classList.remove("is-hidden");
             }
 
             clearPoseResetTimer() {
@@ -879,7 +1338,7 @@
                 this.clearPoseResetTimer();
                 this.poseResetTimer = setTimeout(() => {
                     const diagnosticsModal = document.getElementById("diagnostics-modal");
-                    const diagnosticsOpen = diagnosticsModal && diagnosticsModal.style.display === "flex";
+                    const diagnosticsOpen = diagnosticsModal && !diagnosticsModal.hidden;
                     if (!this.isStreaming && !diagnosticsOpen) {
                         this.setIdlePose("idle");
                     }
@@ -892,11 +1351,10 @@
                     if (!this.imageElement.getAttribute("src")) return;
                     this.isStreaming = true;
                     this.streamRetryCount = 0;
-                    this.loadingElement.style.display = "none";
-                    this.spinnerElement.style.display = "none";
-                    this.idleElement.style.display = "none";
-                    this.imageElement.style.display = "block";
+                    this.loadingElement.classList.add("is-hidden");
+                    this.imageElement.classList.remove("is-hidden");
                     this.setIdlePose("success");
+                    this.idleElement.classList.add("is-hidden");
                     this.schedulePoseResetToIdle();
                     this.updateStreamControls();
                     this.updateStatus("Streaming", true);
@@ -906,15 +1364,15 @@
                 this.imageElement.onerror = () => {
                     this.isStreaming = false;
                     this.imageElement.removeAttribute("src");
-                    this.loadingElement.style.display = "block";
-                    this.imageElement.style.display = "none";
+                    this.loadingElement.classList.remove("is-hidden");
+                    this.imageElement.classList.add("is-hidden");
                     this.setIdlePose("warning");
                     
                     if (this.streamRetryCount < this.maxStreamRetries) {
                         this.streamRetryCount++;
-                        this.placeholderText.textContent = `⚠️ Connection lost`;
+                        this.placeholderText.textContent = "Connection lost";
                         this.placeholderDesc.textContent = `Retrying (${this.streamRetryCount}/${this.maxStreamRetries})...`;
-                        this.showMessage(`🔄 Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, 'warning');
+                        this.showMessage(`Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, 'warning');
                         this.setLoadingPose("running");
                         setTimeout(() => {
                             if (!this.isStreaming && this.streamRetryCount < this.maxStreamRetries) {
@@ -922,9 +1380,9 @@
                             }
                         }, 2000);
                     } else {
-                        this.placeholderText.textContent = "❌ Stream unavailable";
+                        this.placeholderText.textContent = "Stream unavailable";
                         this.placeholderDesc.textContent = "Max retries exceeded. Click Start to try again.";
-                        this.showMessage("❌ Stream connection failed after multiple attempts. Please check the server is running.", 'error');
+                        this.showMessage("Stream connection failed after multiple attempts. Please check the server is running.", 'error');
                     }
                     
                     this.updateStreamControls();
@@ -948,12 +1406,12 @@
             startStream() {
                 if (this.isStreaming) return;
 
-                this.placeholderText.textContent = "📡 Connecting to stream...";
+                this.placeholderText.textContent = "Connecting to stream...";
                 this.placeholderDesc.textContent = "Establishing connection...";
-                this.loadingElement.style.display = "block";
+                this.loadingElement.classList.remove("is-hidden");
                 this.setLoadingPose("loading");
                 this.clearPoseResetTimer();
-                this.imageElement.style.display = "none";
+                this.imageElement.classList.add("is-hidden");
                 this.updateStatus("Starting...", false);
                 this.streamRetryCount = 0;
                 
@@ -964,16 +1422,16 @@
             }
 
             stopStream() {
-                console.log("🛑 Stop Stream button clicked - calling /api/stream/stop");
+                console.log("Stop Stream button clicked - calling /api/stream/stop");
                 
                 // Call server endpoint to cleanly stop the stream
                 fetch("/api/stream/stop", { method: "POST" })
                     .then(response => {
-                        console.log("✅ Stop stream response:", response.status);
+                        console.log("Stop stream response:", response.status);
                         return response.json();
                     })
-                    .then(data => console.log("✅ Stop stream data:", data))
-                    .catch(err => console.error("❌ Stop stream error:", err));
+                    .then(data => console.log("Stop stream data:", data))
+                    .catch(err => console.error("Stop stream error:", err));
                 
                 // Remove image source to stop displaying stream in UI
                 if (this.streamAbortController) {
@@ -984,12 +1442,12 @@
                 this.imageElement.removeAttribute("src");
                 this.isStreaming = false;
                 this.streamRetryCount = 0;
-                this.imageElement.style.display = "none";
-                this.loadingElement.style.display = "block";
+                this.imageElement.classList.add("is-hidden");
+                this.loadingElement.classList.remove("is-hidden");
                 this.setIdlePose("idle");
                 this.clearPoseResetTimer();
-                this.placeholderText.textContent = "⏹️ Stream stopped";
-                this.placeholderDesc.textContent = "Click Start to begin streaming";
+                this.placeholderText.textContent = "Stream stopped";
+                this.placeholderDesc.textContent = "Select Start Stream to begin viewing.";
                 this.updateStreamControls();
                 this.updateStatus("Stopped", false);
                 this.stopStatsPolling();
@@ -1024,18 +1482,17 @@
                     if (aspectRatio) {
                         document.getElementById("stream-container").style.aspectRatio = aspectRatio;
                     }
+                    document.getElementById("feed-mode-badge").hidden = config.mock_camera !== true;
                     // FPS with color coding relative to target
                     const fps = config.fps || 0;
                     const targetFps = config.target_fps || fps || 30;
                     const fpsEl = document.getElementById("stat-fps");
                     fpsEl.textContent = fps || "--";
+                    fpsEl.classList.remove("metric-card__value--good", "metric-card__value--warning", "metric-card__value--error");
                     if (fps) {
                         const ratio = fps / targetFps;
-                        fpsEl.style.color = ratio >= 0.9 ? 'var(--color-success)'
-                            : ratio >= 0.5 ? 'var(--color-warning)'
-                            : 'var(--color-error)';
-                    } else {
-                        fpsEl.style.color = 'var(--color-primary)';
+                        const tone = ratio >= 0.9 ? "good" : ratio >= 0.5 ? "warning" : "error";
+                        fpsEl.classList.add(`metric-card__value--${tone}`);
                     }
                     document.getElementById("stat-resolution").textContent =
                         (config.resolution ? `${config.resolution[0]}x${config.resolution[1]}` : "--");
@@ -1051,7 +1508,6 @@
                 const msg = document.getElementById("message");
                 msg.textContent = text;
                 msg.className = `message show ${type || 'info'}`;
-                msg.style.display = 'block';
 
                 if (!this.isStreaming) {
                     if (type === "success") {
@@ -1074,9 +1530,6 @@
                 // Auto-dismiss after 4 seconds
                 setTimeout(() => {
                     msg.classList.remove("show");
-                    setTimeout(() => {
-                        msg.style.display = 'none';
-                    }, 300);
                 }, 4000);
             }
         }
@@ -1115,20 +1568,34 @@
             controller.setIdlePose("success");
         }
         
+        let diagnosticsReturnFocus = null;
+
         function openDiagnosticsModal() {
-            document.getElementById('diagnostics-modal').style.display = 'flex';
+            const modal = document.getElementById("diagnostics-modal");
+            if (!modal.hidden) return;
+
+            diagnosticsReturnFocus = document.activeElement;
+            modal.hidden = false;
+            modal.classList.add("is-open");
+            document.body.classList.add("modal-open");
+            document.getElementById("diagnostics-close").focus();
+
             const controller = getStreamController();
             if (controller && !controller.isStreaming) {
                 controller.setLoadingPose("looking");
             }
             fetchDiagnostics();
-            // Auto-refresh diagnostics every 3 seconds
             if (diagnosticsRefreshInterval) clearInterval(diagnosticsRefreshInterval);
             diagnosticsRefreshInterval = setInterval(fetchDiagnostics, 3000);
         }
 
         function closeDiagnosticsModal() {
-            document.getElementById('diagnostics-modal').style.display = 'none';
+            const modal = document.getElementById("diagnostics-modal");
+            if (modal.hidden) return;
+
+            modal.classList.remove("is-open");
+            modal.hidden = true;
+            document.body.classList.remove("modal-open");
             if (diagnosticsRefreshInterval) {
                 clearInterval(diagnosticsRefreshInterval);
                 diagnosticsRefreshInterval = null;
@@ -1137,140 +1604,88 @@
             if (controller && !controller.isStreaming) {
                 controller.setIdlePose("idle");
             }
+            if (diagnosticsReturnFocus instanceof HTMLElement && diagnosticsReturnFocus.isConnected) {
+                diagnosticsReturnFocus.focus();
+            }
+            diagnosticsReturnFocus = null;
         }
 
         function fetchDiagnostics() {
-            fetch('/api/diagnostics')
-                .then(res => res.json())
-                .then(data => {
+            fetch("/api/diagnostics")
+                .then((response) => {
+                    if (!response.ok) throw new Error("Failed to load diagnostics");
+                    return response.json();
+                })
+                .then((data) => {
                     setCompanionPoseFromDiagnostics(data);
-                    const content = document.getElementById('diagnostics-content');
-                    const cameraStatusBg = data.camera_ready ? 'var(--color-success-light)' : 'var(--color-error-light)';
-                    const cameraStatusColor = data.camera_ready ? 'var(--color-success-dark)' : 'var(--color-error-dark)';
-                    const cameraStatusBorder = data.camera_ready ? 'var(--color-success)' : 'var(--color-error)';
-                    const messageBg = data.camera_ready ? 'var(--color-success-light)' : 'var(--color-warning-light)';
-                    const messageBorder = data.camera_ready ? 'var(--color-success)' : 'var(--color-warning)';
-                    const messageColor = data.camera_ready ? 'var(--color-success-dark)' : 'var(--color-warning-dark)';
-                    
-                    // Determine health indicator colors based on error rate
-                    let healthColor = 'var(--color-success)';
-                    let healthBg = 'var(--color-success-light)';
-                    let healthBorder = 'var(--color-success)';
-                    if (data.error_rate_percent > 5) {
-                        healthColor = 'var(--color-warning)';
-                        healthBg = 'var(--color-warning-light)';
-                        healthBorder = 'var(--color-warning)';
-                    }
-                    if (data.error_rate_percent > 20) {
-                        healthColor = 'var(--color-error)';
-                        healthBg = 'var(--color-error-light)';
-                        healthBorder = 'var(--color-error)';
-                    }
-                    
+                    const content = document.getElementById("diagnostics-content");
+                    const errorRate = Number(data.error_rate_percent || 0);
+                    const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
+                    const healthTone = !data.camera_ready || errorRate > 20
+                        ? "error"
+                        : errorRate > 5 || consecutiveFailures > 0
+                            ? "warning"
+                            : "success";
+                    const cameraTone = data.camera_ready ? "success" : "error";
+                    const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
+                    const cameraCard = `<div class="metric-card metric-card--status metric-card--${cameraTone}">
+                        <div class="metric-card__label">Camera</div>
+                        <div class="metric-card__value">${cameraStatus}</div>
+                    </div>`;
+                    const healthCard = `<div class="metric-card metric-card--status metric-card--${healthTone}">
+                        <div class="metric-card__label">Health</div>
+                        <div class="metric-card__value">${escapeHTML(data.health_status || "Unknown")}</div>
+                    </div>`;
+                    const totalFailures = Number(data.capture_failures_total || 0);
+                    const noticeTone = healthTone;
+
                     content.innerHTML = `
-                        <!-- Status Cards -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
-                            <div style="background: ${cameraStatusBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border: 2px solid ${cameraStatusBorder};">
-                                <div style="font-size: var(--font-size-sm); color: ${cameraStatusColor}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Camera</div>
-                                <div style="font-size: var(--font-size-2xl); font-weight: 700; color: ${cameraStatusColor};">
-                                    ${data.camera_ready ? '✓ Ready' : '✗ Error'}
-                                </div>
+                        <div class="diagnostic-summary-grid">
+                            ${cameraCard}
+                            ${healthCard}
+                        </div>
+
+                        <div class="diagnostic-summary-grid">
+                            <div class="metric-card">
+                                <div class="metric-card__label">${iconMarkup("clock")} Uptime</div>
+                                <div class="metric-card__value">${formatUptime(Number(data.uptime_seconds || 0))}</div>
                             </div>
-                            <div style="background: ${healthBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border: 2px solid ${healthBorder};">
-                                <div style="font-size: var(--font-size-sm); color: ${healthColor}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm);">Health</div>
-                                <div style="font-size: var(--font-size-2xl); font-weight: 700; color: ${healthColor};">
-                                    ${data.health_status}
-                                </div>
+                            <div class="metric-card">
+                                <div class="metric-card__label">${iconMarkup("alert")} Error Rate</div>
+                                <div class="metric-card__value metric-card__value--${healthTone}">${errorRate.toFixed(1)}%</div>
                             </div>
                         </div>
 
-                        <!-- Quick Stats -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
-                            <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
-                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">${DIAG_ICONS.uptime} Uptime</div>
-                                <div style="font-size: var(--font-size-lg); font-weight: 700; color: var(--color-primary);">${formatUptime(data.uptime_seconds)}</div>
+                        <section class="diagnostics-details" aria-labelledby="diagnostics-metrics-title">
+                            <h3 class="diagnostics-subtitle" id="diagnostics-metrics-title">Detailed Metrics</h3>
+                            <div class="diagnostic-metric-list">
+                                ${diagnosticMetric("Frame Rate", `${Number(data.fps_current || 0).toFixed(1)} fps`, "camera")}
+                                ${diagnosticMetric("Resolution", data.resolution || "Unknown", "grid")}
+                                ${diagnosticMetric("JPEG Quality", `${Number(data.jpeg_quality || 0)}%`, "quality")}
+                                ${diagnosticMetric("Frames Captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
+                                ${diagnosticMetric("Last Frame Age", `${Number(data.last_frame_age_seconds || 0).toFixed(2)}s ago`, "clock")}
+                                ${diagnosticMetric("Active Streams", `${Number(data.stream_connections || 0)}/${Number(data.max_stream_connections || 0)}`, "link")}
+                                ${diagnosticMetric("Recent Failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
+                                ${diagnosticMetric("Total Failures", totalFailures, "chart")}
                             </div>
-                            <div style="background: var(--color-bg-secondary); padding: var(--spacing-lg); border-radius: var(--radius-md);">
-                                <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: var(--spacing-sm);">${DIAG_ICONS.warning} Error Rate</div>
-                                <div style="font-size: var(--font-size-lg); font-weight: 700; color: ${healthColor};">${data.error_rate_percent.toFixed(1)}%</div>
-                            </div>
+                        </section>
+
+                        <div class="diagnostic-notice diagnostic-notice--${noticeTone}">
+                            <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System Status</strong>
+                            <p>${escapeHTML(data.message || "No status details are available.")}</p>
                         </div>
 
-                        <!-- Detailed Metrics -->
-                        <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-lg);">
-                            <div style="font-weight: 600; margin-bottom: var(--spacing-lg); color: var(--color-text); font-size: var(--font-size-lg);">Detailed Metrics</div>
-                            <div style="display: grid; gap: var(--spacing-md);">
-                                <!-- FPS Metric -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.camera} Frame Rate</span>
-                                    <span style="color: var(--color-primary); font-weight: 700; font-size: var(--font-size-lg);">${(data.fps_current || 0).toFixed(1)} fps</span>
-                                </div>
-                                
-                                <!-- Resolution Metric -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.grid} Resolution</span>
-                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.resolution}</span>
-                                </div>
-                                
-                                <!-- Quality Metric -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.quality} JPEG Quality</span>
-                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.jpeg_quality}%</span>
-                                </div>
-                                
-                                <!-- Frames Captured -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.image} Frames Captured</span>
-                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.frames_captured.toLocaleString()}</span>
-                                </div>
-                                
-                                <!-- Last Frame Age -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.clock} Last Frame Age</span>
-                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.last_frame_age_seconds.toFixed(2)}s ago</span>
-                                </div>
-                                
-                                <!-- Active Streams -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.link} Active Streams</span>
-                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.stream_connections}/${data.max_stream_connections}</span>
-                                </div>
-
-                                <!-- Capture Failures -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.alert} Recent Failures</span>
-                                    <span style="color: ${(data.capture_failures_consecutive || 0) > 0 ? 'var(--color-error)' : 'var(--color-text)'}; font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_consecutive || 0}</span>
-                                </div>
-
-                                <!-- Total Capture Failures -->
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
-                                    <span style="color: var(--color-text-secondary); font-weight: 500;">${DIAG_ICONS.chart} Total Failures</span>
-                                    <span style="color: var(--color-text); font-weight: 700; font-size: var(--font-size-lg);">${data.capture_failures_total}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Status Message -->
-                        <div style="background: ${messageBg}; padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid ${messageBorder};">
-                            <div style="font-size: var(--font-size-sm); color: ${messageColor}; font-weight: 500;">
-                                <strong>${DIAG_ICONS.info} System Status:</strong><br/>
-                                ${data.message}
-                            </div>
-                        </div>
-
-                        <!-- Auto-refresh indicator -->
-                        <div style="text-align: center; font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin-top: var(--spacing-lg); animation: pulse 2s infinite;">
-                            ↻ Auto-updating every 3 seconds
-                        </div>
+                        <div class="refresh-indicator">${iconMarkup("refresh")}<span>Updates every 3 seconds</span></div>
                     `;
                 })
-                .catch(err => {
+                .catch((error) => {
                     const controller = getStreamController();
                     if (controller && !controller.isStreaming) {
                         controller.setIdlePose("warning");
                     }
-                    const content = document.getElementById('diagnostics-content');
-                    content.innerHTML = '<div style="color: var(--color-error-dark); background: var(--color-error-light); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--color-error); text-align: center;">⚠️ Failed to fetch diagnostics<br/><small style="color: inherit; opacity: 0.8;">' + err + '</small></div>';
+                    const content = document.getElementById("diagnostics-content");
+                    const detail = error instanceof Error ? error.message : error;
+                    content.innerHTML = `<div class="message show error">Diagnostics are unavailable. ${escapeHTML(detail)}</div>`;
                 });
         }
 
@@ -1289,16 +1704,23 @@
         // Keyboard accessibility for modal
         document.addEventListener('keydown', function(e) {
             const modal = document.getElementById('diagnostics-modal');
-            if (modal.style.display !== 'flex') return;
+            if (modal.hidden) return;
             if (e.key === 'Escape') {
+                e.preventDefault();
                 closeDiagnosticsModal();
                 return;
             }
             if (e.key === 'Tab') {
-                const focusable = modal.querySelectorAll('button, [href], input, select, [tabindex]:not([tabindex="-1"])');
+                const focusable = Array.from(modal.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+                    .filter(element => !element.disabled && !element.hidden && element.tabIndex >= 0);
+                if (!focusable.length) {
+                    e.preventDefault();
+                    return;
+                }
                 const first = focusable[0];
                 const last = focusable[focusable.length - 1];
-                if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+                const focusIsOutsideDialog = !modal.contains(document.activeElement);
+                if (focusIsOutsideDialog || (e.shiftKey ? document.activeElement === first : document.activeElement === last)) {
                     e.preventDefault();
                     (e.shiftKey ? last : first).focus();
                 }
@@ -1306,13 +1728,15 @@
         });
 
         // Close modal when clicking outside
-        document.getElementById('diagnostics-modal')?.addEventListener('click', function(e) {
+        document.getElementById('diagnostics-modal').addEventListener('click', function(e) {
             if (e.target === this) closeDiagnosticsModal();
         });
 
         // Initialize when DOM is ready
         document.addEventListener("DOMContentLoaded", () => {
             window.streamController = new StreamController();
+            document.getElementById("diagnostics-btn").addEventListener("click", openDiagnosticsModal);
+            document.getElementById("diagnostics-close").addEventListener("click", closeDiagnosticsModal);
         });
     </script>
 </body>
