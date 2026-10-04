@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -38,7 +39,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.token || '' }}
         run: |
           set -euo pipefail
           mkdir -p baseline

@@ -18,11 +18,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate release tag
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 scripts/validate_release_tag.py "$RELEASE_TAG"
+
+      - name: Reject release tag updates
+        env:
+          RELEASE_BEFORE: ${{ github.event.before }}
+        run: python3 scripts/validate_release_tag_event.py "$RELEASE_BEFORE"
+
+      - name: Fetch protected main branch
+        run: git fetch origin main:refs/remotes/origin/main --force
+
+      - name: Confirm release commit is reachable from main
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 scripts/validate_release_source.py "$RELEASE_SHA" refs/remotes/origin/main
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
