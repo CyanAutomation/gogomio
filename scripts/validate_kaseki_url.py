@@ -3,14 +3,35 @@
 
 import re
 import sys
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 
-HOST_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$", re.IGNORECASE)
+HOST_RE = re.compile(
+    r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$",
+    re.IGNORECASE,
+)
+MAX_PATH_DECODE_ROUNDS = 16
 
 
 class KasekiURLValidationError(ValueError):
     pass
+
+
+def _contains_parent_path_segment(path):
+    normalized_path = path
+    for _ in range(MAX_PATH_DECODE_ROUNDS):
+        if ".." in normalized_path.replace("\\", "/").split("/"):
+            return True
+        decoded_path = unquote(normalized_path)
+        if decoded_path == normalized_path:
+            return False
+        normalized_path = decoded_path
+
+    if ".." in normalized_path.replace("\\", "/").split("/"):
+        return True
+    if unquote(normalized_path) != normalized_path:
+        raise KasekiURLValidationError("KASEKI_BASE_URL path has too many encoding layers")
+    return False
 
 
 def _normalize_allowlist(allowed_hosts):
@@ -21,7 +42,9 @@ def _normalize_allowlist(allowed_hosts):
             continue
         host, separator, port_text = item.partition(":")
         if not HOST_RE.fullmatch(host):
-            raise KasekiURLValidationError("allowlist entries must be exact DNS names, optionally with a port")
+            raise KasekiURLValidationError(
+                "allowlist entries must be exact DNS names, optionally with a port"
+            )
         if separator:
             if not port_text.isdecimal() or not 1 <= int(port_text) <= 65535:
                 raise KasekiURLValidationError("allowlist port must be between 1 and 65535")
@@ -30,7 +53,9 @@ def _normalize_allowlist(allowed_hosts):
             item = host
         hosts.add(item)
     if not hosts:
-        raise KasekiURLValidationError("KASEKI_ALLOWED_HOSTS must contain at least one exact host")
+        raise KasekiURLValidationError(
+            "KASEKI_ALLOWED_HOSTS must contain at least one exact host"
+        )
     return hosts
 
 
@@ -58,7 +83,7 @@ def validate_base_url(value, allowed_hosts):
         raise KasekiURLValidationError("KASEKI_BASE_URL hostname and port are not allowlisted")
 
     path = parsed.path.rstrip("/")
-    if ".." in path.split("/"):
+    if _contains_parent_path_segment(path):
         raise KasekiURLValidationError("KASEKI_BASE_URL path must not contain parent segments")
     return "https://{}{}".format(authority, path)
 
