@@ -727,38 +727,42 @@ func TestFirstFrameTimeoutFFmpegStillUsesGenericBounds(t *testing.T) {
 }
 
 func TestRealCameraStartTimeoutMessageUsesStartupTimeout(t *testing.T) {
+	// Contract: TC-CAMERA-01 (docs/testing/test-contracts.md).
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/null"
 	rc.captureWaitTimeout = 50 * time.Millisecond
 	rc.fps = 120
-	rc.backendAttempted = "ffmpeg"
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	rc.startupNowFn = clock.Now
+	rc.startupSleepFn = clock.Sleep
+	rc.process = waitCommandProcess{waitFn: func(*exec.Cmd) error { return nil }}
 
+	var backendStdout *io.PipeWriter
 	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
-		stdoutR, stdoutW := io.Pipe()
-		stderrR, stderrW := io.Pipe()
-		cmd := exec.Command("sh", "-c", "sleep 30")
-		if err := cmd.Start(); err != nil {
-			return nil, nil, nil, nil, err
-		}
-		go func() {
-			defer func() { _ = stderrW.Close() }()
-			defer func() { _ = stdoutW.Close() }()
-			time.Sleep(2 * time.Second)
-		}()
-		return cmd, nopWriteCloser{}, stdoutR, stderrR, nil
+		rc.setBackendAttempted("ffmpeg")
+		stdout, writer := io.Pipe()
+		backendStdout = writer
+		return &exec.Cmd{}, nopWriteCloser{}, stdout, io.NopCloser(strings.NewReader("")), nil
 	}
+	t.Cleanup(func() {
+		if backendStdout != nil {
+			_ = backendStdout.Close()
+		}
+	})
 
-	start := time.Now()
+	start := clock.Now()
 	err := rc.Start(640, 480, 120, 80)
-	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("expected Start() timeout error")
+	}
+	if !errors.Is(err, ErrFirstFrameTimeout) {
+		t.Fatalf("Start() error = %v, want ErrFirstFrameTimeout", err)
 	}
 	if !strings.Contains(err.Error(), "waiting 500ms") {
 		t.Fatalf("expected timeout message to include 500ms startup timeout, got %v", err)
 	}
-	if elapsed < 450*time.Millisecond {
-		t.Fatalf("startup wait elapsed too quickly (%v), captureWaitTimeout likely capped startup timeout", elapsed)
+	if elapsed := clock.Now().Sub(start); elapsed < 500*time.Millisecond {
+		t.Fatalf("fake startup clock advanced %v, want at least 500ms", elapsed)
 	}
 }
 

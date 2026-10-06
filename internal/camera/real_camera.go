@@ -128,6 +128,8 @@ type RealCamera struct {
 	runCmdFn       func(*exec.Cmd) ([]byte, error)
 	process        commandProcess
 	stopWaitAfter  func(time.Duration) <-chan time.Time
+	startupNowFn   func() time.Time
+	startupSleepFn func(time.Duration)
 	logger         *log.Logger
 	healthTicks    <-chan time.Time
 }
@@ -170,6 +172,8 @@ func NewRealCamera() *RealCamera {
 		devicePath:         DefaultDevicePath,
 		captureWaitTimeout: defaultCaptureWaitTimeout,
 		stopWaitTimeout:    defaultStopWaitTimeout,
+		startupNowFn:       time.Now,
+		startupSleepFn:     time.Sleep,
 	}
 	rc.lookPath = exec.LookPath
 	rc.statFn = os.Stat
@@ -371,7 +375,7 @@ func closeLaunchedProcess(cmd *exec.Cmd, stdin io.WriteCloser, stdout, stderr io
 
 func (rc *RealCamera) waitForFirstFrame() error {
 	timeout := rc.firstFrameTimeout()
-	deadline := time.Now().Add(timeout)
+	deadline := rc.startupNowFn().Add(timeout)
 
 	for {
 		// Check if stopping to allow clean shutdown during initialization
@@ -405,7 +409,7 @@ func (rc *RealCamera) waitForFirstFrame() error {
 			}
 		}
 
-		if time.Now().After(deadline) {
+		if rc.startupNowFn().After(deadline) {
 			return &InitializationError{
 				Backend: rc.getBackendAttempted(),
 				Reason:  fmt.Sprintf("timed out waiting %s for first JPEG frame (fps=%d)", timeout.Round(10*time.Millisecond), rc.fps),
@@ -413,7 +417,7 @@ func (rc *RealCamera) waitForFirstFrame() error {
 			}
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		rc.startupSleepFn(10 * time.Millisecond)
 	}
 }
 

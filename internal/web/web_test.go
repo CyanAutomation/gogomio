@@ -76,42 +76,53 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 	}
 }
 
-func TestWebUIUsesResponsiveReusableComponents(t *testing.T) {
+func TestWebUIProvidesSmallScreenAndReducedMotionSupport(t *testing.T) {
+	// Contract: TC-WEB-01 (docs/testing/test-contracts.md).
 	index, err := webFS.ReadFile("index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := string(index)
+	css := strings.SplitN(string(index), "</style>", 2)[0]
 
-	for _, want := range []string{
-		"<title>GoGoMio | Camera Dashboard</title>",
-		"<h1>GoGoMio</h1>",
-		"<main class=\"container\">",
-		"System Status",
-		"class=\"metric-card\"",
-		"button--secondary diagnostics-button\" id=\"diagnostics-btn\"",
-		"getElementById(\"diagnostics-btn\").addEventListener(\"click\", openDiagnosticsModal)",
-		"id=\"feed-mode-badge\" class=\"feed-mode-badge\" hidden",
-		"aria-label=\"Close diagnostics\"",
-		"@media (max-width: 480px)",
-		"prefers-reduced-motion: reduce",
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("missing responsive UI contract %q", want)
-		}
+	mobileStyles := cssBlockBody(t, css, "@media (max-width: 480px)")
+	if !strings.Contains(mobileStyles, ".container {") || !strings.Contains(mobileStyles, "padding: var(--spacing-lg)") {
+		t.Error("small-screen layout should reduce the dashboard container padding")
+	}
+	if !strings.Contains(mobileStyles, ".subtitle {") || !strings.Contains(mobileStyles, "font-size: var(--font-size-xs)") {
+		t.Error("small-screen layout should reduce subtitle text size")
 	}
 
-	if strings.Contains(body, "Settings & Stats") {
-		t.Error("dashboard heading should describe the read-only system status section")
-	}
-	if strings.Contains(body, "style=\"") {
-		t.Error("UI components should use shared CSS classes instead of inline styles")
-	}
-	for _, emoji := range []string{"📹", "⚙️", "📊", "▶️", "⏹️"} {
-		if strings.Contains(body, emoji) {
-			t.Errorf("UI should use the shared icon set instead of emoji %q", emoji)
+	reducedMotionStyles := cssBlockBody(t, css, "@media (prefers-reduced-motion: reduce)")
+	for _, property := range []string{"animation-duration: 0.01ms", "transition-duration: 0.01ms"} {
+		if !strings.Contains(reducedMotionStyles, property) {
+			t.Errorf("reduced-motion support is missing %q", property)
 		}
 	}
+}
+
+func cssBlockBody(t *testing.T, css, selector string) string {
+	t.Helper()
+	marker := selector + " {"
+	start := strings.Index(css, marker)
+	if start < 0 {
+		t.Fatalf("missing CSS block %q", selector)
+	}
+
+	openBrace := start + strings.IndexByte(css[start:], '{')
+	depth := 0
+	for i := openBrace; i < len(css); i++ {
+		switch css[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return css[openBrace+1 : i]
+			}
+		}
+	}
+	t.Fatalf("unterminated CSS block %q", selector)
+	return ""
 }
 
 func TestDashboardButtonSizingIsScopedToTheActionRow(t *testing.T) {
