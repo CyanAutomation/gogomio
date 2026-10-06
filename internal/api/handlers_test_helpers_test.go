@@ -3,13 +3,40 @@ package api
 import (
 	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
+
+func newTestJPEGFrame(t testing.TB) []byte {
+	t.Helper()
+	img := image.NewGray(image.Rect(0, 0, 16, 12))
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			img.SetGray(x, y, color.Gray{Y: uint8(x*7 + y*11)})
+		}
+	}
+
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatalf("encode test JPEG: %v", err)
+	}
+	return encoded.Bytes()
+}
+
+func assertJPEGFrame(t testing.TB, frame []byte) {
+	t.Helper()
+	if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
+		t.Fatalf("frame is not a decodable JPEG: %v", err)
+	}
+}
 
 // stableFrameCamera generates consistent JPEG frames for streaming tests and benchmarks.
 type stableFrameCamera struct {

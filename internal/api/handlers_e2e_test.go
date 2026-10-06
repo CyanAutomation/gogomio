@@ -15,114 +15,70 @@ import (
 // E2E Tests — End-to-end HTTP streaming and endpoint validation
 
 // TestE2E_StreamEndpointBasic validates basic MJPEG stream structure
+// Contract: TC-HTTP-01 (docs/testing/test-contracts.md).
 func TestE2E_StreamEndpointBasic(t *testing.T) {
-	t.Helper()
-
-	fm := NewFrameManager(newStableFrameCamera(nil), &config.Config{
+	testConfig := &config.Config{
 		TargetFPS:            10,
 		MaxStreamConnections: 10,
-	})
+	}
+	fm := NewFrameManager(newStableFrameCamera(newTestJPEGFrame(t)), testConfig)
 	defer fm.Stop()
 
-	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{
-		MaxStreamConnections: 10,
-	})
+	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
 
-	const maxStreamBytes = 50 * 1024
-
-	// Deterministic cancellation: stop once a first frame delimiter appears,
-	// or after a safety timeout/max byte threshold.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	writer := newStreamCapturingWriter(maxStreamBytes)
+	writer := newStreamCapturingWriter(0)
 	req := httptest.NewRequest("GET", "/stream.mjpg", nil)
 	req = req.WithContext(ctx)
 
-	// Execute streaming handler
 	done := make(chan struct{})
 	go func() {
 		router.ServeHTTP(writer, req)
 		close(done)
 	}()
 
-	boundarySeen := false
-	pollTicker := time.NewTicker(2 * time.Millisecond)
-	defer pollTicker.Stop()
-
-	hardTimeout := time.NewTimer(750 * time.Millisecond)
-	defer hardTimeout.Stop()
-
-	// Cancel once we observe a multipart frame boundary or hit capture limits.
-	cancelled := false
-	for !cancelled {
+	guard := time.NewTimer(2 * time.Second)
+	defer guard.Stop()
+	var frame []byte
+	select {
+	case frame = <-writer.FirstFrame():
+	case <-guard.C:
+		cancel()
 		select {
 		case <-done:
-			cancelled = true
-		case <-hardTimeout.C:
-			cancel()
-			cancelled = true
-		case <-pollTicker.C:
-			content := writer.GetContent()
-			if strings.Contains(string(content), "--frame") {
-				boundarySeen = true
-				cancel()
-				cancelled = true
-				continue
-			}
-			if len(content) >= maxStreamBytes {
-				cancel()
-				cancelled = true
-			}
+		case <-time.After(250 * time.Millisecond):
+			t.Fatal("stream handler did not stop after cancellation")
 		}
-
-		select {
-		case <-done:
-			cancelled = true
-		default:
-		}
+		t.Fatal("timed out waiting for a complete multipart JPEG frame")
 	}
-
-	// Wait for the handler to exit after cancellation.
+	cancel()
 	select {
 	case <-done:
-	case <-time.After(250 * time.Millisecond):
-		t.Fatalf("stream handler did not stop after deterministic cancellation")
+	case <-guard.C:
+		t.Fatal("stream handler did not stop after cancellation")
 	}
 
-	// Verify stream response
-	statusCode := writer.GetStatusCode()
-	if statusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", statusCode)
+	if got := writer.GetStatusCode(); got != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", got)
 	}
-
-	contentType := writer.GetHeader("Content-Type")
-	if !strings.Contains(contentType, "multipart/x-mixed-replace") {
-		t.Fatalf("expected multipart content type, got %s", contentType)
+	if got := writer.GetHeader("Content-Type"); !strings.Contains(got, "multipart/x-mixed-replace; boundary=frame") {
+		t.Fatalf("unexpected multipart content type %q", got)
 	}
-
-	content := writer.GetContent()
-	if len(content) == 0 {
-		t.Fatalf("expected non-empty stream payload")
-	}
-
-	if !boundarySeen && !strings.Contains(string(content), "--frame") {
-		t.Errorf("expected at least one multipart frame boundary marker in payload")
-	}
+	assertJPEGFrame(t, frame)
 }
 
 // TestE2E_SnapshotEndpoint validates snapshot JPEG delivery
+// Contract: TC-HTTP-01 (docs/testing/test-contracts.md).
 func TestE2E_SnapshotEndpoint(t *testing.T) {
-	testJPEG := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0xFF, 0xD9}
+	testJPEG := newTestJPEGFrame(t)
 	fm := NewFrameManager(newStableFrameCamera(testJPEG), &config.Config{
 		TargetFPS: 10,
 	})
 	defer fm.Stop()
 
 	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{})
-
-	// Wait for frame to be captured
-	time.Sleep(50 * time.Millisecond)
 
 	// Request snapshot
 	req := httptest.NewRequest("GET", "/snapshot.jpg", nil)
@@ -140,13 +96,9 @@ func TestE2E_SnapshotEndpoint(t *testing.T) {
 		t.Fatalf("expected Content-Type image/jpeg, got %s", contentType)
 	}
 
-	// Verify JPEG magic bytes
-	body := writer.Body.Bytes()
-	if len(body) < 2 || body[0] != 0xFF || body[1] != 0xD8 {
-		t.Fatalf("expected JPEG SOI marker, got %x %x", body[0], body[1])
-	}
+	assertJPEGFrame(t, writer.Body.Bytes())
 
-	t.Logf("✓ Snapshot endpoint validated: %d bytes JPEG delivered", len(body))
+	t.Logf("✓ Snapshot endpoint validated: %d bytes JPEG delivered", writer.Body.Len())
 }
 
 // TestE2E_ConcurrentClients validates multiple concurrent MJPEG clients
@@ -157,7 +109,7 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 		MaxStreamConnections: 10, // Allow up to 10 concurrent connections
 	}
 
-	fm := NewFrameManager(newStableFrameCamera(nil), testConfig)
+	fm := NewFrameManager(newStableFrameCamera(newTestJPEGFrame(t)), testConfig)
 	defer fm.Stop()
 
 	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
@@ -189,9 +141,7 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 			if !strings.Contains(writer.GetHeader("Content-Type"), "multipart/x-mixed-replace; boundary=frame") {
 				t.Fatalf("client-%d: invalid content type %q", clientID, writer.GetHeader("Content-Type"))
 			}
-			if len(frame) < 4 || frame[0] != 0xff || frame[1] != 0xd8 || frame[len(frame)-2] != 0xff || frame[len(frame)-1] != 0xd9 {
-				t.Fatalf("client-%d: multipart payload is not a complete JPEG: %x", clientID, frame)
-			}
+			assertJPEGFrame(t, frame)
 		case <-guard.Done():
 			t.Fatalf("timed out waiting for client-%d to receive a complete multipart JPEG frame", clientID)
 		}

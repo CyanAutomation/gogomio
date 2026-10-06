@@ -69,6 +69,7 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
    ```bash
    go test ./... -v -race -cover
+   node --test internal/web/aspect-ratio.test.js
    ```
 
 ## Making Changes

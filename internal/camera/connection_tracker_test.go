@@ -116,6 +116,7 @@ func TestConnectionTrackerTryIncrementAfterDecrement(t *testing.T) {
 
 // TestConnectionTrackerConcurrentOperations verifies the connection-limit requirement:
 // concurrent callers must never admit more than maxConnections clients.
+// Contract: TC-CONN-02 (docs/testing/test-contracts.md).
 func TestConnectionTrackerConcurrentOperations(t *testing.T) {
 	tracker := NewConnectionTracker()
 	maxConnections := 50
