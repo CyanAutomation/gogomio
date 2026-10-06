@@ -138,53 +138,30 @@ func TestConfigJSON(t *testing.T) {
 	}
 }
 
-// TestConfigTimeouts tests timeout computation
-func TestConfigTimeouts(t *testing.T) {
-	cfg := &Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 10,
-		Port:                 8000,
-		BindHost:             "0.0.0.0",
-		MockCamera:           false,
-	}
-
-	// Frame timeout should be ~3 frame intervals
-	timeout := cfg.FrameTimeout()
-	if timeout <= 0 {
-		t.Errorf("FrameTimeout is %v, want positive duration", timeout)
-	}
-
-	// Should be roughly 1/24 * 3 = ~125ms at 24 FPS
-	expected := (time.Second / time.Duration(cfg.TargetFPS)) * 3
-	if timeout < expected-50*time.Millisecond || timeout > expected+50*time.Millisecond {
-		t.Logf("FrameTimeout is %v (expected ~%v)", timeout, expected)
-	}
-}
-
-func TestFrameTimeout_HighFPSFloor(t *testing.T) {
+// TestConfigFrameTimeoutBoundaries verifies the fallback, frame-interval,
+// and minimum-timeout contracts at representative FPS values.
+// Contract: TC-CONFIG-01 (docs/testing/test-contracts.md).
+func TestConfigFrameTimeoutBoundaries(t *testing.T) {
 	tests := []struct {
 		name string
 		fps  int
+		want time.Duration
 	}{
-		{name: "1000fps", fps: 1000},
-		{name: "5000fps", fps: 5000},
-		{name: "10000fps", fps: 10000},
+		{name: "non-positive uses default", fps: 0, want: 5 * time.Second},
+		{name: "negative FPS uses default", fps: -1, want: 5 * time.Second},
+		{name: "1 FPS", fps: 1, want: 3 * time.Second},
+		{name: "24 FPS", fps: 24, want: 125*time.Millisecond - 2*time.Nanosecond},
+		{name: "60 FPS", fps: 60, want: 50*time.Millisecond - 2*time.Nanosecond},
+		{name: "1000 FPS minimum", fps: 1000, want: 10 * time.Millisecond},
+		{name: "5000 FPS minimum", fps: 5000, want: 10 * time.Millisecond},
+		{name: "10000 FPS minimum", fps: 10000, want: 10 * time.Millisecond},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{TargetFPS: tt.fps}
-			timeout := cfg.FrameTimeout()
-
-			if timeout <= 0 {
-				t.Fatalf("FrameTimeout(%d) = %v, want positive non-zero duration", tt.fps, timeout)
-			}
-
-			if timeout < 10*time.Millisecond {
-				t.Fatalf("FrameTimeout(%d) = %v, want timeout floor of at least 10ms", tt.fps, timeout)
+			if got := cfg.FrameTimeout(); got != tt.want {
+				t.Fatalf("FrameTimeout(%d) = %v, want %v", tt.fps, got, tt.want)
 			}
 		})
 	}
@@ -519,29 +496,6 @@ func TestConfig_AddressString(t *testing.T) {
 	addr := cfg.AddressString()
 	if addr != "127.0.0.1:8080" {
 		t.Errorf("AddressString() = %q, want %q", addr, "127.0.0.1:8080")
-	}
-}
-
-// TestConfig_FrameTimeout_EdgeCases tests frame timeout with various FPS values
-func TestConfig_FrameTimeout_EdgeCases(t *testing.T) {
-	tests := []struct {
-		fps       int
-		minExpect time.Duration
-		maxExpect time.Duration
-	}{
-		{1, 2800 * time.Millisecond, 3200 * time.Millisecond}, // 1 FPS: ~3000ms
-		{24, 100 * time.Millisecond, 150 * time.Millisecond},  // 24 FPS: ~125ms
-		{60, 40 * time.Millisecond, 60 * time.Millisecond},    // 60 FPS: ~50ms
-		{0, 4900 * time.Millisecond, 5100 * time.Millisecond}, // 0 FPS: default 5s
-	}
-
-	for _, tt := range tests {
-		cfg := &Config{TargetFPS: tt.fps}
-		timeout := cfg.FrameTimeout()
-
-		if timeout < tt.minExpect || timeout > tt.maxExpect {
-			t.Errorf("FrameTimeout for %d FPS = %v, want between %v and %v", tt.fps, timeout, tt.minExpect, tt.maxExpect)
-		}
 	}
 }
 
