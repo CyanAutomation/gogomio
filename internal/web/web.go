@@ -96,6 +96,17 @@ func RegisterStaticFiles(r *http.ServeMux) {
 		_, _ = w.Write(data)
 	})
 
+	r.HandleFunc("/static/diagnostics-dialog.js", func(w http.ResponseWriter, r *http.Request) {
+		data, err := webFS.ReadFile("diagnostics-dialog.js")
+		if err != nil {
+			http.Error(w, "Failed to load UI script", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", immutableCacheControl)
+		_, _ = w.Write(data)
+	})
+
 	// Serve MIO mascot images at /static/mio/
 	mioSubFS, err := fs.Sub(mioFS, "mio")
 	if err != nil {

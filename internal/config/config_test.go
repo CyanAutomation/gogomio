@@ -8,6 +8,24 @@ import (
 	"time"
 )
 
+func clearConfigEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"MIO_RESOLUTION",
+		"MIO_SENSOR_MODE",
+		"MIO_FPS",
+		"MIO_TARGET_FPS",
+		"MIO_JPEG_QUALITY",
+		"MIO_MAX_STREAM_CONNECTIONS",
+		"MIO_PORT",
+		"MIO_BIND_HOST",
+		"MOCK_CAMERA",
+		"MIO_TRUSTED_PROXY_CIDRS",
+	} {
+		t.Setenv(key, "")
+	}
+}
+
 // TestConfigFromEnv tests loading configuration from environment variables
 func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("MIO_RESOLUTION", "1280x720")
@@ -29,9 +47,7 @@ func TestConfigFromEnv(t *testing.T) {
 
 // TestConfigDefaults tests that default values are used when env vars are not set
 func TestConfigDefaults(t *testing.T) {
-	// Unset all config env vars
-	t.Setenv("MIO_TARGET_FPS", "")
-	t.Setenv("MIO_BIND_HOST", "")
+	clearConfigEnv(t)
 
 	cfg := LoadFromEnv()
 
@@ -278,14 +294,21 @@ func TestConfig_TargetFPS_DefaultsToFPS(t *testing.T) {
 	}
 }
 
-// TestConfig_InvalidTargetFPS_Zero tests zero target FPS
-func TestConfig_InvalidTargetFPS_Zero(t *testing.T) {
-	t.Setenv("MIO_TARGET_FPS", "0")
+// TestConfig_InvalidTargetFPS_FallsBackToFPS verifies malformed and
+// non-positive target FPS values fall back to the configured FPS.
+// Contract: TC-CONFIG-02 (docs/testing/test-contracts.md).
+func TestConfig_InvalidTargetFPS_FallsBackToFPS(t *testing.T) {
+	for _, targetFPS := range []string{"0", "-1", "invalid"} {
+		t.Run(targetFPS, func(t *testing.T) {
+			clearConfigEnv(t)
+			t.Setenv("MIO_FPS", "30")
+			t.Setenv("MIO_TARGET_FPS", targetFPS)
 
-	cfg := LoadFromEnv()
-	// Zero target FPS should be ignored, defaults to regular FPS
-	if cfg.TargetFPS == 0 {
-		t.Errorf("zero TargetFPS should be ignored, got %d", cfg.TargetFPS)
+			cfg := LoadFromEnv()
+			if cfg.TargetFPS != cfg.FPS {
+				t.Errorf("TargetFPS for %q should fall back to FPS %d, got %d", targetFPS, cfg.FPS, cfg.TargetFPS)
+			}
+		})
 	}
 }
 

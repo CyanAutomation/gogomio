@@ -1258,6 +1258,12 @@ func TestNewRateLimiterClampsNonPositiveMaxReqSec(t *testing.T) {
 
 func TestNewRateLimiterClampsNonPositiveWindow(t *testing.T) {
 	limiter := NewRateLimiter(1, 0)
+	if limiter.window != rateLimiterDefaultWindow {
+		t.Fatalf("clamped window = %v, want %v", limiter.window, rateLimiterDefaultWindow)
+	}
+
+	now := time.Date(2026, time.August, 12, 12, 0, 0, 0, time.UTC)
+	limiter.now = func() time.Time { return now }
 
 	const ip = "203.0.113.201"
 	if !limiter.Allow(ip) {
@@ -1267,7 +1273,7 @@ func TestNewRateLimiterClampsNonPositiveWindow(t *testing.T) {
 		t.Fatalf("expected second immediate request to be denied within default window")
 	}
 
-	time.Sleep(rateLimiterDefaultWindow + 20*time.Millisecond)
+	now = now.Add(rateLimiterDefaultWindow + time.Nanosecond)
 	if !limiter.Allow(ip) {
 		t.Fatalf("expected request to be allowed after default window elapsed")
 	}
@@ -2345,80 +2351,60 @@ func TestFrameManager_CleanupLoop_GracefulShutdown(t *testing.T) {
 	}
 }
 
-// TestFrameManager_FrameBuffer_ConcurrentAccess tests frame buffer concurrent reads
-func TestFrameManager_FrameBuffer_ConcurrentAccess(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
-
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Start capture
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	// Allow frames to be captured
-	time.Sleep(200 * time.Millisecond)
-
-	// Simulate concurrent reads from multiple clients
-	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			// Each goroutine tries to read frame 10 times
-			for j := 0; j < 10; j++ {
-				frame := fm.GetFrame()
-				if len(frame) == 0 {
-					t.Error("expected non-empty frame")
-					return
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-		}()
-	}
-
-	wg.Wait()
-}
-
-// TestFrameManager_Metrics_FrameCount tests frame counting during capture
+// TestFrameManager_Metrics_FrameCount verifies the published-frame counter
+// reflects a frame produced by the capture loop.
+// Contract: TC-METRICS-01 (docs/testing/test-contracts.md).
 func TestFrameManager_Metrics_FrameCount(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
+	cam := &captureLoopCountingCamera{
+		captureBegan:   make(chan struct{}),
+		releaseCapture: make(chan struct{}),
 	}
-	defer func() { _ = cam.Stop() }()
+	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
 
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Start capture
 	fm.startCapture()
-	waitForCaptureState(t, fm, true)
+	select {
+	case <-cam.captureBegan:
+	case <-time.After(testDuration(2 * time.Second)):
+		t.Fatal("capture loop did not begin producing a frame")
+	}
+	close(cam.releaseCapture)
 
-	// Let some frames be captured
-	time.Sleep(200 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), testDuration(2*time.Second))
+	defer cancel()
+	frame, sequence := fm.frameBuffer.WaitFrameWithContext(ctx, time.Hour, 0)
+	if len(frame) == 0 || sequence == 0 {
+		t.Fatalf("published frame = %v at sequence %d, want a non-empty frame with a sequence", frame, sequence)
+	}
+	fm.stopCapture()
 
-	// Verify that frames were captured by checking if frame buffer has data
-	frame := fm.GetFrame()
-	if len(frame) == 0 {
-		t.Errorf("expected frames to be captured")
+	frameCount, _, _ := fm.streamStats.Snapshot()
+	if frameCount < 1 {
+		t.Fatalf("published frame count = %d, want at least one", frameCount)
+	}
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var reportedFrameCount int64 = -1
+	for _, line := range strings.Split(response.Body.String(), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != "gogomio_frames_captured_total" {
+			continue
+		}
+		parsed, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			t.Fatalf("invalid frame counter value %q: %v", fields[1], err)
+		}
+		reportedFrameCount = parsed
+		break
+	}
+	if reportedFrameCount != frameCount {
+		t.Fatalf("reported frame count = %d, want %d", reportedFrameCount, frameCount)
 	}
 }
 

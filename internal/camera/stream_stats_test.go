@@ -50,16 +50,22 @@ func TestStreamStatsFPSCalculation(t *testing.T) {
 	}
 }
 
-// TestStreamStatsWindowSliding tests that FPS window is a sliding 30-frame window
+// TestStreamStatsWindowSliding verifies FPS uses the newest 30 frames, excluding
+// older frames with a different cadence.
+// Contract: TC-STATS-01 (docs/testing/test-contracts.md).
 func TestStreamStatsWindowSliding(t *testing.T) {
 	stats := NewStreamStats()
+	const baseTime int64 = 1_000_000_000
 
-	baseTime := time.Now().UnixNano()
-
-	// Record 50 frames at 1ms intervals
-	for i := 0; i < 50; i++ {
-		ts := baseTime + int64(i*1000000) // 1ms apart
-		stats.RecordFrame(ts)
+	// These first 20 frames are spaced 100 ms apart. If they remain in the FPS
+	// calculation, they substantially lower the result.
+	for i := int64(0); i < 20; i++ {
+		stats.RecordFrame(baseTime + i*100_000_000)
+	}
+	// The newest 30 frames span 29 ms, so their rolling-window FPS is exactly
+	// 1000 regardless of the older cadence.
+	for i := int64(0); i < 30; i++ {
+		stats.RecordFrame(baseTime + 2_000_000_000 + i*1_000_000)
 	}
 
 	frameCount, _, fps := stats.Snapshot()
@@ -68,10 +74,8 @@ func TestStreamStatsWindowSliding(t *testing.T) {
 		t.Errorf("frame count is %d, want 50", frameCount)
 	}
 
-	// FPS should be calculated from last 30 frames only (frames 20-49)
-	// Span is ~29ms (29 frames over 29ms = 1000 FPS)
-	if fps < 500 || fps > 1500 {
-		t.Errorf("FPS is %v, want ~1000 (from rolling 30-frame window)", fps)
+	if fps != 1000 {
+		t.Errorf("FPS is %v, want 1000 from the newest 30 frames", fps)
 	}
 }
 
