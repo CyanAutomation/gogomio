@@ -145,29 +145,37 @@ jobs:
                 cp "$previous_metadata" baseline/benchmark-metadata.txt
                 echo "Benchmark workflow run: $HISTORY_RUN_ID" >> baseline/benchmark-metadata.txt
               fi
-              echo 'available=true' >> "$GITHUB_OUTPUT"
-              echo 'source=artifact' >> "$GITHUB_OUTPUT"
-              echo "run_id=$HISTORY_RUN_ID" >> "$GITHUB_OUTPUT"
+              {
+                echo 'available=true'
+                echo 'source=artifact'
+                echo "run_id=$HISTORY_RUN_ID"
+              } >> "$GITHUB_OUTPUT"
               echo "Using benchmark artifact from run $HISTORY_RUN_ID."
             else
-              echo 'available=false' >> "$GITHUB_OUTPUT"
-              echo 'source=none' >> "$GITHUB_OUTPUT"
+              {
+                echo 'available=false'
+                echo 'source=none'
+              } >> "$GITHUB_OUTPUT"
               echo 'No successful main-branch benchmark artifact is available; this run will establish one.'
             fi
             exit 0
           fi
 
           if [[ -z "$baseline_sha" || "$baseline_sha" == "$GITHUB_SHA" ]]; then
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo 'source=none' >> "$GITHUB_OUTPUT"
+            {
+              echo 'available=false'
+              echo 'source=none'
+            } >> "$GITHUB_OUTPUT"
             echo 'No earlier revision is available for a benchmark comparison.'
             exit 0
           fi
 
           git worktree add --detach "$RUNNER_TEMP/benchmark-baseline" "$baseline_sha"
-          echo "available=true" >> "$GITHUB_OUTPUT"
-          echo 'source=revision' >> "$GITHUB_OUTPUT"
-          echo "sha=$baseline_sha" >> "$GITHUB_OUTPUT"
+          {
+            echo 'available=true'
+            echo 'source=revision'
+            echo "sha=$baseline_sha"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Run base revision benchmarks
         id: run-baseline-benchmarks

@@ -182,6 +182,17 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("go vet ./...", go_tests)
         self.assertIn("go test ./... -race", go_tests)
 
+    def test_workflow_shellcheck_warnings_are_avoided(self):
+        benchmark = workflow_step(workflow("benchmark.yml"), "Prepare comparison baseline")
+        self.assertIn('} >> "$GITHUB_OUTPUT"', benchmark)
+        self.assertNotIn("echo 'available=true' >> \"$GITHUB_OUTPUT\"", benchmark)
+        self.assertNotIn('echo "available=true" >> "$GITHUB_OUTPUT"', benchmark)
+
+        gofmt = workflow_step(workflow("code-coverage-test.yml"), "Check gofmt")
+        self.assertIn("mapfile -t go_files < <(git ls-files '*.go')", gofmt)
+        self.assertIn('gofmt -l "${go_files[@]}"', gofmt)
+        self.assertNotIn("$(git ls-files", gofmt)
+
     def test_coverage_threshold_uses_strict_shell_and_rejects_unparseable_output(self):
         step = workflow_step(workflow("code-coverage-test.yml"), "Enforce coverage threshold (≥75%)")
         self.assertIn("set -euo pipefail", step)
