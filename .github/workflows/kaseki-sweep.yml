@@ -172,7 +172,11 @@ jobs:
           : "${KASEKI_API_TOKEN:?Configure KASEKI_API_TOKEN in the kaseki-agent environment}"
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
-          for attempt in $(seq 1 185); do
+          # Leave time for API retries, the job summary, and runner cleanup before
+          # the controller's 180-minute task timeout and 200-minute job timeout.
+          POLL_TIMEOUT_SECONDS=10500
+          poll_started_at=$SECONDS
+          while (( SECONDS - poll_started_at < POLL_TIMEOUT_SECONDS )); do
             curl --proto '=https' --fail-with-body --silent --show-error \
               --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
               --output "$response_file" \
@@ -192,7 +196,15 @@ jobs:
                 ;;
               queued|running)
                 echo "Kaseki status: $status"
-                sleep 60
+                elapsed_seconds=$((SECONDS - poll_started_at))
+                remaining_seconds=$((POLL_TIMEOUT_SECONDS - elapsed_seconds))
+                if (( remaining_seconds > 0 )); then
+                  sleep_seconds=60
+                  if (( remaining_seconds < sleep_seconds )); then
+                    sleep_seconds=$remaining_seconds
+                  fi
+                  sleep "$sleep_seconds"
+                fi
                 ;;
               *)
                 echo "::error title=Unexpected Kaseki status::Controller returned an unsupported status"
@@ -200,7 +212,7 @@ jobs:
                 ;;
             esac
           done
-          echo "::error title=Kaseki run timed out::No terminal status after 185 minutes"
+          echo "::error title=Kaseki run timed out::No terminal status within 175 minutes (controller timeout is 180 minutes)"
           exit 1
 
       - name: Publish run details
