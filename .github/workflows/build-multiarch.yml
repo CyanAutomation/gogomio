@@ -20,7 +20,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: docker-publish-${{ github.repository }}
+  # Version tags run independently; non-tag builds serialize mutable tags such as `latest`.
+  group: docker-publish-${{ github.repository }}-${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && github.run_id) || 'latest' }}
   cancel-in-progress: false
 
 jobs:
@@ -56,14 +57,8 @@ jobs:
           INPUT_TAGS: ${{ inputs.tags }}
         run: python3 scripts/validate_docker_dispatch_tags.py "$INPUT_TAGS"
 
-      - name: Validate helper scripts and workflow contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash scripts/test-docker-tags.sh
-          bash scripts/test-docker-go-tests.sh
-          python3 -B -m unittest discover -s scripts -p 'test_*.py'
-          node --test internal/web/aspect-ratio.test.js internal/web/diagnostics-dialog.test.js
+      - name: Run shared CI helper tests
+        run: bash scripts/test-ci-helpers.sh
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -72,9 +67,7 @@ jobs:
           cache: true
 
       - name: Run Go vet and race tests
-        run: |
-          go vet ./...
-          go test ./... -race
+        run: bash scripts/test-go-ci.sh
 
   build:
     name: Build and push candidate image
@@ -104,7 +97,7 @@ jobs:
             requested_tags="$(python3 scripts/validate_docker_dispatch_tags.py "$INPUT_TAGS")"
           elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             python3 scripts/validate_release_tag.py "$GITHUB_REF_NAME"
-            requested_tags="${GITHUB_REF_NAME},latest"
+            requested_tags="${GITHUB_REF_NAME}"
           else
             requested_tags=latest
           fi
@@ -156,11 +149,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
-      - name: Login to Docker Hub
+      # Optional read-only robot credentials avoid anonymous Docker Hub pull limits.
+      # Configure DOCKERHUB_READONLY_USERNAME and DOCKERHUB_READONLY_TOKEN if needed.
+      - name: Check for optional Docker Hub pull credentials
+        id: pull-credentials
+        shell: bash
+        env:
+          DOCKERHUB_READONLY_USERNAME: ${{ secrets.DOCKERHUB_READONLY_USERNAME }}
+          DOCKERHUB_READONLY_TOKEN: ${{ secrets.DOCKERHUB_READONLY_TOKEN }}
+        run: |
+          if [[ -n "$DOCKERHUB_READONLY_USERNAME" && -n "$DOCKERHUB_READONLY_TOKEN" ]]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$DOCKERHUB_READONLY_USERNAME" || -n "$DOCKERHUB_READONLY_TOKEN" ]]; then
+            echo "::error::Configure both DOCKERHUB_READONLY_USERNAME and DOCKERHUB_READONLY_TOKEN, or leave both unset."
+            exit 1
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login to Docker Hub for pull access
+        if: steps.pull-credentials.outputs.configured == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_READONLY_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_READONLY_TOKEN }}
 
       - name: Verify linux/amd64 and linux/arm64 on the immutable digest
         shell: bash
@@ -175,12 +187,30 @@ jobs:
     needs: [validate, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions: {}
     steps:
-      - name: Login to Docker Hub
+      - name: Check for optional Docker Hub pull credentials
+        id: pull-credentials
+        shell: bash
+        env:
+          DOCKERHUB_READONLY_USERNAME: ${{ secrets.DOCKERHUB_READONLY_USERNAME }}
+          DOCKERHUB_READONLY_TOKEN: ${{ secrets.DOCKERHUB_READONLY_TOKEN }}
+        run: |
+          if [[ -n "$DOCKERHUB_READONLY_USERNAME" && -n "$DOCKERHUB_READONLY_TOKEN" ]]; then
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$DOCKERHUB_READONLY_USERNAME" || -n "$DOCKERHUB_READONLY_TOKEN" ]]; then
+            echo "::error::Configure both DOCKERHUB_READONLY_USERNAME and DOCKERHUB_READONLY_TOKEN, or leave both unset."
+            exit 1
+          else
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login to Docker Hub for pull access
+        if: steps.pull-credentials.outputs.configured == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKERHUB_READONLY_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_READONLY_TOKEN }}
 
       - name: Scan candidate image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -209,7 +239,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
-      - name: Login to Docker Hub
+      - name: Login to Docker Hub for publishing
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKER_USERNAME }}

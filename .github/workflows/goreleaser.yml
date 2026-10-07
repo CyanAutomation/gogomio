@@ -47,9 +47,7 @@ jobs:
           cache: true
 
       - name: Run Go vet and race tests
-        run: |
-          go vet ./...
-          go test ./... -race
+        run: bash scripts/test-go-ci.sh
 
   goreleaser:
     name: Build and Release Binaries

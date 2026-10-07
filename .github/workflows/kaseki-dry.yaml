@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: kaseki-dry-sweep-${{ github.repository }}
+  group: kaseki-dry-sweep-${{ github.repository }}-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
