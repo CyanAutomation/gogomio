@@ -11,13 +11,94 @@ on:
 
 permissions:
   contents: read
-  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  history:
+    name: Find historical benchmark baseline
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      available: ${{ steps.lookup.outputs.available }}
+      run_id: ${{ steps.lookup.outputs.run_id }}
+    steps:
+      - name: Find the latest successful main-branch benchmark artifact
+        id: lookup
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          previous_run_id=''
+          available=false
+
+          if ! previous_run_id="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow benchmark.yml \
+            --branch main \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')"; then
+            echo '::warning::Could not list previous benchmark runs; proceeding without a historical baseline.'
+            previous_run_id=''
+          fi
+
+          if [[ -n "$previous_run_id" ]]; then
+            mkdir -p "$RUNNER_TEMP/previous-benchmark"
+            if gh run download "$previous_run_id" \
+              --repo "$GITHUB_REPOSITORY" \
+              --name benchmark-results \
+              --dir "$RUNNER_TEMP/previous-benchmark"; then
+              if [[ -s "$RUNNER_TEMP/previous-benchmark/bench-current.txt" ]]; then
+                available=true
+                echo "Using benchmark artifact from run $previous_run_id."
+              else
+                echo "::warning::Run $previous_run_id has no usable benchmark-results artifact; proceeding without a historical baseline."
+                previous_run_id=''
+              fi
+            else
+              echo "::warning::Could not download benchmark artifact from run $previous_run_id; proceeding without a historical baseline."
+              previous_run_id=''
+            fi
+          else
+            echo 'No successful main-branch benchmark artifact is available; this run will establish one.'
+          fi
+
+          {
+            echo "available=$available"
+            echo "run_id=$previous_run_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Share historical benchmark input with the benchmark job
+        if: steps.lookup.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: benchmark-history
+          path: |
+            ${{ runner.temp }}/previous-benchmark/bench-current.txt
+            ${{ runner.temp }}/previous-benchmark/benchmark-metadata.txt
+          if-no-files-found: error
+          retention-days: 1
+
   benchmark:
     name: Performance Benchmarks
+    needs: history
+    if: >-
+      always() &&
+      !cancelled() &&
+      (needs.history.result == 'success' || needs.history.result == 'skipped') &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    env:
+      BENCH_COUNT: ${{ github.event_name == 'pull_request' && '5' || '10' }}
 
     steps:
       - name: Checkout code
@@ -32,6 +113,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Download historical benchmark input
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.history.outputs.available == 'true'
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: benchmark-history
+          path: ${{ runner.temp }}/previous-benchmark
+
       - name: Prepare comparison baseline
         id: baseline
         shell: bash
@@ -39,7 +127,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
-          GH_TOKEN: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.token || '' }}
+          HISTORY_AVAILABLE: ${{ needs.history.outputs.available }}
+          HISTORY_RUN_ID: ${{ needs.history.outputs.run_id }}
         run: |
           set -euo pipefail
           mkdir -p baseline
@@ -49,43 +138,22 @@ jobs:
           elif [[ "$EVENT_NAME" == "push" && -n "$PUSH_BEFORE_SHA" && ! "$PUSH_BEFORE_SHA" =~ ^0+$ ]]; then
             baseline_sha="$PUSH_BEFORE_SHA"
           else
-            echo 'Looking for the latest successful main-branch benchmark artifact.'
-            if ! previous_run_id="$(gh run list \
-              --workflow benchmark.yml \
-              --branch main \
-              --status success \
-              --limit 1 \
-              --json databaseId \
-              --jq '.[0].databaseId // empty')"; then
-              echo '::warning::Could not list previous benchmark runs; proceeding without a historical baseline.'
-              previous_run_id=''
-            fi
-
-            if [[ -n "$previous_run_id" ]]; then
-              if gh run download "$previous_run_id" \
-                --name benchmark-results \
-                --dir "$RUNNER_TEMP/previous-benchmark"; then
-                previous_benchmark="$RUNNER_TEMP/previous-benchmark/bench-current.txt"
-                if [[ -s "$previous_benchmark" ]]; then
-                  cp "$previous_benchmark" baseline/bench-current.txt
-                  previous_metadata="$RUNNER_TEMP/previous-benchmark/benchmark-metadata.txt"
-                  if [[ -s "$previous_metadata" ]]; then
-                    cp "$previous_metadata" baseline/benchmark-metadata.txt
-                    echo "Benchmark workflow run: $previous_run_id" >> baseline/benchmark-metadata.txt
-                  fi
-                  echo 'available=true' >> "$GITHUB_OUTPUT"
-                  echo 'source=artifact' >> "$GITHUB_OUTPUT"
-                  echo "run_id=$previous_run_id" >> "$GITHUB_OUTPUT"
-                  echo "Using benchmark artifact from run $previous_run_id."
-                  exit 0
-                fi
+            if [[ "$HISTORY_AVAILABLE" == 'true' && -s "$RUNNER_TEMP/previous-benchmark/bench-current.txt" ]]; then
+              cp "$RUNNER_TEMP/previous-benchmark/bench-current.txt" baseline/bench-current.txt
+              previous_metadata="$RUNNER_TEMP/previous-benchmark/benchmark-metadata.txt"
+              if [[ -s "$previous_metadata" ]]; then
+                cp "$previous_metadata" baseline/benchmark-metadata.txt
+                echo "Benchmark workflow run: $HISTORY_RUN_ID" >> baseline/benchmark-metadata.txt
               fi
-              echo "::warning::Run $previous_run_id has no usable benchmark-results artifact; proceeding without a historical baseline."
+              echo 'available=true' >> "$GITHUB_OUTPUT"
+              echo 'source=artifact' >> "$GITHUB_OUTPUT"
+              echo "run_id=$HISTORY_RUN_ID" >> "$GITHUB_OUTPUT"
+              echo "Using benchmark artifact from run $HISTORY_RUN_ID."
+            else
+              echo 'available=false' >> "$GITHUB_OUTPUT"
+              echo 'source=none' >> "$GITHUB_OUTPUT"
+              echo 'No successful main-branch benchmark artifact is available; this run will establish one.'
             fi
-
-            echo 'available=false' >> "$GITHUB_OUTPUT"
-            echo 'source=none' >> "$GITHUB_OUTPUT"
-            echo 'No successful main-branch benchmark artifact is available; this run will establish one.'
             exit 0
           fi
 
@@ -119,7 +187,7 @@ jobs:
           } > baseline/benchmark-metadata.txt
           if (
             cd "$RUNNER_TEMP/benchmark-baseline"
-            go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... \
+            go test -run='^$' -bench=. -benchmem -benchtime=1s -count="$BENCH_COUNT" ./... \
               > "$GITHUB_WORKSPACE/baseline/bench-current.txt" \
               2> "$GITHUB_WORKSPACE/benchmark-baseline-diagnostics.txt"
           ); then
@@ -148,7 +216,7 @@ jobs:
             echo "CPU: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs || echo unknown)"
           } > benchmark-metadata.txt
 
-          if go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./... \
+          if go test -run='^$' -bench=. -benchmem -benchtime=1s -count="$BENCH_COUNT" ./... \
             > bench-current.txt 2> benchmark-diagnostics.txt; then
             rm -f benchmark-diagnostics.txt
           else

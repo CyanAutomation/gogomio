@@ -20,6 +20,16 @@ def workflow_step(text, name):
     return match.group("body")
 
 
+def workflow_job(text, name):
+    match = re.search(
+        rf"(?ms)^  {re.escape(name)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+    )
+    if match is None:
+        raise AssertionError(f"workflow job {name!r} was not found")
+    return match.group("body")
+
+
 class WorkflowContractTests(unittest.TestCase):
     def test_kaseki_wrappers_share_a_main_only_normal_pr_workflow(self):
         reusable = workflow("kaseki-sweep.yml")
@@ -35,6 +45,15 @@ class WorkflowContractTests(unittest.TestCase):
         job_environment = reusable.split("\njobs:\n  sweep:", 1)[1].split("\n    steps:", 1)[0]
         self.assertNotIn("KASEKI_API_TOKEN:", job_environment)
         self.assertNotIn("draft", reusable.lower())
+        for name, group in (
+            ("kaseki-docs.yaml", "kaseki-docs-sweep"),
+            ("kaseki-dry.yaml", "kaseki-dry-sweep"),
+        ):
+            with self.subTest(workflow=name):
+                self.assertIn(
+                    f"group: {group}-${{{{ github.repository }}}}-${{{{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}}}",
+                    workflow(name),
+                )
 
     def test_kaseki_health_probe_uses_the_validated_controller_url(self):
         reusable = workflow("kaseki-sweep.yml")
@@ -72,7 +91,101 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertGreaterEqual(workflow(name).count("persist-credentials: false"), 1)
         benchmark = workflow("benchmark.yml")
-        self.assertIn("github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'", benchmark)
+        history = workflow_job(benchmark, "history")
+        self.assertIn("GH_TOKEN: ${{ github.token }}", history)
+
+    def test_pr_ci_cancels_obsolete_runs_without_cancelling_other_events(self):
+        for name in ("benchmark.yml", "code-coverage-test.yml"):
+            with self.subTest(workflow=name):
+                text = workflow(name)
+                self.assertIn(
+                    "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}",
+                    text,
+                )
+                self.assertIn(
+                    "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+                    text,
+                )
+
+    def test_benchmark_history_api_permission_is_scoped_to_trusted_job(self):
+        text = workflow("benchmark.yml")
+        top_level = text.split("jobs:\n", 1)[0]
+        self.assertIn("contents: read", top_level)
+        self.assertNotIn("actions: read", top_level)
+
+        history = workflow_job(text, "history")
+        benchmark = workflow_job(text, "benchmark")
+        self.assertIn(
+            "if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
+            history,
+        )
+        self.assertIn("actions: read", history)
+        self.assertNotIn("contents: read", history)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", history)
+        self.assertIn("actions/download-artifact@", benchmark)
+        self.assertNotIn("GH_TOKEN:", benchmark)
+        self.assertIn("needs: history", benchmark)
+        self.assertIn("github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'", benchmark)
+
+    def test_benchmark_uses_shorter_pr_samples_and_a_larger_full_run_budget(self):
+        text = workflow("benchmark.yml")
+        self.assertIn("timeout-minutes: 30", text)
+        self.assertIn("BENCH_COUNT: ${{ github.event_name == 'pull_request' && '5' || '10' }}", text)
+        self.assertGreaterEqual(text.count('-count="$BENCH_COUNT"'), 2)
+
+    def test_docker_release_tags_are_not_coalesced_or_used_for_latest(self):
+        text = workflow("build-multiarch.yml")
+        self.assertIn(
+            "group: docker-publish-${{ github.repository }}-${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && github.run_id) || 'latest' }}",
+            text,
+        )
+        self.assertIn('requested_tags="${GITHUB_REF_NAME}"', text)
+        self.assertNotIn('requested_tags="${GITHUB_REF_NAME},latest"', text)
+
+    def test_pull_only_docker_jobs_use_read_only_credentials_and_scan_has_no_github_permissions(self):
+        text = workflow("build-multiarch.yml")
+        for name in ("verify", "scan"):
+            with self.subTest(job=name):
+                job = workflow_job(text, name)
+                self.assertIn("DOCKERHUB_READONLY_USERNAME", job)
+                self.assertIn("DOCKERHUB_READONLY_TOKEN", job)
+                self.assertNotIn("secrets.DOCKER_USERNAME", job)
+                self.assertNotIn("secrets.DOCKER_PASSWORD", job)
+        scan = workflow_job(text, "scan")
+        self.assertIn("permissions: {}", scan)
+
+    def test_kaseki_poll_deadline_precedes_controller_and_job_timeouts(self):
+        reusable = workflow("kaseki-sweep.yml")
+        wait = workflow_step(reusable, "Wait for Kaseki completion")
+        self.assertIn("timeoutSeconds: 10800", reusable)
+        self.assertIn("POLL_TIMEOUT_SECONDS=10500", wait)
+        self.assertIn("poll_started_at=$SECONDS", wait)
+        self.assertIn("No terminal status within 175 minutes", wait)
+        self.assertNotIn("seq 1 185", wait)
+
+    def test_shared_ci_helpers_and_actionlint_run_in_workflows(self):
+        for name in ("code-coverage-test.yml", "build-multiarch.yml"):
+            with self.subTest(workflow=name):
+                self.assertIn("bash scripts/test-ci-helpers.sh", workflow(name))
+
+        for name in ("build-multiarch.yml", "goreleaser.yml"):
+            with self.subTest(workflow=name):
+                self.assertIn("bash scripts/test-go-ci.sh", workflow(name))
+        self.assertIn(
+            "go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color",
+            workflow("code-coverage-test.yml"),
+        )
+        helper_tests = (ROOT / "scripts" / "test-ci-helpers.sh").read_text()
+        go_tests = (ROOT / "scripts" / "test-go-ci.sh").read_text()
+        self.assertIn("python3 scripts/check_skills.py", helper_tests)
+        self.assertIn("python3 -B -m unittest discover -s scripts -p 'test_*.py'", helper_tests)
+        self.assertIn("go vet ./...", go_tests)
+        self.assertIn("go test ./... -race", go_tests)
+
+    def test_coverage_threshold_uses_strict_shell_and_rejects_unparseable_output(self):
+        step = workflow_step(workflow("code-coverage-test.yml"), "Enforce coverage threshold (≥75%)")
+        self.assertIn("set -euo pipefail", step)
+        self.assertIn("Could not parse total coverage", step)
 
     def test_coverage_artifact_is_attempted_after_failures(self):
         # Contract: TC-CI-01 (docs/testing/test-contracts.md).
@@ -86,7 +199,8 @@ class WorkflowContractTests(unittest.TestCase):
         command = "node --test internal/web/aspect-ratio.test.js internal/web/diagnostics-dialog.test.js"
         for name in ("code-coverage-test.yml", "build-multiarch.yml"):
             with self.subTest(workflow=name):
-                self.assertIn(command, workflow(name))
+                self.assertIn("bash scripts/test-ci-helpers.sh", workflow(name))
+        self.assertIn(command, (ROOT / "scripts" / "test-ci-helpers.sh").read_text())
 
 
 if __name__ == "__main__":
