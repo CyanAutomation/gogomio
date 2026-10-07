@@ -55,16 +55,18 @@ jobs:
           persist-credentials: false
 
       - name: Validate Kaseki configuration
+        id: validate_kaseki_configuration
         shell: bash
         run: |
           set -euo pipefail
           validated_url="$(python3 scripts/validate_kaseki_url.py "$KASEKI_BASE_URL" "$KASEKI_ALLOWED_HOSTS")"
           echo "KASEKI_BASE_URL=$validated_url" >> "$GITHUB_ENV"
+          echo "base_url=$validated_url" >> "$GITHUB_OUTPUT"
 
       - name: Verify controller health
         uses: CyanAutomation/kaseki-agent/.github/actions/verify-controller-health@30db5d15e117b8d8de13eb66766d48cf6b7d618b
         with:
-          base-url: ${{ vars.KASEKI_BASE_URL }}
+          base-url: ${{ steps.validate_kaseki_configuration.outputs.base_url }}
 
       - name: Verify controller readiness
         shell: bash
