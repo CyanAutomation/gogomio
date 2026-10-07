@@ -36,6 +36,18 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("KASEKI_API_TOKEN:", job_environment)
         self.assertNotIn("draft", reusable.lower())
 
+    def test_kaseki_health_probe_uses_the_validated_controller_url(self):
+        reusable = workflow("kaseki-sweep.yml")
+        validation = workflow_step(reusable, "Validate Kaseki configuration")
+        health = workflow_step(reusable, "Verify controller health")
+
+        self.assertIn("id: validate_kaseki_configuration", validation)
+        self.assertIn('echo "base_url=$validated_url" >> "$GITHUB_OUTPUT"', validation)
+        self.assertIn(
+            "base-url: ${{ steps.validate_kaseki_configuration.outputs.base_url }}",
+            health,
+        )
+
     def test_docker_publisher_validates_scans_verifies_and_attests_before_promotion(self):
         text = workflow("build-multiarch.yml")
         self.assertIn("github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'", text)
