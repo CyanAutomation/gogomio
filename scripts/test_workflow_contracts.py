@@ -83,7 +83,7 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_javascript_unit_tests_are_run_in_ci(self):
         # Contract: TC-WEB-02 (docs/testing/test-contracts.md).
-        command = "node --test internal/web/aspect-ratio.test.js"
+        command = "node --test internal/web/aspect-ratio.test.js internal/web/diagnostics-dialog.test.js"
         for name in ("code-coverage-test.yml", "build-multiarch.yml"):
             with self.subTest(workflow=name):
                 self.assertIn(command, workflow(name))

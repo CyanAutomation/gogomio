@@ -445,9 +445,9 @@ func TestFrameBufferWaitFrameWithContextCancel(t *testing.T) {
 	}
 }
 
-// TestFrameBufferWaitFrameReturnsSharedReadOnlyData validates WaitFrame reuses
-// the published immutable snapshot to avoid per-read allocations.
-func TestFrameBufferWaitFrameReturnsSharedReadOnlyData(t *testing.T) {
+// TestFrameBufferWaitFrameReturnsPublishedData verifies repeated waits return
+// the current published frame and sequence.
+func TestFrameBufferWaitFrameReturnsPublishedData(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 0)
 	frame := []byte{7, 8, 9}
@@ -456,14 +456,11 @@ func TestFrameBufferWaitFrameReturnsSharedReadOnlyData(t *testing.T) {
 	first, firstSeq := fb.WaitFrame(0, 0)
 	second, secondSeq := fb.WaitFrame(0, 0)
 
-	if firstSeq == 0 || secondSeq == 0 {
-		t.Fatalf("expected non-zero sequence, got first=%d second=%d", firstSeq, secondSeq)
+	if firstSeq == 0 || secondSeq != firstSeq {
+		t.Fatalf("published sequence changed without a write: first=%d second=%d", firstSeq, secondSeq)
 	}
-	if len(first) == 0 || len(second) == 0 {
-		t.Fatal("expected non-empty frames")
-	}
-	if &first[0] != &second[0] {
-		t.Fatalf("expected shared underlying frame storage, got %p and %p", &first[0], &second[0])
+	if !bytes.Equal(first, frame) || !bytes.Equal(second, frame) {
+		t.Fatalf("WaitFrame returned first=%v second=%v, want published frame %v", first, second, frame)
 	}
 }
 

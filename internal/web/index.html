@@ -1220,6 +1220,7 @@
     </div>
 
     <script src="/static/aspect-ratio.js?v=c25586154aecec7c1570b7560b99e9f9067abdfa0a91408521805ffd987a1fb4"></script>
+    <script src="/static/diagnostics-dialog.js?v=8a70de73df0ac321af2106fab956a8cc01cc6e7b7fea248b4120106cd5cb4095"></script>
     <script>
         const iconMarkup = (name) => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
 
@@ -1574,7 +1575,7 @@
             const modal = document.getElementById("diagnostics-modal");
             if (!modal.hidden) return;
 
-            diagnosticsReturnFocus = document.activeElement;
+            diagnosticsReturnFocus = GoGoMioDiagnosticsDialog.rememberReturnFocus(document);
             modal.hidden = false;
             modal.classList.add("is-open");
             document.body.classList.add("modal-open");
@@ -1604,9 +1605,7 @@
             if (controller && !controller.isStreaming) {
                 controller.setIdlePose("idle");
             }
-            if (diagnosticsReturnFocus instanceof HTMLElement && diagnosticsReturnFocus.isConnected) {
-                diagnosticsReturnFocus.focus();
-            }
+            GoGoMioDiagnosticsDialog.restoreReturnFocus(diagnosticsReturnFocus);
             diagnosticsReturnFocus = null;
         }
 
@@ -1704,27 +1703,7 @@
         // Keyboard accessibility for modal
         document.addEventListener('keydown', function(e) {
             const modal = document.getElementById('diagnostics-modal');
-            if (modal.hidden) return;
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                closeDiagnosticsModal();
-                return;
-            }
-            if (e.key === 'Tab') {
-                const focusable = Array.from(modal.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
-                    .filter(element => !element.disabled && !element.hidden && element.tabIndex >= 0);
-                if (!focusable.length) {
-                    e.preventDefault();
-                    return;
-                }
-                const first = focusable[0];
-                const last = focusable[focusable.length - 1];
-                const focusIsOutsideDialog = !modal.contains(document.activeElement);
-                if (focusIsOutsideDialog || (e.shiftKey ? document.activeElement === first : document.activeElement === last)) {
-                    e.preventDefault();
-                    (e.shiftKey ? last : first).focus();
-                }
-            }
+            GoGoMioDiagnosticsDialog.handleKeydown(e, modal, closeDiagnosticsModal, document);
         });
 
         // Close modal when clicking outside
