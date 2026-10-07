@@ -102,6 +102,8 @@ func LoadFromEnv() *Config {
 	if targetFPS := os.Getenv("MIO_TARGET_FPS"); targetFPS != "" {
 		if f, err := strconv.Atoi(targetFPS); err == nil && f > 0 {
 			cfg.TargetFPS = f
+		} else {
+			cfg.TargetFPS = cfg.FPS
 		}
 	} else {
 		cfg.TargetFPS = cfg.FPS

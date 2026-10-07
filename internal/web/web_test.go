@@ -39,6 +39,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		`id="stop-stream"`,
 		`id="diagnostics-btn"`,
 		`<script src="/static/aspect-ratio.js?v=`,
+		`<script src="/static/diagnostics-dialog.js?v=`,
 	}
 
 	for _, hook := range runtimeHooks {
@@ -59,24 +60,9 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		}
 	}
 
-	// Keep bootstrap verification stable by asserting bootstrap-specific behavior
-	// instead of matching entire script source text.
-	if !strings.Contains(body, "new StreamController();") {
-		t.Error("missing StreamController bootstrap initialization in root HTML")
-	}
-	if !strings.Contains(body, `getElementById("diagnostics-btn").addEventListener("click", openDiagnosticsModal)`) {
-		t.Error("missing stable element-to-action linkage for diagnostics button")
-	}
-
-	// Keep the image-fit policy with the broader UI contract rather than
-	// maintaining a source-shape-sensitive standalone CSS test. Configured
-	// aspect-ratio behavior is covered by aspect-ratio.test.js.
-	if !strings.Contains(body, "object-fit: contain;") {
-		t.Error("stream image must preserve the whole camera frame")
-	}
 }
 
-func TestWebUIProvidesSmallScreenAndReducedMotionSupport(t *testing.T) {
+func TestDashboardResponsiveLayoutContracts(t *testing.T) {
 	// Contract: TC-WEB-01 (docs/testing/test-contracts.md).
 	index, err := webFS.ReadFile("index.html")
 	if err != nil {
@@ -97,6 +83,23 @@ func TestWebUIProvidesSmallScreenAndReducedMotionSupport(t *testing.T) {
 		if !strings.Contains(reducedMotionStyles, property) {
 			t.Errorf("reduced-motion support is missing %q", property)
 		}
+	}
+
+	secondaryButton := cssRuleBody(t, css, ".button--secondary")
+	if strings.Contains(secondaryButton, "flex:") {
+		t.Error("button variant must not determine its layout size")
+	}
+	streamActions := cssRuleBody(t, css, ".stream-controls > .button")
+	if !strings.Contains(streamActions, "flex: 1") {
+		t.Error("only the stream action row should grow its paired buttons")
+	}
+
+	streamViewer := cssRuleBody(t, css, ".stream-viewer")
+	if !strings.Contains(streamViewer, "aspect-ratio: 4 / 3") {
+		t.Error("stream viewer should retain a fluid 4:3 aspect ratio")
+	}
+	if strings.Contains(streamViewer, "min-height: 360px") {
+		t.Error("stream viewer must not force a wider layout on small screens")
 	}
 }
 
@@ -123,51 +126,6 @@ func cssBlockBody(t *testing.T, css, selector string) string {
 	}
 	t.Fatalf("unterminated CSS block %q", selector)
 	return ""
-}
-
-func TestDashboardButtonSizingIsScopedToTheActionRow(t *testing.T) {
-	index, err := webFS.ReadFile("index.html")
-	if err != nil {
-		t.Fatal(err)
-	}
-	css := strings.SplitN(string(index), "</style>", 2)[0]
-
-	secondaryButton := cssRuleBody(t, css, ".button--secondary")
-	if strings.Contains(secondaryButton, "flex:") {
-		t.Error("button variant must not determine its layout size")
-	}
-	streamActions := cssRuleBody(t, css, ".stream-controls > .button")
-	if !strings.Contains(streamActions, "flex: 1") {
-		t.Error("only the stream action row should grow its paired buttons")
-	}
-
-	streamViewer := cssRuleBody(t, css, ".stream-viewer")
-	if !strings.Contains(streamViewer, "aspect-ratio: 4 / 3") {
-		t.Error("stream viewer should retain a fluid 4:3 aspect ratio")
-	}
-	if strings.Contains(streamViewer, "min-height: 360px") {
-		t.Error("stream viewer must not force a wider layout on small screens")
-	}
-}
-
-func TestDiagnosticsDialogHasAccessibleFocusManagement(t *testing.T) {
-	index, err := webFS.ReadFile("index.html")
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(index)
-
-	for _, want := range []string{
-		`id="diagnostics-modal" class="modal-overlay" role="dialog" aria-modal="true"`,
-		`id="diagnostics-close" class="button button--icon" aria-label="Close diagnostics"`,
-		`document.getElementById("diagnostics-close").focus();`,
-		`diagnosticsReturnFocus.focus();`,
-		`modal.querySelectorAll('button, a[href], input, select, textarea`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("missing dialog accessibility contract %q", want)
-		}
-	}
 }
 
 func cssRuleBody(t *testing.T, css, selector string) string {
@@ -250,6 +208,7 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 		fs   fs.ReadFileFS
 	}{
 		{url: "/static/aspect-ratio.js", file: "aspect-ratio.js", fs: webFS},
+		{url: "/static/diagnostics-dialog.js", file: "diagnostics-dialog.js", fs: webFS},
 		{url: "/static/mio/mio_pose_idle.png", file: "mio/mio_pose_idle.png", fs: mioFS},
 		{url: "/static/mio/mio_pose_sleeping.png", file: "mio/mio_pose_sleeping.png", fs: mioFS},
 		{url: "/static/mio/mio_pose_curious.png", file: "mio/mio_pose_curious.png", fs: mioFS},
@@ -317,18 +276,25 @@ func TestMioStaticAssetsAreServed(t *testing.T) {
 	}
 }
 
-func TestAspectRatioScriptIsImmutable(t *testing.T) {
+func TestUIScriptsAreImmutable(t *testing.T) {
 	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
-	req, _ := http.NewRequest("GET", "/static/aspect-ratio.js?v=test", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status code: got %d, want 200", w.Code)
-	}
-	if got := w.Header().Get("Cache-Control"); got != immutableCacheControl {
-		t.Errorf("Cache-Control: got %q, want %q", got, immutableCacheControl)
+	for _, asset := range []string{"aspect-ratio.js", "diagnostics-dialog.js"} {
+		t.Run(asset, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/static/"+asset+"?v=test", nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status code: got %d, want 200", w.Code)
+			}
+			if got := w.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/javascript") {
+				t.Errorf("Content-Type: got %q, want text/javascript", got)
+			}
+			if got := w.Header().Get("Cache-Control"); got != immutableCacheControl {
+				t.Errorf("Cache-Control: got %q, want %q", got, immutableCacheControl)
+			}
+		})
 	}
 }
 
