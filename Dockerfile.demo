@@ -1,6 +1,6 @@
 # Generic amd64/arm64 image for the mock-camera demo and API development.
 # Hardware camera dependencies belong only in the Pi-specific Dockerfile.
-ARG GO_IMAGE=golang:1.25-alpine3.22
+ARG GO_IMAGE=golang:1.25.13-alpine3.23
 FROM ${GO_IMAGE} AS build
 WORKDIR /src
 COPY . .
