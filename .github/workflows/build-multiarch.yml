@@ -6,6 +6,8 @@ on:
       - main
     tags:
       - 'v*'
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
     inputs:
       tags:
@@ -80,6 +82,8 @@ jobs:
     outputs:
       tag_names_csv: ${{ steps.meta.outputs.tag_names_csv }}
       digest: ${{ steps.build.outputs.digest }}
+      amd64_digest: ${{ steps.platform-digests.outputs.amd64_digest }}
+      arm64_digest: ${{ steps.platform-digests.outputs.arm64_digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -128,10 +132,23 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: cyanautomation/gogomio:${{ steps.meta.outputs.candidate_tag }}
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           sbom: true
           provenance: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Resolve candidate platform digests
+        id: platform-digests
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          : "${IMAGE_DIGEST:?Build did not return an image digest}"
+          docker buildx imagetools inspect --raw "cyanautomation/gogomio@$IMAGE_DIGEST" \
+            | python3 scripts/verify_docker_manifest.py --github-output "$GITHUB_OUTPUT"
 
   verify:
     name: Verify candidate manifest
@@ -183,11 +200,15 @@ jobs:
             | python3 scripts/verify_docker_manifest.py
 
   scan:
-    name: Scan candidate vulnerabilities
+    name: Scan candidate vulnerabilities (${{ matrix.architecture }})
     needs: [validate, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [amd64, arm64]
     steps:
       - name: Check for optional Docker Hub pull credentials
         id: pull-credentials
@@ -215,12 +236,13 @@ jobs:
       - name: Scan candidate image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: cyanautomation/gogomio@${{ needs.build.outputs.digest }}
+          image-ref: cyanautomation/gogomio@${{ matrix.architecture == 'amd64' && needs.build.outputs.amd64_digest || needs.build.outputs.arm64_digest }}
           format: table
           exit-code: '1'
           ignore-unfixed: true
           vuln-type: os,library
           severity: HIGH,CRITICAL
+          version: v0.75.0
 
   promote:
     name: Promote verified image digest

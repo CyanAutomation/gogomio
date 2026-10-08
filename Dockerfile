@@ -5,7 +5,7 @@
 ARG VERSION=0.1.0-dev
 ARG PORT=8000
 ARG INSTALL_FFMPEG=false
-ARG BUILDER_BASE_IMAGE=golang:1.25-alpine3.22
+ARG BUILDER_BASE_IMAGE=golang:1.25.13-alpine3.23
 
 # Stage 1: Build
 FROM ${BUILDER_BASE_IMAGE} AS builder
@@ -74,6 +74,7 @@ RUN set -eu; \
         (echo "ERROR: arm64 image requires libcamera-apps or rpicam-apps" >&2; exit 1); \
       apt-get purge -y --quiet gnupg; \
     fi; \
+    apt-get upgrade -y --quiet --no-install-recommends; \
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/raspi.sources
 
 # Create non-root user with explicit umask
