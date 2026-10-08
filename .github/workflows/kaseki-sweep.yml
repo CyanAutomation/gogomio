@@ -21,8 +21,8 @@ on:
         type: string
     secrets:
       KASEKI_API_TOKEN:
-        description: Optional caller secret; the kaseki-agent environment secret is used when omitted
-        required: false
+        description: Kaseki API token passed by the calling workflow
+        required: true
 
 permissions:
   contents: read

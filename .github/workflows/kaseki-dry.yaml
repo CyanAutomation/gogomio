@@ -47,3 +47,5 @@ jobs:
 
         A no-change result is successful. If there is no sufficiently valuable,
         high-confidence DRY improvement, make no changes.
+    secrets:
+      KASEKI_API_TOKEN: ${{ secrets.KASEKI_API_TOKEN }}
