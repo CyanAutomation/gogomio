@@ -34,3 +34,5 @@ jobs:
         Do not invent behavior. Avoid cosmetic rewrites. Before finishing, review the
         diff to confirm it contains documentation-only changes. If documentation is
         already accurate, make no changes and do not open a pull request.
+    secrets:
+      KASEKI_API_TOKEN: ${{ secrets.KASEKI_API_TOKEN }}
