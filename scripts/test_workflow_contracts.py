@@ -79,6 +79,35 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("validate_release_tag_event.py", text)
         self.assertRegex(text, r"(?m)^\s+timeout-minutes:")
 
+    def test_docker_images_use_patched_go_and_upgrade_debian_base_packages(self):
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
+        cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
+        go_mod = (ROOT / "go.mod").read_text()
+
+        self.assertIn("golang:1.25.13-alpine3.23", dockerfile)
+        self.assertIn("golang:1.25.13-alpine3.23", demo_dockerfile)
+        self.assertIn("GO_IMAGE=golang:1.25.13-alpine3.23", cloudbuild)
+        self.assertNotIn("BUILDER_BASE_IMAGE=golang:", cloudbuild)
+        self.assertIn("go 1.25.13", go_mod)
+        self.assertIn("apt-get upgrade -y --quiet --no-install-recommends", dockerfile)
+
+    def test_docker_images_are_refreshed_and_scanned_per_architecture(self):
+        text = workflow("build-multiarch.yml")
+        build = workflow_step(text, "Build candidate and generate attestations")
+        resolve = workflow_step(text, "Resolve candidate platform digests")
+        scan = workflow_job(text, "scan")
+
+        self.assertIn("schedule:", text)
+        self.assertIn("pull: true", build)
+        self.assertIn("no-cache: ${{ github.event_name == 'schedule' }}", build)
+        self.assertIn("verify_docker_manifest.py --github-output", resolve)
+        self.assertIn("steps.platform-digests.outputs.amd64_digest", workflow_job(text, "build"))
+        self.assertIn("steps.platform-digests.outputs.arm64_digest", workflow_job(text, "build"))
+        self.assertIn("architecture: [amd64, arm64]", scan)
+        self.assertIn("matrix.architecture == 'amd64'", scan)
+        self.assertIn("version: v0.75.0", scan)
+
     def test_release_workflow_checks_tag_commit_is_on_main(self):
         text = workflow("goreleaser.yml")
         self.assertIn("validate_release_source.py", text)
