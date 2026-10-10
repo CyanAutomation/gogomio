@@ -867,7 +867,7 @@ type DetailedHealthResponse struct {
 	CaptureFailuresTotal int64 `json:"capture_failures_total" example:"10"`
 	// Number of times capture has been restarted
 	CaptureRestartCount int64 `json:"capture_restart_count" example:"2"`
-	// Error rate as percentage
+	// Error rate percentage: failed captures divided by all capture attempts.
 	ErrorRatePercent float64 `json:"error_rate_percent" example:"0.5"`
 	// Frame sequence number (increments per frame)
 	FrameSequenceNumber uint64 `json:"frame_sequence_number" example:"216001"`
@@ -1409,10 +1409,12 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		message = "Camera is ready; capture starts when a stream or snapshot is requested"
 	}
 
-	// Calculate error rate
+	// Calculate error rate from all capture attempts. A failure before the first
+	// published frame still represents a failed attempt and yields a nonzero rate.
 	var errorRate float64
-	if frameCount > 0 {
-		errorRate = (float64(totalFailures) / (float64(totalFailures) + float64(frameCount))) * 100
+	totalAttempts := float64(totalFailures) + float64(frameCount)
+	if totalAttempts > 0 {
+		errorRate = (float64(totalFailures) / totalAttempts) * 100
 	}
 
 	// Determine health status
