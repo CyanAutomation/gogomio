@@ -58,7 +58,7 @@ definitions:
         example: false
         type: boolean
       error_rate_percent:
-        description: Error rate as percentage
+        description: Percentage of failed capture attempts out of all attempts (failed captures / (captured frames + failed captures) * 100)
         example: 0.5
         type: number
       fps_configured:

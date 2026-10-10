@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
-	"log"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +12,8 @@ import (
 	"github.com/CyanAutomation/gogomio/internal/config"
 )
 
-// TestDiagnosticsErrorRateFromHandler verifies error_rate_percent via routed /api/diagnostics handler
+// TestDiagnosticsErrorRateFromHandler verifies the documented diagnostics rate
+// through the routed handler. Contract: TC-DIAG-01 (docs/testing/test-contracts.md).
 func TestDiagnosticsErrorRateFromHandler(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -23,7 +22,9 @@ func TestDiagnosticsErrorRateFromHandler(t *testing.T) {
 		expectedErrorRate float64
 	}{
 		{name: "No frames or failures", frameCount: 0, failureCount: 0, expectedErrorRate: 0},
+		{name: "Failure before first captured frame", frameCount: 0, failureCount: 1, expectedErrorRate: 100.0},
 		{name: "No failures", frameCount: 1000, failureCount: 0, expectedErrorRate: 0},
+		{name: "One failure and one captured frame", frameCount: 1, failureCount: 1, expectedErrorRate: 50.0},
 		{name: "One percent failures", frameCount: 990, failureCount: 10, expectedErrorRate: 1.0},
 		{name: "Half failures", frameCount: 500, failureCount: 500, expectedErrorRate: 50.0},
 	}
@@ -73,7 +74,8 @@ func TestDiagnosticsErrorRateFromHandler(t *testing.T) {
 	}
 }
 
-// TestDiagnosticsHealthStatusThresholds verifies health status via the diagnostics handler response JSON.
+// TestDiagnosticsHealthStatusThresholds verifies documented status boundaries
+// through the diagnostics handler. Contract: TC-DIAG-02 (docs/testing/test-contracts.md).
 func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -179,131 +181,6 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 	}
 	if got := body["message"]; got != "Capture reliability degraded" {
 		t.Fatalf("message: got %v, want %q", got, "Capture reliability degraded")
-	}
-}
-
-// TestDiagnosticsEdgeCases tests edge cases in error rate calculation
-func TestDiagnosticsEdgeCases(t *testing.T) {
-	tests := []struct {
-		name            string
-		frameCount      int64
-		failureCount    int64
-		shouldCalculate bool
-		expectedRate    float64
-	}{
-		{
-			name:            "Very small numbers",
-			frameCount:      1,
-			failureCount:    0,
-			shouldCalculate: true,
-			expectedRate:    0.0,
-		},
-		{
-			name:            "One failure one frame",
-			frameCount:      1,
-			failureCount:    1,
-			shouldCalculate: true,
-			expectedRate:    50.0,
-		},
-		{
-			name:            "Large numbers",
-			frameCount:      1000000,
-			failureCount:    10000,
-			shouldCalculate: true,
-			expectedRate:    0.998,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var errorRate float64
-			if tt.frameCount+tt.failureCount > 0 {
-				errorRate = (float64(tt.failureCount) / float64(tt.frameCount+tt.failureCount)) * 100
-			}
-
-			if errorRate != tt.expectedRate {
-				// Allow for small floating point errors
-				if !(errorRate > tt.expectedRate-0.01 && errorRate < tt.expectedRate+0.01) {
-					t.Errorf("Error rate: got %f, want %f", errorRate, tt.expectedRate)
-				}
-			}
-		})
-	}
-}
-
-// TestSettingsUpdateErrorHandling tests error handling in settings updates
-func TestSettingsUpdateErrorHandling(t *testing.T) {
-	// Create a test request with invalid JSON
-	invalidJSON := []byte("{invalid json}")
-
-	req, err := http.NewRequest("POST", "/api/settings", bytes.NewReader(invalidJSON))
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
-
-	// Verify request body is invalid
-	decoder := json.NewDecoder(req.Body)
-	var payload interface{}
-	if err := decoder.Decode(&payload); err == nil {
-		t.Error("Expected JSON decode to fail, but it succeeded")
-	}
-}
-
-// TestPanicRecoveryLogging ensures panic recovery messages are logged
-func TestPanicRecoveryLogging(t *testing.T) {
-	var logBuffer bytes.Buffer
-	logger := log.New(&logBuffer, "", 0)
-
-	// Function with panic recovery (mimics goroutine pattern)
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Printf("❌ PANIC recovered: %v", r)
-			}
-		}()
-
-		// Trigger panic
-		panic("test panic")
-	}()
-
-	// Verify panic was logged
-	logOutput := logBuffer.String()
-	if logOutput == "" {
-		t.Error("Panic recovery did not produce log output")
-	}
-	if !bytes.Contains(logBuffer.Bytes(), []byte("PANIC")) {
-		t.Error("Log output does not contain PANIC indicator")
-	}
-}
-
-// BenchmarkDiagnosticsErrorRate benchmarks error rate calculation
-func BenchmarkDiagnosticsErrorRate(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		frameCount := int64(1000000)
-		failureCount := int64(10000)
-
-		var errorRate float64
-		if frameCount+failureCount > 0 {
-			errorRate = (float64(failureCount) / float64(frameCount+failureCount)) * 100
-		}
-		_ = errorRate
-	}
-}
-
-// BenchmarkDiagnosticsHealthStatus benchmarks health status determination
-func BenchmarkDiagnosticsHealthStatus(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		errorRate := 10.5
-		consecutiveFailures := int64(2)
-
-		healthStatus := "Excellent"
-		if errorRate > 5 {
-			healthStatus = "Degraded"
-		}
-		if errorRate > 20 || consecutiveFailures > 5 {
-			healthStatus = "Poor"
-		}
-		_ = healthStatus
 	}
 }
 
