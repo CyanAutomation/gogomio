@@ -87,7 +87,9 @@ func TestMockCameraStop(t *testing.T) {
 	}
 }
 
-// TestMockCameraDifferentResolutions tests different resolutions
+// TestMockCameraDifferentResolutions verifies each requested output size is
+// present in the generated JPEG, not just that capture returned some bytes.
+// Contract: TC-CAMERA-02 (docs/testing/test-contracts.md).
 func TestMockCameraDifferentResolutions(t *testing.T) {
 	tests := []struct {
 		width  int
@@ -99,50 +101,64 @@ func TestMockCameraDifferentResolutions(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		mc := NewMockCamera()
-		err := mc.Start(test.width, test.height, 24, 90)
-		if err != nil {
-			t.Errorf("Start with %dx%d failed: %v", test.width, test.height, err)
-			continue
-		}
+		t.Run(fmt.Sprintf("%dx%d", test.width, test.height), func(t *testing.T) {
+			clock := newFakeClock(time.Unix(1700000000, 0))
+			mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
+			if err := mc.Start(test.width, test.height, 24, 90); err != nil {
+				t.Fatalf("Start failed: %v", err)
+			}
+			t.Cleanup(func() { _ = mc.Stop() })
 
-		frame, err := mc.CaptureFrame()
-		if err != nil {
-			t.Errorf("CaptureFrame with %dx%d failed: %v", test.width, test.height, err)
-			continue
-		}
+			frame, err := mc.CaptureFrame()
+			if err != nil {
+				t.Fatalf("CaptureFrame failed: %v", err)
+			}
+			if len(frame) == 0 {
+				t.Fatal("CaptureFrame returned an empty JPEG")
+			}
 
-		if len(frame) == 0 {
-			t.Errorf("frame with %dx%d is empty", test.width, test.height)
-		}
-
-		_ = mc.Stop()
+			config, err := jpeg.DecodeConfig(bytes.NewReader(frame))
+			if err != nil {
+				t.Fatalf("decode JPEG dimensions: %v", err)
+			}
+			if config.Width != test.width || config.Height != test.height {
+				t.Fatalf("JPEG dimensions = %dx%d, want %dx%d", config.Width, config.Height, test.width, test.height)
+			}
+		})
 	}
 }
 
-// TestMockCameraQualitySettings tests different JPEG qualities
+// TestMockCameraQualitySettings verifies higher JPEG quality produces a larger
+// encoding for the same generated scene, and that each result remains decodable.
+// Contract: TC-CAMERA-02 (docs/testing/test-contracts.md).
 func TestMockCameraQualitySettings(t *testing.T) {
 	qualities := []int{50, 75, 90}
+	encodedSizes := make([]int, len(qualities))
 
-	for _, quality := range qualities {
-		mc := NewMockCamera()
-		err := mc.Start(640, 480, 24, quality)
-		if err != nil {
-			t.Errorf("Start with quality %d failed: %v", quality, err)
-			continue
+	for i, quality := range qualities {
+		t.Run(fmt.Sprintf("quality_%d", quality), func(t *testing.T) {
+			clock := newFakeClock(time.Unix(1700000000, 0))
+			mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
+			if err := mc.Start(640, 480, 24, quality); err != nil {
+				t.Fatalf("Start failed: %v", err)
+			}
+			t.Cleanup(func() { _ = mc.Stop() })
+
+			frame, err := mc.CaptureFrame()
+			if err != nil {
+				t.Fatalf("CaptureFrame failed: %v", err)
+			}
+			if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
+				t.Fatalf("generated frame is not a decodable JPEG: %v", err)
+			}
+			encodedSizes[i] = len(frame)
+		})
+	}
+
+	for i := 1; i < len(qualities); i++ {
+		if encodedSizes[i] <= encodedSizes[i-1] {
+			t.Errorf("quality %d JPEG size = %d bytes, want more than quality %d size %d bytes", qualities[i], encodedSizes[i], qualities[i-1], encodedSizes[i-1])
 		}
-
-		frame, err := mc.CaptureFrame()
-		if err != nil {
-			t.Errorf("CaptureFrame with quality %d failed: %v", quality, err)
-			continue
-		}
-
-		if len(frame) == 0 {
-			t.Errorf("frame with quality %d is empty", quality)
-		}
-
-		_ = mc.Stop()
 	}
 }
 
@@ -345,47 +361,6 @@ func TestMockCameraLifecycle(t *testing.T) {
 	}
 	if frame != nil {
 		t.Errorf("CaptureFrame after Stop returned frame data, want nil")
-	}
-}
-
-// TestMockCameraFrameIsValid tests that frames are valid JPEG data
-func TestMockCameraFrameIsValid(t *testing.T) {
-	mc := NewMockCamera()
-
-	err := mc.Start(640, 480, 24, 90)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer func() { _ = mc.Stop() }()
-
-	for i := 0; i < 5; i++ {
-		frame, err := mc.CaptureFrame()
-		if err != nil {
-			t.Fatalf("CaptureFrame %d failed: %v", i, err)
-		}
-
-		// Check JPEG markers
-		if len(frame) < 4 {
-			t.Errorf("frame %d too short: %d bytes", i, len(frame))
-			continue
-		}
-
-		// JPEG SOI (start of image)
-		if frame[0] != 0xFF || frame[1] != 0xD8 {
-			t.Errorf("frame %d invalid SOI marker: %02x %02x", i, frame[0], frame[1])
-		}
-
-		// JPEG EOI (end of image) - should be in last 2 bytes
-		found := false
-		for j := len(frame) - 2; j >= 0 && j >= len(frame)-100; j-- {
-			if frame[j] == 0xFF && frame[j+1] == 0xD9 {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Logf("frame %d: EOI marker not found in last 100 bytes (total %d)", i, len(frame))
-		}
 	}
 }
 
