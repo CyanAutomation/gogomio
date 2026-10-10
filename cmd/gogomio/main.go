@@ -257,11 +257,11 @@ func initializeCameraWithLogger(
 
 // logGoroutineStats logs goroutine count periodically to track potential leaks
 func logGoroutineStats(done <-chan struct{}) {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
 	var lastCount int
-	logGoroutineStatsWithDeps(ticker.C, func(count int) {
+	logGoroutineStatsWithTicker(done, func(interval time.Duration) (<-chan time.Time, func()) {
+		ticker := time.NewTicker(interval)
+		return ticker.C, ticker.Stop
+	}, func(count int) {
 		delta := count - lastCount
 		deltaStr := ""
 		if delta > 0 {
@@ -271,7 +271,17 @@ func logGoroutineStats(done <-chan struct{}) {
 		}
 		log.Printf("📊 Goroutines: %d%s", count, deltaStr)
 		lastCount = count
-	}, done)
+	})
+}
+
+func logGoroutineStatsWithTicker(
+	done <-chan struct{},
+	newTicker func(time.Duration) (<-chan time.Time, func()),
+	recordCount func(int),
+) {
+	tickerCh, stopTicker := newTicker(10 * time.Second)
+	defer stopTicker()
+	logGoroutineStatsWithDeps(tickerCh, recordCount, done)
 }
 
 func logGoroutineStatsWithDeps(tickerCh <-chan time.Time, recordCount func(int), done <-chan struct{}) {

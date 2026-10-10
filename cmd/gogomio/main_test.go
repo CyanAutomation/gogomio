@@ -208,20 +208,28 @@ func TestInitializeCamera_MockStartFailure(t *testing.T) {
 	}
 }
 
-func TestLogGoroutineStatsWithDeps_RecordsOneTickAndStops(t *testing.T) {
+func TestLogGoroutineStatsRecordsOneTickAndStopsTicker(t *testing.T) {
 	tickerCh := make(chan time.Time, 1)
-	stopCh := make(chan struct{})
+	done := make(chan struct{})
 	exited := make(chan struct{})
+	tickerStopped := make(chan struct{})
+	tickerCreated := make(chan time.Duration, 1)
 	recordedCounts := make(chan int, 2)
 
 	go func() {
 		defer close(exited)
-		logGoroutineStatsWithDeps(tickerCh, func(count int) {
+		logGoroutineStatsWithTicker(done, func(interval time.Duration) (<-chan time.Time, func()) {
+			tickerCreated <- interval
+			return tickerCh, func() { close(tickerStopped) }
+		}, func(count int) {
 			recordedCounts <- count
-		}, stopCh)
+		})
 	}()
+	if got := <-tickerCreated; got != 10*time.Second {
+		t.Fatalf("ticker interval = %v, want 10s", got)
+	}
 
-	tickerCh <- time.Now()
+	tickerCh <- time.Unix(1700000000, 0)
 	select {
 	case count := <-recordedCounts:
 		if count < 0 {
@@ -231,37 +239,25 @@ func TestLogGoroutineStatsWithDeps_RecordsOneTickAndStops(t *testing.T) {
 		t.Fatal("expected one goroutine count after a tick")
 	}
 
-	close(stopCh)
+	close(done)
 	select {
 	case <-exited:
 	case <-time.After(time.Second):
 		t.Fatal("goroutine stats worker did not stop")
 	}
+	select {
+	case <-tickerStopped:
+	default:
+		t.Fatal("goroutine stats worker returned without stopping its ticker")
+	}
 
 	// The channel remains writable after shutdown to prove attempted later ticks
 	// cannot result in another telemetry record.
-	tickerCh <- time.Now()
+	tickerCh <- time.Unix(1700000001, 0)
 	select {
 	case count := <-recordedCounts:
 		t.Fatalf("expected no records after shutdown, got %d", count)
 	default:
-	}
-}
-
-func TestLogGoroutineStats_StopsWhenDoneIsClosed(t *testing.T) {
-	done := make(chan struct{})
-	exited := make(chan struct{})
-
-	go func() {
-		defer close(exited)
-		logGoroutineStats(done)
-	}()
-
-	close(done)
-	select {
-	case <-exited:
-	case <-time.After(time.Second):
-		t.Fatal("goroutine stats logger did not stop")
 	}
 }
 
