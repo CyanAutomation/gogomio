@@ -68,25 +68,6 @@ func TestMockCameraCaptureFrame(t *testing.T) {
 	}
 }
 
-// TestMockCameraStop tests stopping capture
-func TestMockCameraStop(t *testing.T) {
-	mc := NewMockCamera()
-
-	err := mc.Start(640, 480, 24, 90)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-
-	err = mc.Stop()
-	if err != nil {
-		t.Fatalf("Stop failed: %v", err)
-	}
-
-	if mc.IsReady() {
-		t.Error("mock camera should not be ready after Stop")
-	}
-}
-
 // TestMockCameraDifferentResolutions verifies each requested output size is
 // present in the generated JPEG, not just that capture returned some bytes.
 // Contract: TC-CAMERA-02 (docs/testing/test-contracts.md).
@@ -162,51 +143,6 @@ func TestMockCameraQualitySettings(t *testing.T) {
 	}
 }
 
-// TestMockCameraMultipleCapturesConcurrent tests concurrent frame capture
-func TestMockCameraMultipleCapturesConcurrent(t *testing.T) {
-	mc := NewMockCamera()
-
-	err := mc.Start(640, 480, 24, 90)
-	if err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer func() { _ = mc.Stop() }()
-
-	var wg sync.WaitGroup
-	numGoroutines := 5
-	framesPerGoroutine := 10
-
-	errorChan := make(chan error, numGoroutines*framesPerGoroutine)
-
-	for g := 0; g < numGoroutines; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < framesPerGoroutine; i++ {
-				frame, err := mc.CaptureFrame()
-				if err != nil {
-					errorChan <- err
-					continue
-				}
-				if len(frame) == 0 {
-					errorChan <- fmt.Errorf("empty frame on iteration")
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-	close(errorChan)
-
-	if len(errorChan) > 0 {
-		var errs []error
-		for err := range errorChan {
-			errs = append(errs, err)
-		}
-		t.Errorf("concurrent capture errors: %v", errs)
-	}
-}
-
 // TestMockCameraCaptureFrameConcurrentSequencing validates that concurrent callers
 // receive unique frame numbers and are paced by FPS timing.
 func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
@@ -274,6 +210,9 @@ func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
 
 	seen := make(map[uint64]struct{}, totalCalls)
 	for frame := range frames {
+		if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
+			t.Fatalf("concurrent capture returned an invalid JPEG: %v", err)
+		}
 		h := fnv.New64a()
 		if _, err := h.Write(frame); err != nil {
 			t.Fatalf("failed to hash frame: %v", err)
@@ -312,7 +251,8 @@ func TestMockCameraLifecycle(t *testing.T) {
 		width  = 64
 		height = 48
 	)
-	mc := NewMockCamera()
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
 
 	// Initially not ready
 	if mc.IsReady() {
