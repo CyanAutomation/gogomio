@@ -152,6 +152,22 @@ func (c *blockingCaptureCamera) CaptureFrameWithContext(ctx context.Context) ([]
 	return nil, ctx.Err()
 }
 
+type panickingCaptureCamera struct {
+	panicStarted chan struct{}
+	startOnce    sync.Once
+}
+
+func (c *panickingCaptureCamera) Start(_, _, _, _ int) error { return nil }
+func (c *panickingCaptureCamera) Stop() error                { return nil }
+func (c *panickingCaptureCamera) IsReady() bool              { return true }
+func (c *panickingCaptureCamera) CaptureFrame() ([]byte, error) {
+	return c.CaptureFrameWithContext(context.Background())
+}
+func (c *panickingCaptureCamera) CaptureFrameWithContext(context.Context) ([]byte, error) {
+	c.startOnce.Do(func() { close(c.panicStarted) })
+	panic("simulated camera capture panic")
+}
+
 var errStopStream = errors.New("stop stream")
 
 type countingStreamWriter struct {
@@ -160,7 +176,6 @@ type countingStreamWriter struct {
 
 	mu         sync.Mutex
 	boundaries int
-	statusCode int
 	buf        []byte
 }
 
@@ -216,28 +231,13 @@ func (w *countingStreamWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (w *countingStreamWriter) WriteHeader(code int) { w.statusCode = code }
-func (w *countingStreamWriter) Flush()               {}
+func (w *countingStreamWriter) WriteHeader(int) {}
+func (w *countingStreamWriter) Flush()          {}
 
 func (w *countingStreamWriter) BoundaryCount() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.boundaries
-}
-
-func (w *countingStreamWriter) StatusCode() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.statusCode == 0 {
-		return http.StatusOK
-	}
-	return w.statusCode
-}
-
-func (w *countingStreamWriter) BodyString() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return string(w.buf)
 }
 
 // setupTestServer creates a test Chi router with API handlers
@@ -786,94 +786,6 @@ func TestDeprecatedAPIStatusEndpointUsesRuntimeConfig(t *testing.T) {
 	}
 }
 
-// TestSnapshotEndpoint tests the /snapshot.jpg endpoint
-func TestSnapshotEndpoint(t *testing.T) {
-	router, cam, _ := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
-
-	// Pre-populate frame by making a stream request in background
-	// This ensures capture loop is started and frame buffer has content
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan struct{})
-	streamWriter := newCountingStreamWriter(2)
-	go func() {
-		defer close(done)
-		req, _ := http.NewRequestWithContext(ctx, "GET", "/stream.mjpg", nil)
-		router.ServeHTTP(streamWriter, req)
-	}()
-	waitForStreamBoundaries(t, streamWriter, 1)
-	cancel()
-	waitForDone(t, done, 2*time.Second, "snapshot prefill stream")
-
-	// Now test snapshot endpoint
-	req, _ := http.NewRequest("GET", "/snapshot.jpg", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d", w.Code)
-	}
-
-	// Check content type
-	contentType := w.Header().Get("Content-Type")
-	if contentType != "image/jpeg" {
-		t.Errorf("expected content type image/jpeg, got %s", contentType)
-	}
-
-	// Check body is not empty and has JPEG markers
-	body := w.Body.Bytes()
-	if len(body) == 0 {
-		t.Error("response body is empty")
-	}
-
-	if len(body) > 1 && (body[0] != 0xFF || body[1] != 0xD8) {
-		t.Errorf("response does not have JPEG SOI marker: %02x %02x", body[0], body[1])
-	}
-}
-
-// TestStreamEndpoint tests the /stream.mjpg endpoint initialization
-func TestStreamEndpoint(t *testing.T) {
-	router, cam, _ := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
-	req = req.WithContext(ctx)
-	done := make(chan struct{})
-	streamWriter := newCountingStreamWriter(2)
-	go func() {
-		defer close(done)
-		router.ServeHTTP(streamWriter, req)
-	}()
-
-	waitForStreamBoundaries(t, streamWriter, 1)
-
-	// Cancel the context to stop the handler
-	cancel()
-
-	// Wait for handler to exit before reading response
-	waitForDone(t, done, 2*time.Second, "stream handler")
-
-	if streamWriter.BoundaryCount() < 1 {
-		t.Fatal("expected at least one frame boundary in response")
-	}
-
-	// Validate headers
-	if streamWriter.StatusCode() != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, streamWriter.StatusCode())
-	}
-	contentType := streamWriter.Header().Get("Content-Type")
-	if contentType != "multipart/x-mixed-replace; boundary=frame" {
-		t.Fatalf("expected content type %q, got %q", "multipart/x-mixed-replace; boundary=frame", contentType)
-	}
-	if !strings.Contains(contentType, "boundary=frame") {
-		t.Fatalf("expected stream boundary in content type, got %q", contentType)
-	}
-}
-
 // TestIndexEndpoint tests the / root endpoint serves the embedded UI.
 func TestIndexEndpoint(t *testing.T) {
 	router, cam, _ := setupTestServer(t)
@@ -951,61 +863,6 @@ func TestCORSHeaders(t *testing.T) {
 			t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
 		}
 	})
-}
-
-// TestMJPEGStreamingEndpoint tests the /stream.mjpg endpoint with frame transmission
-func TestMJPEGStreamingEndpoint(t *testing.T) {
-	router, cam, _ := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	req, _ := http.NewRequest("GET", "/stream.mjpg", nil)
-	req = req.WithContext(ctx)
-	// Run request in goroutine - will exit when context times out
-	done := make(chan struct{})
-	streamWriter := newCountingStreamWriter(4)
-	go func() {
-		defer close(done)
-		router.ServeHTTP(streamWriter, req)
-	}()
-	waitForStreamBoundaries(t, streamWriter, 1)
-
-	// Wait for handler to finish (context timeout or error)
-	waitForDone(t, done, 3*time.Second, "mjpeg stream handler")
-
-	// Now that handler is done, it's safe to read response without races
-
-	// Verify response headers
-	if ct := streamWriter.Header().Get("Content-Type"); ct != "multipart/x-mixed-replace; boundary=frame" {
-		t.Errorf("Content-Type: got %q, want multipart/x-mixed-replace", ct)
-	}
-
-	// Read response body - httptest.ResponseRecorder buffers everything
-	responseBody := streamWriter.BodyString()
-
-	// Verify MJPEG boundary markers are present
-	if len(responseBody) == 0 {
-		t.Fatal("no response body from stream")
-	}
-
-	if !contains(responseBody, "--frame") {
-		t.Error("MJPEG boundary marker --frame not found in response")
-	}
-
-	if !contains(responseBody, "Content-Type: image/jpeg") {
-		t.Error("JPEG Content-Type header not found in response")
-	}
-
-	if !contains(responseBody, "Content-Length:") {
-		t.Error("Content-Length header not found in response")
-	}
-
-	// Verify status code is 200 (streaming started)
-	if streamWriter.StatusCode() != http.StatusOK {
-		t.Errorf("status code: got %d, want 200", streamWriter.StatusCode())
-	}
 }
 
 // TestStreamingConnectionLimit tests that max stream connections are enforced
@@ -1822,63 +1679,77 @@ func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T)
 	}
 }
 
-func TestFrameManagerConcurrentIncrementAndStopCancelTransitionsDoNotPanic(t *testing.T) {
-	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+// Contract: TC-CAPTURE-01 (docs/testing/test-contracts.md).
+func TestFrameManagerCaptureLoopRecoversFromCameraPanic(t *testing.T) {
+	cam := &panickingCaptureCamera{panicStarted: make(chan struct{})}
+	fm := NewFrameManager(cam, &config.Config{FPS: 30, TargetFPS: 30})
+	t.Cleanup(fm.Stop)
 
-	for i := 0; i < 200; i++ {
+	fm.startCapture()
+	select {
+	case <-cam.panicStarted:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("capture loop did not call the camera")
+	}
+	waitForCaptureState(t, fm, false)
+
+	if got := fm.GetCaptureRestartCount(); got != 1 {
+		t.Fatalf("capture loop starts = %d, want 1 after recovered panic", got)
+	}
+}
+
+// Contract: TC-CONN-01 (docs/testing/test-contracts.md).
+func TestFrameManagerConcurrentIncrementDecrementAndStopLeavesNoActiveClients(t *testing.T) {
+	cfg := &config.Config{FPS: 30, TargetFPS: 30}
+	const (
+		iterations = 50
+		clients    = 4
+	)
+
+	for iteration := 0; iteration < iterations; iteration++ {
 		cam := &captureLoopCountingCamera{}
 		fm := newFrameManager(cam, cfg, 10*time.Millisecond)
+		t.Cleanup(fm.Stop)
 
-		panicCh := make(chan any, 4)
-		var wg sync.WaitGroup
-		wg.Add(3)
-
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					panicCh <- r
-				}
-			}()
-			for j := 0; j < 20; j++ {
+		start := make(chan struct{})
+		var ready, workers sync.WaitGroup
+		ready.Add(clients + 1)
+		workers.Add(clients)
+		for i := 0; i < clients; i++ {
+			go func() {
+				defer workers.Done()
+				ready.Done()
+				<-start
 				fm.IncrementClients()
-				time.Sleep(time.Microsecond)
-			}
-		}()
-
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					panicCh <- r
-				}
-			}()
-			for j := 0; j < 20; j++ {
 				fm.DecrementClients()
-				time.Sleep(time.Microsecond)
-			}
-		}()
-
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					panicCh <- r
-				}
 			}()
-			time.Sleep(2 * time.Millisecond)
-			fm.Stop()
-		}()
-
-		wg.Wait()
-		select {
-		case p := <-panicCh:
-			t.Fatalf("iteration %d: unexpected panic from Increment/Decrement/Stop race: %v", i, p)
-		default:
 		}
 
-		// Ensure cleanup if Stop() lost the race in goroutine scheduling.
-		fm.Stop()
+		stopDone := make(chan struct{})
+		go func() {
+			ready.Done()
+			<-start
+			fm.Stop()
+			close(stopDone)
+		}()
+
+		ready.Wait()
+		close(start)
+		workers.Wait()
+		waitForDone(t, stopDone, testDuration(testConditionTimeout), "frame manager stop")
+
+		if got := atomic.LoadInt64(&fm.clientCount); got != 0 {
+			t.Fatalf("iteration %d: active client count = %d, want 0 after all clients and Stop finish", iteration, got)
+		}
+		if !fm.stopped.Load() {
+			t.Fatalf("iteration %d: manager is not marked stopped after Stop returns", iteration)
+		}
+		fm.captureMu.Lock()
+		captureStarted := fm.captureStarted
+		fm.captureMu.Unlock()
+		if captureStarted {
+			t.Fatalf("iteration %d: capture loop remains active after Stop", iteration)
+		}
 	}
 }
 

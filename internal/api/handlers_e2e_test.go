@@ -69,18 +69,46 @@ func TestE2E_StreamEndpointBasic(t *testing.T) {
 	assertJPEGFrame(t, frame)
 }
 
-// TestE2E_SnapshotEndpoint validates snapshot JPEG delivery
+// TestE2E_SnapshotEndpointAfterStreaming validates snapshot JPEG delivery after
+// an MJPEG client has started and stopped capture.
 // Contract: TC-HTTP-01 (docs/testing/test-contracts.md).
-func TestE2E_SnapshotEndpoint(t *testing.T) {
+func TestE2E_SnapshotEndpointAfterStreaming(t *testing.T) {
 	testJPEG := newTestJPEGFrame(t)
-	fm := NewFrameManager(newStableFrameCamera(testJPEG), &config.Config{
-		TargetFPS: 10,
-	})
+	testConfig := &config.Config{TargetFPS: 10, MaxStreamConnections: 2}
+	fm := NewFrameManager(newStableFrameCamera(testJPEG), testConfig)
 	defer fm.Stop()
 
-	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{})
+	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
 
-	// Request snapshot
+	streamCtx, cancelStream := context.WithCancel(context.Background())
+	streamWriter := newStreamCapturingWriter(0)
+	streamDone := make(chan struct{})
+	streamRequest := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(streamCtx)
+	go func() {
+		router.ServeHTTP(streamWriter, streamRequest)
+		close(streamDone)
+	}()
+
+	select {
+	case streamedFrame := <-streamWriter.FirstFrame():
+		assertJPEGFrame(t, streamedFrame)
+	case <-time.After(2 * time.Second):
+		cancelStream()
+		select {
+		case <-streamDone:
+		case <-time.After(250 * time.Millisecond):
+			t.Fatal("stream handler did not stop after cancellation")
+		}
+		t.Fatal("timed out waiting for a complete multipart JPEG before snapshot")
+	}
+	cancelStream()
+	select {
+	case <-streamDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream handler did not stop after cancellation")
+	}
+
+	// Request a snapshot after the stream has published a frame.
 	req := httptest.NewRequest("GET", "/snapshot.jpg", nil)
 	writer := httptest.NewRecorder()
 
