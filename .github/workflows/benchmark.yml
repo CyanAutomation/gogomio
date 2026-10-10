@@ -97,8 +97,6 @@ jobs:
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      BENCH_COUNT: ${{ github.event_name == 'pull_request' && '5' || '10' }}
 
     steps:
       - name: Checkout code
@@ -112,6 +110,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Set benchmark sample count
+        run: echo "BENCH_COUNT=$(scripts/benchmark-count.sh)" >> "$GITHUB_ENV"
 
       - name: Download historical benchmark input
         if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.history.outputs.available == 'true'
