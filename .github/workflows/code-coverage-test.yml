@@ -46,18 +46,7 @@ jobs:
       - name: Enforce coverage threshold (≥75%)
         run: |
           set -euo pipefail
-          coverage_output="$(go tool cover -func=coverage.out)"
-          if ! coverage_value="$(printf '%s\n' "$coverage_output" | awk '$1 == "total:" { print $3; found=1 } END { if (!found) exit 1 }')"; then
-            echo "::error::Could not parse total coverage from go tool output."
-            exit 1
-          fi
-          if [[ ! "$coverage_value" =~ ^[0-9]+([.][0-9]+)?%$ ]]; then
-            echo "::error::Could not parse total coverage from go tool output."
-            exit 1
-          fi
-          COVERAGE="${coverage_value%\%}"
-          echo "Total coverage: ${COVERAGE}%"
-          awk -v cov="$COVERAGE" 'BEGIN { if (cov + 0 < 75) { print "Coverage " cov "% is below 75% threshold"; exit 1 } }'
+          go tool cover -func=coverage.out | python3 scripts/enforce_coverage.py --minimum 75
 
       - name: Store coverage artifact
         if: always()

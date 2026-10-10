@@ -24,3 +24,5 @@ guards a behavior that does not already have a traceable requirement or issue.
 | `TC-WEB-02` | Stream aspect ratio comes from configured resolution dimensions, and invalid CSS dimensions are rejected. | [Aspect-ratio helper](../../internal/web/aspect-ratio.js) |
 | `TC-WEB-03` | Diagnostics dialog keyboard navigation stays inside the dialog and returns focus to its opener. | [Dialog behavior helper](../../internal/web/diagnostics-dialog.js) |
 | `TC-CI-01` | The coverage report upload is attempted even after the test job fails. | [Coverage workflow](../../.github/workflows/code-coverage-test.yml) |
+| `TC-CI-02` | Pull request benchmarks use five samples; other benchmark events use ten, within the configured job timeout. | [Benchmark workflow](../../.github/workflows/benchmark.yml) |
+| `TC-CI-03` | The coverage gate accepts totals at or above 75% and rejects below-threshold or malformed totals. | [Coverage guidance](../../CONTRIBUTING.md#guidelines) |

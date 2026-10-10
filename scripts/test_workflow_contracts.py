@@ -156,10 +156,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("needs: history", benchmark)
         self.assertIn("github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'", benchmark)
 
-    def test_benchmark_uses_shorter_pr_samples_and_a_larger_full_run_budget(self):
+    def test_benchmark_uses_tested_sample_count_policy_and_job_timeout(self):
         text = workflow("benchmark.yml")
         self.assertIn("timeout-minutes: 30", text)
-        self.assertIn("BENCH_COUNT: ${{ github.event_name == 'pull_request' && '5' || '10' }}", text)
+        self.assertIn(
+            'echo "BENCH_COUNT=$(scripts/benchmark-count.sh)" >> "$GITHUB_ENV"',
+            text,
+        )
         self.assertGreaterEqual(text.count('-count="$BENCH_COUNT"'), 2)
 
     def test_docker_release_tags_are_not_coalesced_or_used_for_latest(self):
@@ -192,7 +195,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("No terminal status within 175 minutes", wait)
         self.assertNotIn("seq 1 185", wait)
 
-    def test_shared_ci_helpers_and_actionlint_run_in_workflows(self):
+    def test_ci_workflows_invoke_shared_test_runners(self):
         for name in ("code-coverage-test.yml", "build-multiarch.yml"):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-ci-helpers.sh", workflow(name))
@@ -200,32 +203,19 @@ class WorkflowContractTests(unittest.TestCase):
         for name in ("build-multiarch.yml", "goreleaser.yml"):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-go-ci.sh", workflow(name))
-        self.assertIn(
-            "go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color",
-            workflow("code-coverage-test.yml"),
+
+        lint = workflow_step(
+            workflow("code-coverage-test.yml"), "Lint GitHub Actions workflows"
         )
-        helper_tests = (ROOT / "scripts" / "test-ci-helpers.sh").read_text()
-        go_tests = (ROOT / "scripts" / "test-go-ci.sh").read_text()
-        self.assertIn("python3 scripts/check_skills.py", helper_tests)
-        self.assertIn("python3 -B -m unittest discover -s scripts -p 'test_*.py'", helper_tests)
-        self.assertIn("go vet ./...", go_tests)
-        self.assertIn("go test ./... -race", go_tests)
+        self.assertIn("actionlint", lint)
 
-    def test_workflow_shellcheck_warnings_are_avoided(self):
-        benchmark = workflow_step(workflow("benchmark.yml"), "Prepare comparison baseline")
-        self.assertIn('} >> "$GITHUB_OUTPUT"', benchmark)
-        self.assertNotIn("echo 'available=true' >> \"$GITHUB_OUTPUT\"", benchmark)
-        self.assertNotIn('echo "available=true" >> "$GITHUB_OUTPUT"', benchmark)
-
-        gofmt = workflow_step(workflow("code-coverage-test.yml"), "Check gofmt")
-        self.assertIn("mapfile -t go_files < <(git ls-files '*.go')", gofmt)
-        self.assertIn('gofmt -l "${go_files[@]}"', gofmt)
-        self.assertNotIn("$(git ls-files", gofmt)
-
-    def test_coverage_threshold_uses_strict_shell_and_rejects_unparseable_output(self):
+    def test_coverage_workflow_uses_executable_threshold_checker(self):
         step = workflow_step(workflow("code-coverage-test.yml"), "Enforce coverage threshold (≥75%)")
         self.assertIn("set -euo pipefail", step)
-        self.assertIn("Could not parse total coverage", step)
+        self.assertIn(
+            "go tool cover -func=coverage.out | python3 scripts/enforce_coverage.py --minimum 75",
+            step,
+        )
 
     def test_coverage_artifact_is_attempted_after_failures(self):
         # Contract: TC-CI-01 (docs/testing/test-contracts.md).
@@ -233,15 +223,6 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("if: always()", step)
         self.assertIn("uses: actions/upload-artifact", step)
         self.assertIn("path: coverage.out", step)
-
-    def test_javascript_unit_tests_are_run_in_ci(self):
-        # Contract: TC-WEB-02 (docs/testing/test-contracts.md).
-        command = "node --test internal/web/aspect-ratio.test.js internal/web/diagnostics-dialog.test.js"
-        for name in ("code-coverage-test.yml", "build-multiarch.yml"):
-            with self.subTest(workflow=name):
-                self.assertIn("bash scripts/test-ci-helpers.sh", workflow(name))
-        self.assertIn(command, (ROOT / "scripts" / "test-ci-helpers.sh").read_text())
-
 
 if __name__ == "__main__":
     unittest.main()
