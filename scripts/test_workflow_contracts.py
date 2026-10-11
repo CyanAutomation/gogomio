@@ -85,11 +85,12 @@ class WorkflowContractTests(unittest.TestCase):
         cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
         go_mod = (ROOT / "go.mod").read_text()
 
-        self.assertIn("golang:1.25.13-alpine3.23", dockerfile)
-        self.assertIn("golang:1.25.13-alpine3.23", demo_dockerfile)
-        self.assertIn("GO_IMAGE=golang:1.25.13-alpine3.23", cloudbuild)
+        go_version = "1.27.2"
+        self.assertIn(f"FROM golang:{go_version}-alpine3.23 AS builder", dockerfile)
+        self.assertIn(f"FROM golang:{go_version}-alpine3.23 AS build", demo_dockerfile)
+        self.assertNotIn("GO_IMAGE=golang:", cloudbuild)
         self.assertNotIn("BUILDER_BASE_IMAGE=golang:", cloudbuild)
-        self.assertIn("go 1.25.13", go_mod)
+        self.assertIn(f"go {go_version}", go_mod)
         self.assertIn("apt-get upgrade -y --quiet --no-install-recommends", dockerfile)
 
     def test_docker_images_are_refreshed_and_scanned_per_architecture(self):

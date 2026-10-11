@@ -543,7 +543,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 ## Dependencies
 
-- A Go toolchain compatible with the version declared in `go.mod` (currently Go 1.25)
+- Go 1.27.2 or newer, as declared in `go.mod`
 - The Go application has no third-party Go module dependencies.
 - Runtime camera binaries (arm64 Raspberry Pi):
   - Preferred: `rpicam-vid` via `rpicam-apps`
