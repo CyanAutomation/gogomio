@@ -1,3 +1,3 @@
 module github.com/CyanAutomation/gogomio
 
-go 1.25.13
+go 1.27.2
