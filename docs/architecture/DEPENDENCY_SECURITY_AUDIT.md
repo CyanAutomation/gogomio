@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-24
 **Project:** GoGoMio
-**Go module requirement:** Go 1.25
+**Go module requirement:** Go 1.27.2
 
 ## Go dependencies
 

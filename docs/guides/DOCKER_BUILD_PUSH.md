@@ -83,8 +83,8 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 ### Issue: Go Version Mismatch
 
 [`go.mod`](../../go.mod) is the source of truth for the project's Go version. It
-currently declares Go 1.25, so the Docker builder image and every CI job that
-builds or tests the project must provide a compatible Go 1.25 toolchain.
+currently declares Go 1.27.2, so the Docker builder image and every CI job that
+builds or tests the project must provide Go 1.27.2 or newer.
 
 When upgrading Go, update `go.mod` first, then synchronize the builder image and
 CI toolchain declarations. Do not lower the module's Go version to accommodate
