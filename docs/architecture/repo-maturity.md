@@ -409,7 +409,7 @@ __✅ Static checks present__
 CI runs `go vet ./...` and checks tracked Go files with `gofmt -l`.
 
 __✅ Type checking present__  
-Go is statically typed; all code type-safe by default. The module requires Go 1.25.
+Go is statically typed; all code type-safe by default. The module requires Go 1.27.2.
 
 __✅ No oversized files__  
 Largest files: [internal/api/handlers.go](../../internal/api/handlers.go) (~400 lines), [cmd/gogomio/main.go](../../cmd/gogomio/main.go) (~300 lines). All well under 1000-line threshold.

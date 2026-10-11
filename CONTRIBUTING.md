@@ -43,9 +43,8 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 ### Prerequisites
 
-- **Go toolchain compatible with the version declared in `go.mod`** (currently
-  Go 1.25) — Install from [go.dev](https://go.dev/dl/). The Docker builder and
-  CI must use the same compatible toolchain.
+- **Go 1.27.2 or newer** — Install from [go.dev](https://go.dev/dl/). This is
+  the minimum declared in `go.mod`; the Docker builder and CI use Go 1.27.2.
 - **Docker** — For multi-architecture builds and deployment testing
 - **Git** — For version control
 
