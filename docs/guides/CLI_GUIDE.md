@@ -15,7 +15,7 @@ The GoGoMio binary supports two modes:
 MOCK_CAMERA=true ./gogomio  # Development: mock camera
 ```
 
-### Run CLI commands
+### Run CLI commands in Docker
 
 ```bash
 # Basic status and info
@@ -274,5 +274,5 @@ docker-compose exec gogomio groups gogomio
 ## See Also
 
 - [README.md](../../README.md) - Main project documentation
-- [Dockerfile](../Dockerfile) - Docker build configuration
-- [docker-compose.yml](../docker-compose.yml) - Compose configuration with CLI examples
+- [Dockerfile](../../Dockerfile) - Docker build configuration
+- [docker-compose.yml](../../docker-compose.yml) - Compose configuration with CLI examples

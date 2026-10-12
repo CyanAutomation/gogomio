@@ -23,11 +23,11 @@ docker build -t cyanautomation/gogomio:latest \
 # - Multi-stage build optimized
 # - Binary size: 19.6 MB
 # - Build time: ~18.6s (golang compilation)
-```
+```bash
 
 ### Push Results
 
-```
+```text
 cyanautomation/gogomio:latest
 ├─ SHA256: 8da43e76c4ba02f67d2941e760aa5cba906c6fcd8d155af93cd23e093795a190
 ├─ Pushed: 5 layers + base alpine mounted
@@ -37,7 +37,7 @@ cyanautomation/gogomio:0.1.0
 ├─ SHA256: 8da43e76c4ba02f67d2941e760aa5cba906c6fcd8d155af93cd23e093795a190
 ├─ Pushed: Reused all layers (identical)
 └─ Size: 1574 bytes (manifest)
-```
+```text
 
 ### Verification - Pull from Docker Hub
 
