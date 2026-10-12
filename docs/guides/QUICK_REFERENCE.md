@@ -190,7 +190,7 @@ docker stats
 | **GitHub** | <https://github.com/CyanAutomation/gogomio> |
 | **Docker Hub** | <https://hub.docker.com/r/cyanautomation/gogomio> |
 | **Platforms** | amd64, arm64 |
-| **Status** | Production Ready |
+| **Status** | No built-in authentication; restrict access to a trusted network |
 
 ## One-Liners
 
@@ -246,5 +246,5 @@ docker exec gogomio-gogomio-1 cat /tmp/gogomio/settings.json > settings.json
 ---
 
 **Last Updated**: April 14, 2026  
-**Version**: Phase 3 (Production Ready)  
-**Status**: ✅ All systems operational
+**Reference snapshot**: April 14, 2026
+**Status**: Check the root README and current CI/release information before deployment

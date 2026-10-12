@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-Motion In Ocean is now deployed to Docker Hub and ready for production use on any platform.
+This guide covers mock-camera smoke tests and Raspberry Pi deployment. GoGoMio has no built-in authentication; keep it on a trusted network or place it behind an authenticated reverse proxy before remote access. Check the root README for current image and security information.
 
 ### Docker Hub
 
@@ -486,4 +486,4 @@ firefox http://localhost:8000/
 
 ---
 
-**Status**: Production Ready ✅
+**Status**: Review the current release and security guidance before deployment.

@@ -1,10 +1,12 @@
-# Docker Hub Deployment Report - Phase 3 Complete
+# Docker Hub Deployment Report - Historical Snapshot
 
-## ✅ Deployment Successful
+This report records a publication state from 2026-04-14. Verify current image tags and follow the root README's security guidance before deploying; the service has no built-in authentication.
+
+## Publication state recorded by this report
 
 **Date**: 2026-04-14  
 **Version**: Phase 3 (Complete)  
-**Status**: 🚀 Ready for Production
+**Status**: Image publication reported as successful at the date above; current status is not verified here
 
 ---
 
@@ -19,7 +21,7 @@
 - ✅ Persistent settings management
 - ✅ Real camera support (V4L2/ffmpeg)
 - ✅ Mock camera for development
-- ✅ 81 comprehensive tests (all passing)
+- See current CI checks for test results; this report is not a test record for the current revision.
 - ✅ Multi-architecture support
 
 ### Docker Hub Repository
@@ -64,7 +66,7 @@ docker buildx build \
 
 **Image Manifest**:
 
-```
+```text
 docker.io/cyanautomation/gogomio:latest
 ├── SHA256: (amd64) df0cf59a2e7ff69aa16f59968bc80e4495ed3bb3...
 ├── SHA256: (arm64) 67de3cb1b94fb910b4e185184c92ca8ac7575eebc...
@@ -81,7 +83,7 @@ docker.io/cyanautomation/gogomio:latest
 | ---------- | ------- |
 | Repository | docker.io/cyanautomation/gogomio |
 | Base Image | alpine:3.19 |
-| Go Version | Compatible with the version declared in `go.mod` (currently 1.25) |
+| Go Version | See the current version declared in `go.mod` |
 | Binary Build | Static, CGO disabled, stripped |
 | Binary Size | ~8.9MB |
 | Runtime Size | ~11-12MB per architecture |
@@ -389,7 +391,7 @@ docker stack deploy -c docker-compose.yml gogomio
 
    ```bash
    docker pull docker.io/cyanautomation/gogomio:latest
-   ```
+   ```text
 
 3. **Run application**:
 
@@ -399,7 +401,7 @@ docker stack deploy -c docker-compose.yml gogomio
 
 4. **Access web UI**:
 
-   ```
+   ```text
    http://localhost:8000/
    ```
 
@@ -437,18 +439,18 @@ docker stack deploy -c docker-compose.yml gogomio
 - ✅ Updated docker-compose.mock.yml
 - ✅ Tested with docker-compose
 - ✅ Created deployment guide
-- ✅ Production ready
+- Production readiness was not established by this historical checklist.
 
 ---
 
 ## Status
 
-**🚀 PRODUCTION READY**
+### Deployment status
 
-Motion In Ocean is now fully deployed and ready for immediate production use on:
+This file is a point-in-time deployment report. It does not establish that the current image is suitable for production. The service has no built-in authentication; follow the current security guidance in the root README before exposing it to a network.
 
 - ✅ Regular computers (amd64)
 - ✅ Raspberry Pi (arm64)
 - ✅ Any Linux system with Docker
 
-**No local builds required. Simple `docker-compose up -d` deployment.**
+The commands above use the published image. They do not build the current source checkout.
