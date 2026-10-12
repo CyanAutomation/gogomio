@@ -329,4 +329,4 @@ For GitHub Actions or other CI systems:
 
 - [Docker buildx documentation](https://docs.docker.com/build/architecture/)
 - [Multi-architecture builds](https://docs.docker.com/build/building/multi-platform/)
-- [GoGoMio MULTI_ARCH_BUILD.md](../MULTI_ARCH_BUILD.md)
+- [GoGoMio multi-architecture build report](../docs/archive/MULTI_ARCH_BUILD.md)

@@ -32,7 +32,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
   -t cyanautomation/gogomio:0.1.0-multiarch \
   -t cyanautomation/gogomio:0.1.0 \
   --push -f Dockerfile .
-```
+```text
 
 ### Build Timeline
 
@@ -120,7 +120,7 @@ docker compose -f docker-compose.mock.yml up
 
 **Local amd64 test successful:**
 
-```
+```text
 2026/04/14 21:15:12 🌊 Motion In Ocean - Go Edition v0.1.0-dev
 2026/04/14 21:15:12 Using mock camera (development mode)
 2026/04/14 21:15:12 Camera started: 640x480 @ 24 FPS
@@ -134,7 +134,7 @@ docker compose -f docker-compose.mock.yml up
 
 ### Binary Size Information
 
-```
+```text
 Image: cyanautomation/gogomio:latest (uncompressed)
 ├─ linux/amd64: ~19.6 MB
 └─ linux/arm64: ~19.6 MB (identical size due to static Go binary)

@@ -150,4 +150,4 @@ All existing environment variables work unchanged:
 - [Raspberry Pi libcamera Documentation](https://www.raspberrypi.com/documentation/computers/camera_software.html)
 - [libcamera-vid Usage](https://www.raspberrypi.com/documentation/computers/camera_software.html#libcamera-vid-options)
 - [Docker Build Documentation](https://docs.docker.com/engine/reference/builder/)
-- [BuildX Cross-Compilation](https://docs.docker.com/build/buildx/)
+- [Docker multi-platform builds](https://docs.docker.com/build/building/multi-platform/)

@@ -1,7 +1,7 @@
 services:
   gogomio:
     image: docker.io/cyanautomation/gogomio:latest
-    # For testing on any platform (amd64, arm64, etc.)
+    # Keep the mock test image architecture consistent; ARM hosts may emulate amd64.
     platform: linux/amd64
     ports:
       - "8000:8000"

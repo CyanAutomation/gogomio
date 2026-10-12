@@ -492,7 +492,7 @@ GoGoMio is a **hardware-integrated, real-time streaming application** designed f
 
 **Signal Implications**:
 
-- **Documentation (Much Higher Weight)**: GoGoMio provides excellent guides ([RASPBERRY_PI_BUILD.md](../../docs/guides/RASPBERRY_PI_BUILD.md), [DEPLOYMENT_GUIDE.md](../../docs/guides/DEPLOYMENT_GUIDE.md), [DOCKER_HUB_DEPLOYMENT.md](../../docs/guides/DOCKER_HUB_DEPLOYMENT.md)).
+- **Documentation (Much Higher Weight)**: GoGoMio provides focused guides ([RASPBERRY_PI_BUILD.md](guides/RASPBERRY_PI_BUILD.md), [DEPLOYMENT_GUIDE.md](guides/DEPLOYMENT_GUIDE.md)) and a historical [Docker Hub deployment report](archive/DOCKER_HUB_DEPLOYMENT.md).
 - **Troubleshooting (Critical)**: Common issues: camera not detected, permission errors, low FPS. GoGoMio's [README troubleshooting section](../../README.md#troubleshooting) is comprehensive.
 - **Version Management (Important)**: Go version, Docker base image version (Debian, libcamera version) all affect behavior. Documented in [Dockerfile](../../Dockerfile) and guides.
 
