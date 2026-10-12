@@ -23,14 +23,15 @@ This directory is organized around **canonical, current documentation** and a se
 - [Quick Reference](./guides/QUICK_REFERENCE.md)
 - [Deployment Guide](./guides/DEPLOYMENT_GUIDE.md)
 - [Raspberry Pi Build](./guides/RASPBERRY_PI_BUILD.md)
-- [Docker Build & Push](./guides/DOCKER_BUILD_PUSH.md)
-- [Docker Hub Deployment](./guides/DOCKER_HUB_DEPLOYMENT.md)
-- [Multi-Arch Build](./guides/MULTI_ARCH_BUILD.md)
 
 ### Reference
 
 - [OpenAPI JSON](./reference/swagger.json)
 - [OpenAPI YAML](./reference/swagger.yaml)
+
+### Contributor resources
+
+- [Contributing guide](../CONTRIBUTING.md)
 
 ### Architecture
 
@@ -46,6 +47,9 @@ This directory is organized around **canonical, current documentation** and a se
 - [Historical golangci-lint analysis](./archive/GOLANGCI_LINT_ANALYSIS.md)
 - [Comprehensive Improvement Summary](./archive/COMPREHENSIVE_IMPROVEMENT_SUMMARY.md)
 - [Docker Deployment Summary](./archive/DOCKER_DEPLOYMENT_SUMMARY.md)
+- [Docker Build & Push report (historical)](./archive/DOCKER_BUILD_PUSH.md)
+- [Docker Hub Deployment report (historical)](./archive/DOCKER_HUB_DEPLOYMENT.md)
+- [Multi-Arch Build report (historical)](./archive/MULTI_ARCH_BUILD.md)
 - [Option 2 Implementation](./archive/OPTION2_IMPLEMENTATION.md)
 - [Phase 1 Summary](./archive/PHASE1_SUMMARY.md)
 - [Phase 2 Complete](./archive/PHASE2_COMPLETE.md)

@@ -57,14 +57,14 @@ This project adheres to the Contributor Covenant. By participating, you are expe
    chmod +x .githooks/pre-commit
    ```
 
-3. **Configure environment** (for development):
+2. **Configure environment** (for development):
 
    ```bash
    cp .env.example .env
    # Edit .env if needed; defaults are fine for mock camera mode
    ```
 
-4. **Run tests locally** (before any commits):
+3. **Run tests locally** (before any commits):
 
    ```bash
    go test ./... -v -race -cover

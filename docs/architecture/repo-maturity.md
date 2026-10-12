@@ -463,7 +463,7 @@ __✅ Development/deployment guide__
 
 * [RASPBERRY_PI_BUILD.md](../../docs/guides/RASPBERRY_PI_BUILD.md) — Pi deployment
 * [DEPLOYMENT_GUIDE.md](../../docs/guides/DEPLOYMENT_GUIDE.md) — Docker/container deployment
-* [MULTI_ARCH_BUILD.md](../../docs/guides/MULTI_ARCH_BUILD.md) — cross-arch Docker builds
+* [MULTI_ARCH_BUILD.md](../archive/MULTI_ARCH_BUILD.md) — historical cross-arch Docker build report
 
 ⸻
 
