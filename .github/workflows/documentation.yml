@@ -38,5 +38,6 @@ jobs:
         with:
           lycheeVersion: v0.24.2
           args: >-
-            --verbose --no-progress --exclude-loopback --retry-wait-time 2 --accept 200..=299,403,429
+            --verbose --no-progress --exclude-loopback --exclude '^http://raspberrypi\.local:8000/'
+            --retry-wait-time 2 --accept 200..=299,403,429
             README.md CONTRIBUTING.md docs/README.md 'docs/guides/*.md'
