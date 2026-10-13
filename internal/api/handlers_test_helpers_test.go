@@ -38,7 +38,7 @@ func assertJPEGFrame(t testing.TB, frame []byte) {
 	}
 }
 
-// stableFrameCamera generates consistent JPEG frames for streaming tests and benchmarks.
+// stableFrameCamera generates consistent JPEG frames for streaming tests.
 type stableFrameCamera struct {
 	frame      []byte
 	captureErr error

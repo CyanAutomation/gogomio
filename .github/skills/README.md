@@ -16,7 +16,7 @@ These repository skills give GitHub Copilot focused guidance for specialized GoG
 - Describe current repository behavior. Label proposed future behavior as a proposal, not as an existing default.
 - Keep each `SKILL.md` focused on when it applies and the project-specific decisions it changes. Link to implementation, tests, or a focused reference for detail.
 - Keep each frontmatter `name` aligned with its skill directory and keep this catalog in sync.
-- Keep documented `go test -run` and `-bench` selectors matched to actual test functions.
+- Keep documented `go test -run` selectors matched to actual test functions.
 - Run the skill checks after editing:
 
   ```bash

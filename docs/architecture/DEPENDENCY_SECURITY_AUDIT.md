@@ -1,6 +1,6 @@
 # Dependency and Build Tooling Review
 
-**Date:** 2026-09-24
+**Date:** 2026-10-13
 **Project:** GoGoMio
 **Go module requirement:** Go 1.27.2
 
@@ -8,20 +8,19 @@
 
 The application uses internal packages and the Go standard library. It has no third-party Go module requirements, so `go.mod` has no `require` block and `go.sum` is not needed. The HTTP router, command dispatch, and API reference serving use standard-library and project code.
 
-This removes application module downloads from Docker builds and the normal build and test jobs. The benchmark comparison job still installs `golang.org/x/perf/cmd/benchstat` when it runs. It does not remove the trust placed in the Go toolchain, container base images, OS packages, or build and release services.
+This removes application module downloads from Docker builds and normal build and test jobs. It does not remove the trust placed in the Go toolchain, container base images, OS packages, or build and release services.
 
 ## Runtime and delivery tools
 
 - Raspberry Pi deployments use `rpicam-vid` or `libcamera-vid`; `ffmpeg` is the compatibility fallback. These tools provide access to camera drivers and codecs.
 - Docker and Docker Compose provide the supported deployment path. Buildx creates multi-architecture images.
 - GitHub Actions runs CI and stores coverage reports as workflow artifacts. GoReleaser packages binary releases.
-- The benchmark workflow installs `benchstat` on demand to compare benchmark results; it is a CI-only tool, not an application dependency.
 
 These tools have distinct delivery or hardware roles and are not duplicated by the in-process Go application.
 
 ## CI checks
 
-Normal CI checks use Go's built-in `go test`, `go vet`, and `gofmt`. The deployment workflows still use runner-provided `jq` to process service responses; the Go builder no longer installs `jq` to summarize test logs. Dependency updates are not configured in Dependabot because the application module has no third-party Go packages; GitHub Actions updates remain enabled. The separately installed benchmark tool is not tracked by Dependabot.
+Normal CI checks use Go's built-in `go test`, `go vet`, and `gofmt`. The deployment workflows use runner-provided `jq` to process service responses. Dependency updates are not configured in Dependabot because the application module has no third-party Go packages; GitHub Actions updates remain enabled.
 
 ## Scope and maintenance
 
