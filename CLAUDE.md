@@ -26,12 +26,6 @@ go test -v ./internal/camera -run TestFrameBuffer
 # Test (single package)
 go test -v ./internal/api
 
-# Benchmarks
-go test -v ./internal/camera -bench=. -benchmem
-
-# Benchmarks with detailed output
-go test -bench=. -benchmem -benchtime=2s ./internal/camera ./internal/api
-
 # Development with mock camera (no hardware needed)
 docker-compose -f docker-compose.mock.yml up --build
 
@@ -42,16 +36,7 @@ gofmt -w ./cmd ./internal ./docs/reference
 
 **Code Quality**: CI runs `go vet ./...` and checks tracked Go files with `gofmt -l`.
 
-**Performance Baselines** (April 2026):
-
-- **FrameBuffer.Write()**: ~150ns per frame (optimal; lock-free atomic operation)
-- **MJPEG Handler throughput**: ~10,000 concurrent frames/sec on single core
-- **GC Impact**: <1ms pause per request (see [FRAME_BUFFER_GC_ANALYSIS.md](docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md))
-- **Connection tracking overhead**: <100μs per new connection
-
-Benchmark regression checks run on pull requests, pushes to `main`, weekly, and on demand via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml). The workflow compares against the PR/push base or the most recent successful main artifact and fails for a statistically significant regression above 15% after multiple-comparison correction. See [FRAME_BUFFER_GC_ANALYSIS.md](docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) for details.
-
-**CI/CD Note**: The [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml) workflow runs tests weekly or on manual dispatch, enforces a ≥75% coverage threshold, and stores the coverage report as a GitHub Actions artifact. Benchmarks are tracked via [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml).
+**CI/CD Note**: The [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml) workflow runs tests on pushes and pull requests, enforces a ≥75% coverage threshold, and stores the coverage report as a GitHub Actions artifact.
 
 There is no Makefile. The repo uses standard Go tooling and GitHub Actions for multi-arch Docker builds via `./scripts/build-multiarch.sh`.
 

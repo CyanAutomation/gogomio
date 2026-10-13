@@ -30,7 +30,7 @@ These settings are loaded by [`internal/config/config.go`](../../../internal/con
 - The frame buffer retains the latest immutable frame and its sequence. `Write` copies caller data; `WriteImmutable` transfers ownership, so callers must not mutate the published slice. See [`internal/camera/frame_buffer.go`](../../../internal/camera/frame_buffer.go).
 - Streams share the latest-frame buffer rather than maintaining a frame queue per client. The configured stream limit bounds concurrent stream handlers; it does not adapt to device memory.
 - Resolution and FPS are validated at startup. The application does not lower them automatically when RAM is low, cap FPS by CPU count, or change settings in response to memory pressure.
-- Measure on the target device before proposing new resource thresholds. Keep estimates, benchmark results, and measured device limits distinct.
+- Measure on the target device before proposing new resource thresholds. Keep estimates separate from observed device limits.
 
 ## Container and architecture changes
 

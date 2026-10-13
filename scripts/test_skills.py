@@ -20,7 +20,6 @@ class ValidateSkillsTests(unittest.TestCase):
             "import \"testing\"\n"
             "func TestCameraStart(t *testing.T) {}\n"
             "func TestCameraStop(t *testing.T) {}\n"
-            "func BenchmarkCameraStart(b *testing.B) {}\n"
         )
         (self.skills / "README.md").write_text(
             "# Skills\n\n[Camera patterns](./camera-patterns/SKILL.md)\n"
@@ -33,7 +32,6 @@ class ValidateSkillsTests(unittest.TestCase):
             "See [the guide](../../../docs/guide.md).\n\n"
             "```bash\n"
             "go test ./internal/camera -run 'TestCameraStart|TestCameraStop' -race\n"
-            "go test ./internal/camera -run '^$' -bench '^BenchmarkCameraStart$'\n"
             "```\n"
         )
 

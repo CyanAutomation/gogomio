@@ -90,10 +90,10 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 
 | Signal | Status | Evidence | Notes |
 | -------- | -------- | ---------- | ------- |
-| Tests directory/files exist | ✅ Met | [internal/](../../internal/) contains 19 test files: `*_test.go` | Unit tests, integration tests, race tests, benchmark tests |
+| Tests directory/files exist | ✅ Met | [internal/](../../internal/) contains 18 test files: `*_test.go` | Unit tests, integration tests, and race tests |
 | Tests runnable locally | ✅ Met | [CLAUDE.md](../../CLAUDE.md): `go test ./... -v -race -cover` | Command documented; can be run without CI |
 | Tests executed in CI | ❌ **NOT MET** | [.github/workflows/](../../.github/workflows/) has `build-multiarch.yml` only | Docker builds pass but no dedicated test workflow; **MAJOR GAP** |
-| Multiple test types exist | ✅ Met | Unit (config, camera, api), integration (handlers), race (frame_buffer, connection_tracker), benchmark, recovery | 4 test types present covering critical paths |
+| Multiple test types exist | ✅ Met | Unit (config, camera, api), integration (handlers), race (frame_buffer, connection_tracker), recovery | 4 test types present covering critical paths |
 | Build/test passes | ⚠️ Partial | Docker builds succeed; tests pass locally | Tests not executed in CI pipeline; docker builds in CI pass |
 
 **Category Score: 3.5/5** | **Contribution: (3.5/5) × 15 = 10.5 points**  
@@ -450,10 +450,10 @@ GoGoMio is a **hardware-integrated, real-time streaming application** designed f
 **Signal Implications**:
 
 - **Codebase Maintainability**: Oversized files (>1000 lines) become a **higher risk**. GoGoMio passes (largest ~500 lines), but this is important for latency debugging.
-- **Performance Documentation**: While not a rubric signal, gogomio benefits from benchmarks ([frame_buffer_benchmark_test.go](../../internal/camera/frame_buffer_benchmark_test.go)) and GC analysis ([FRAME_BUFFER_GC_ANALYSIS.md](../../docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md)).
+- **GC Analysis**: The [frame-buffer analysis](../../docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) identifies allocation paths and recommends profiling before optimization.
 - **Concurrency Testing**: Race condition tests are **non-negotiable** because the FrameBuffer is the hot path for all clients. GoGoMio correctly tests with `-race` flag.
 
-**See**: [RACE_CONDITIONS_ANALYSIS.md](../../docs/architecture/RACE_CONDITIONS_ANALYSIS.md), benchmarks in [internal/camera/](../../internal/camera/)
+**See**: [RACE_CONDITIONS_ANALYSIS.md](../../docs/architecture/RACE_CONDITIONS_ANALYSIS.md) and [FRAME_BUFFER_GC_ANALYSIS.md](../../docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md).
 
 ---
 
@@ -523,7 +523,7 @@ GoGoMio is a **hardware-integrated, real-time streaming application** designed f
 | ---------- | ---------------- | ---------- |
 | **Mock mode for development** | Enables full testing without hardware; rare among embedded projects | [mock_camera.go](../../internal/camera/mock_camera.go), [docker-compose.mock.yml](../../docker-compose.mock.yml) |
 | **Comprehensive hardware documentation** | Reduces deployment friction; critical for Raspberry Pi users | [RASPBERRY_PI_BUILD.md](../../docs/guides/RASPBERRY_PI_BUILD.md), [DEPLOYMENT_GUIDE.md](../../docs/guides/DEPLOYMENT_GUIDE.md) |
-| **Real-time performance testing** | Benchmarks and GC analysis ensure latency requirements are met | [frame_buffer_benchmark_test.go](../../internal/camera/frame_buffer_benchmark_test.go), [FRAME_BUFFER_GC_ANALYSIS.md](../../docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) |
+| **Frame-buffer allocation analysis** | The GC analysis documents allocation paths and a profiling approach | [FRAME_BUFFER_GC_ANALYSIS.md](../../docs/architecture/FRAME_BUFFER_GC_ANALYSIS.md) |
 | **Race condition testing** | Critical for streaming applications; prevents frame buffer corruption | [frame_buffer_race_test.go](../../internal/camera/frame_buffer_race_test.go), [RACE_CONDITIONS_ANALYSIS.md](../../docs/architecture/RACE_CONDITIONS_ANALYSIS.md) |
 | **Multi-architecture Docker builds** | Supports both development (amd64) and Raspberry Pi (arm64) without manual builds | [build-multiarch.yml](../../.github/workflows/build-multiarch.yml), [scripts/build-multiarch.sh](../../scripts/build-multiarch.sh) |
 | **Thread-safe frame buffer with condition variables** | Production-grade concurrency for real-time video streaming | [frame_buffer.go](../../internal/camera/frame_buffer.go) |

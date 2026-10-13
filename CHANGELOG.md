@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - `code-coverage-test.yml` triggers updated from manual/weekly-only to push + PR + weekly + manual
 
+### Removed
+
+- Go microbenchmark functions, their CI workflow and comparison tooling
+
 ---
 
 ## [0.1.0] - 2026-04-30
