@@ -62,7 +62,7 @@ docker-compose ps
 | `/snapshot.jpg` | GET | Latest frame |
 | `/api/config` | GET | Configuration & stats |
 | `/api/status` | GET | Server status |
-| `/api/settings` | GET/POST/PUT | Manage settings |
+| `/v1/api/settings` | GET/POST/PUT | Manage settings |
 | `/docs/index.html` | GET | **Swagger API documentation** |
 
 ## Example API Calls
@@ -75,12 +75,12 @@ curl http://localhost:8000/health | jq
 curl http://localhost:8000/api/config | jq
 
 # Save settings
-curl -X POST http://localhost:8000/api/settings \
+curl -X POST http://localhost:8000/v1/api/settings \
   -H "Content-Type: application/json" \
   -d '{"brightness": 150, "contrast": 120}'
 
 # Get settings
-curl http://localhost:8000/api/settings | jq
+curl http://localhost:8000/v1/api/settings | jq
 
 # Download snapshot
 curl http://localhost:8000/snapshot.jpg -o frame.jpg
@@ -245,6 +245,6 @@ docker exec gogomio-gogomio-1 cat /tmp/gogomio/settings.json > settings.json
 
 ---
 
-**Last Updated**: April 14, 2026  
+**Last Updated**: April 14, 2026
 **Reference snapshot**: April 14, 2026
 **Status**: Check the root README and current CI/release information before deployment

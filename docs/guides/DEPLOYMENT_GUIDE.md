@@ -62,7 +62,7 @@ docker-compose -f docker-compose.mock.yml down
 docker-compose -f docker-compose.mock.yml logs -f
 ```
 
-**Resolution**: 1280x720 @ 30 FPS  
+**Resolution**: 1280x720 @ 30 FPS
 **Access**: <http://localhost:8000/>
 
 ### For Raspberry Pi (Real Camera)
@@ -81,7 +81,7 @@ docker-compose down
 docker-compose logs -f
 ```
 
-**Resolution**: 640x480 @ 24 FPS  
+**Resolution**: 640x480 @ 24 FPS
 **Access**: <http://raspberrypi.local:8000/>
 
 ### For Docker Hub Registry Pull
@@ -186,27 +186,27 @@ curl http://localhost:8000/api/config | jq
 curl http://localhost:8000/snapshot.jpg -o frame.jpg
 
 # Save settings
-curl -X POST http://localhost:8000/api/settings \
+curl -X POST http://localhost:8000/v1/api/settings \
   -H "Content-Type: application/json" \
   -d '{"brightness": 150, "contrast": 120}'
 
 # Get settings
-curl http://localhost:8000/api/settings | jq
+curl http://localhost:8000/v1/api/settings | jq
 ```
 
 ### Web UI Features
 
-1. **Live Stream Viewer**  
+1. **Live Stream Viewer**
    - Real-time MJPEG display
    - Auto-reconnect on disconnect
    - Connection status indicator
 
-2. **Settings Controls**  
+2. **Settings Controls**
    - Brightness, Contrast, Saturation sliders
    - Save/Reset buttons
    - Persistent across restarts
 
-3. **Statistics Dashboard**  
+3. **Statistics Dashboard**
    - FPS counter (updates every 2 seconds)
    - Camera resolution
    - JPEG quality
