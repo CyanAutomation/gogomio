@@ -30,8 +30,8 @@ func TestStreamStatsRecordFrame(t *testing.T) {
 func TestStreamStatsFPSCalculation(t *testing.T) {
 	stats := NewStreamStats()
 
-	// Record 10 frames at ~1ms intervals
-	baseTime := time.Now().UnixNano()
+	// Record 10 frames at 1 ms intervals.
+	const baseTime int64 = 1_700_000_000_000
 	for i := 0; i < 10; i++ {
 		ts := baseTime + int64(i*1000000) // 1ms apart (nanoseconds)
 		stats.RecordFrame(ts)
@@ -43,10 +43,9 @@ func TestStreamStatsFPSCalculation(t *testing.T) {
 		t.Errorf("frame count is %d, want 10", frameCount)
 	}
 
-	// With 10 frames over ~9ms, FPS should be roughly (9 frames / 9ms) = 1000 FPS
-	// Allow some tolerance due to timing variations
-	if fps < 500 || fps > 1500 {
-		t.Errorf("FPS is %v, want ~1000", fps)
+	// Nine 1 ms intervals yield 1000 FPS.
+	if math.Abs(fps-1000) > 1e-9 {
+		t.Fatalf("FPS is %v, want 1000 ± 1e-9", fps)
 	}
 }
 
@@ -172,20 +171,19 @@ func TestStreamStatsSnapshotConsistency(t *testing.T) {
 	<-done
 }
 
-// TestStreamStatsFPSWithZeroTimeSpan tests FPS when frames arrive simultaneously
-func TestStreamStatsFPSWithZeroTimeSpan(t *testing.T) {
+// Contract: TC-STATS-01 (docs/testing/test-contracts.md).
+func TestStreamStatsReportsZeroFPSForIdenticalTimestamps(t *testing.T) {
 	stats := NewStreamStats()
 
-	// Record 10 frames with identical timestamp
-	ts := time.Now().UnixNano()
+	const ts int64 = 1_700_000_000_000
 	for i := 0; i < 10; i++ {
 		stats.RecordFrame(ts)
 	}
 
 	_, _, fps := stats.Snapshot()
 
-	if !math.IsNaN(fps) && fps != 0 {
-		t.Errorf("FPS with zero time span should be 0 or NaN, got %v", fps)
+	if fps != 0 {
+		t.Fatalf("FPS for identical timestamps = %v, want 0", fps)
 	}
 }
 

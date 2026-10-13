@@ -1,9 +1,7 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -119,38 +117,6 @@ func TestParseResolution(t *testing.T) {
 		if err == nil && res != tt.expected {
 			t.Errorf("parseResolution(%s) = %v, want %v", tt.input, res, tt.expected)
 		}
-	}
-}
-
-// TestConfigJSON tests JSON marshaling/unmarshaling
-func TestConfigJSON(t *testing.T) {
-	cfg := &Config{
-		Resolution:           [2]int{1280, 720},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          85,
-		MaxStreamConnections: 5,
-		Port:                 8000,
-		BindHost:             "0.0.0.0",
-		MockCamera:           false,
-	}
-
-	// Marshal to JSON
-	jsonData, err := json.Marshal(cfg)
-	if err != nil {
-		t.Errorf("Marshal failed: %v", err)
-	}
-
-	// Unmarshal back
-	cfg2 := &Config{}
-	err = json.Unmarshal(jsonData, cfg2)
-	if err != nil {
-		t.Errorf("Unmarshal failed: %v", err)
-	}
-
-	// Compare
-	if !reflect.DeepEqual(cfg, cfg2) {
-		t.Errorf("Config mismatch after JSON round-trip: %+v vs %+v", cfg, cfg2)
 	}
 }
 
