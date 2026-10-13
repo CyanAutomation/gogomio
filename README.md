@@ -2,7 +2,6 @@
 
 [![Test](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml)
 [![Build Multi-Architecture Docker Image](https://github.com/CyanAutomation/gogomio/actions/workflows/build-multiarch.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/build-multiarch.yml)
-[![Benchmarks](https://github.com/CyanAutomation/gogomio/actions/workflows/benchmark.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/benchmark.yml)
 
 GoGoMio is a Go service that streams Raspberry Pi CSI camera video over MJPEG/HTTP. It includes a mock camera for development, an embedded web interface, and a CLI for managing a running server. It is intended for Raspberry Pi camera operators and developers integrating camera streams.
 
@@ -18,7 +17,6 @@ For the canonical documentation map and archive policy, see [docs/README.md](doc
 - [Configuration](#configuration)
 - [Architecture](#architecture)
 - [Development](#development)
-- [Performance](#performance)
 - [Troubleshooting](#troubleshooting)
 - [Dependencies](#dependencies)
 - [Integration Examples](#integration-examples)
@@ -465,10 +463,6 @@ Run tests:
 ```bash
 go test ./... -v -race -cover
 ```
-
-## Performance
-
-The [benchmark workflow](.github/workflows/benchmark.yml) runs Go microbenchmarks on GitHub-hosted runners and records runner metadata. These measurements are not end-to-end Raspberry Pi camera benchmarks. Throughput, latency, CPU, and memory use depend on the Pi model, camera, backend, resolution, and deployment; no Pi performance figures are published here without a reproducible hardware test.
 
 ## Troubleshooting
 

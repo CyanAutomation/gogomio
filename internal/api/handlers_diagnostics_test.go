@@ -183,29 +183,3 @@ func TestDiagnosticsResponseStructure(t *testing.T) {
 		t.Fatalf("message: got %v, want %q", got, "Capture reliability degraded")
 	}
 }
-
-// BenchmarkDiagnosticsResponseEncoding benchmarks JSON encoding of response
-func BenchmarkDiagnosticsResponseEncoding(b *testing.B) {
-	response := DetailedHealthResponse{
-		Status:                     "ok",
-		CameraReady:                true,
-		FPSCurrent:                 24.5,
-		UptimeSeconds:              3600,
-		StreamConnections:          1,
-		FramesCaptured:             86400,
-		LastFrameAgeSeconds:        0.1,
-		Resolution:                 "1920x1080",
-		JPEGQuality:                85,
-		MaxConnections:             2,
-		CaptureFailuresConsecutive: 0,
-		CaptureFailuresTotal:       10,
-		ErrorRatePercent:           0.01,
-		HealthStatus:               "Excellent",
-		Message:                    "Camera is functioning normally",
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = json.Marshal(response)
-	}
-}

@@ -819,13 +819,7 @@ After implementing fixes:
    go test ./... -v -race -cover
    ```
 
-3. **Run benchmarks to ensure no performance regression**:
-
-   ```bash
-   go test -bench=. -benchmem ./internal/camera ./internal/api
-   ```
-
-4. **Manual testing**:
+3. **Manual testing**:
    - Test mock camera mode
    - Test connection limits
    - Test settings persistence
@@ -838,7 +832,6 @@ After implementing fixes:
 - [ ] All P0 security issues resolved
 - [ ] golangci-lint passes with extended linter set
 - [ ] Test coverage remains ≥75%
-- [ ] No performance regressions in benchmarks
 - [ ] Documentation complete for all exported items
 - [ ] CI integration with `.golangci.yml`
 
@@ -851,9 +844,8 @@ After implementing fixes:
 These can be addressed in future iterations:
 
 1. **Add more linters**: Consider `nilaway`, `rowserrcheck`, `sqlclosecheck` if applicable
-2. **Benchmark tracking**: Integrate benchmark regression detection in CI
-3. **Security scanning**: Add `govulncheck` to CI pipeline
-4. **Code coverage gates**: Enforce coverage thresholds per package
+2. **Security scanning**: Add `govulncheck` to CI pipeline
+3. **Code coverage gates**: Enforce coverage thresholds per package
 
 ### References
 

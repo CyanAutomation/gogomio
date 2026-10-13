@@ -42,7 +42,7 @@ declare -a LABELS=(
     "feature|Request or implement a new feature|a2eeef"
     "documentation|Improvements or additions to documentation|0075ca"
     "testing|Test improvements, coverage, E2E tests|fbca04"
-    "performance|Performance optimization or benchmarking|d4c5f9"
+    "performance|Performance optimization|d4c5f9"
     "good-first-issue|Suitable for newcomers/contributors|7057ff"
     "dependencies|Dependency updates or upgrades|0366d6"
     "ci|CI/CD pipeline improvements|5319e7"

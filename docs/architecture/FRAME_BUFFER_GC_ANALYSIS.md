@@ -3,7 +3,7 @@
 **Date**: April 18, 2026  
 **Component**: `internal/camera/frame_buffer.go`  
 **Current Implementation**: Single-frame buffer with shared references  
-**Analysis Thoroughness**: Medium (benchmark recommendations provided)
+**Review Type**: Static code analysis
 
 ---
 
@@ -93,90 +93,6 @@ GetFrame Endpoint (if used)
 - Channel overhead is minimal compared to frame cloning
 - Channels are small (header only, no data)
 - Still creates garbage: 1-2 bytes per frame
-
----
-
-## Performance Characteristics
-
-### Current Behavior
-
-| Metric | Value | Notes |
-| -------- | ------- | ------- |
-| **Copy Overhead** | ~3 MB/sec @ 30fps | Varies with resolution |
-| **Mutex Contention** | Low | Write lock held <1ms |
-| **Memory Usage** | Bounded | Only 2 frame buffers max |
-| **Latency Impact** | Unknown | Needs profiling |
-
-### Benchmark Recommendations
-
-#### Suggested Benchmarks to Run
-
-**1. Frame Copy Microbenchmark**
-
-```go
-// File: internal/camera/frame_buffer_benchmark_test.go
-func BenchmarkFrameBufferWrite(b *testing.B) {
-    fb := NewFrameBuffer(NewStreamStats(), 30)
-    frame := make([]byte, 100*1024)  // 100 KB frame
-    
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        fb.Write(frame)
-    }
-}
-
-// Expected: ~1-2 MB/sec throughput for 100 KB frames
-```
-
-**2. GC Frequency Under Load**
-
-```go
-func TestFrameBufferGCFrequency(t *testing.T) {
-    runtime.GC()  // Force initial GC
-    var m1 runtime.MemStats
-    runtime.ReadMemStats(&m1)
-    
-    fb := NewFrameBuffer(NewStreamStats(), 30)
-    frame := make([]byte, 100*1024)
-    
-    // Simulate 1 second of frames
-    for i := 0; i < 30; i++ {
-        fb.Write(frame)
-        time.Sleep(33 * time.Millisecond)
-    }
-    
-    var m2 runtime.MemStats
-    runtime.ReadMemStats(&m2)
-    
-    gcRuns := m2.NumGC - m1.NumGC
-    heapAlloc := m2.HeapAlloc - m1.HeapAlloc
-    
-    t.Logf("GC runs: %d, Heap delta: %d bytes", gcRuns, heapAlloc)
-}
-```
-
-**3. Contention Analysis**
-
-```bash
-# Use Go's CPU profiling
-go tool pprof -http=:6060 http://localhost:6060/debug/pprof/profile?seconds=30
-
-# Look for:
-# - Time in sync.(*Mutex).Lock()
-# - Time in runtime.mallocgc()
-```
-
-#### Running Existing Benchmarks
-
-```bash
-# Run all frame_buffer benchmarks
-go test -bench=. -benchmem ./internal/camera | grep -i frame
-
-# Expected output format:
-# BenchmarkFrameBufferWrite-8         30000   39500 ns/op   110000 B/op   2 allocs/op
-#                                   ^^^^^^   ^^^^^^          ^^^^^^   ^
-#                                   runs    ns/frame         bytes    allocs/frame
-```
 
 ---
 
@@ -338,7 +254,7 @@ Run pprof during sustained 30fps stream capture
 
 2. **Document Results** (Optional)
    - If GC impact is significant, open GitHub issue
-   - Link benchmark results to decision
+   - Record profiling observations alongside the decision
 
 3. **Defer Optimization** (Current Recommendation)
    - Wait until profiling shows GC is bottleneck
@@ -367,7 +283,7 @@ Run pprof during sustained 30fps stream capture
 [ ] Add tests for frame reuse under concurrent access
 [ ] Document that snapshot.data is valid only until next Write()
 [ ] Update GetFrame() to copy from pool buffer
-[ ] Run benchmarks to verify improvement
+[ ] Profile sustained streaming under representative load
 [ ] Run race detector: go test -race ./...
 ```
 
@@ -394,7 +310,7 @@ Run pprof during sustained 30fps stream capture
 [ ] Update to use WriteImmutable() instead
 [ ] Verify frame boundaries are not overwritten
 [ ] Add comment documenting frame ownership
-[ ] Run benchmarks
+[ ] Profile sustained streaming under representative load
 [ ] Run race detector
 ```
 
@@ -424,50 +340,3 @@ If optimization is needed, **Strategy 2 (Direct Write)** offers best risk/reward
 - Runtime GC Tuning: <https://pkg.go.dev/runtime/debug#SetGCPercent>
 
 ---
-
-## Performance Benchmarks and Regression Checks
-
-The workflow compares each pull request against its base revision and each push to `main` against the previous revision. Scheduled and manually dispatched runs compare against the most recent successful benchmark artifact from `main`; the first run without an artifact establishes that baseline. Artifacts retain the raw current and baseline samples, comparison reports, and runner metadata for 90 days.
-
-The values below are historical reference targets from April 2026. The workflow does not enforce these absolute values; its gate checks relative changes between two revisions or runs.
-
-### Reference Targets (April 2026)
-
-| Metric | Baseline | Threshold | Status |
-| -------- | ---------- | ----------- | -------- |
-| **FrameBuffer.Write()** | ~150ns per frame | <250ns | ✅ Optimal |
-| **MJPEG Handler throughput** | ~10,000 frames/sec | >5,000 frames/sec | ✅ Excellent |
-| **GC Pause (per request)** | <1ms | <5ms | ✅ Acceptable |
-| **Connection tracking overhead** | <100μs per new connection | <500μs | ✅ Negligible |
-| **Frame copy latency** | 1-2 MB/sec for 100 KB frames | >500 KB/sec | ✅ Sufficient |
-
-### Benchmark Commands
-
-```bash
-# Run all benchmarks without running unit tests
-go test -run='^$' -bench=. -benchmem -benchtime=1s -count=10 ./...
-
-# Run frame buffer benchmarks only
-go test -run='^$' -bench=FrameBuffer -benchmem ./internal/camera
-
-# Run handler benchmarks only
-go test -run='^$' -bench=Handler -benchmem ./internal/api
-
-# Compare two saved benchmark outputs
-benchstat baseline.txt current.txt
-```
-
-### Regression Detection
-
-Benchmarks are run:
-
-- **Scheduled**: Weekly (every Monday 9 AM UTC)
-- **On-demand**: Via `workflow_dispatch` trigger
-- **On push**: To `main`
-- **On pull request**: Compared against the pull request base revision
-
-The gate uses 10 samples per revision, a 15% change threshold, and a 0.05 significance level with Holm correction across recognized benchmark metrics. It accounts for direction: increases are regressions for time and allocation metrics, while decreases are regressions for throughput metrics. A detected regression fails the benchmark workflow. Unknown custom metrics are listed as unclassified and excluded from gating; the check fails closed if it finds no metrics with a configured direction.
-
-### Historical Baselines
-
-- **v0.1.0 (April 2026)**: Reference measurements were recorded; automated history is retained as workflow artifacts for 90 days.
