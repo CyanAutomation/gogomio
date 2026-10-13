@@ -175,14 +175,6 @@ func TestNewFeatureRace(t *testing.T) {
    - Temporary skips must have a tracked issue
    - Use `t.Skip("reason + issue #123")`
 
-### Recommended
-
-1. **Benchmarks for performance-critical code**:
-
-   ```bash
-   go test -bench=. -benchmem ./internal/camera ./internal/api
-   ```
-
 ### Fault-Injection Logging Notes
 
 - Some `internal/settings` fault-injection tests intentionally trigger persist failures to validate rollback and cleanup paths.
@@ -359,7 +351,6 @@ Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
 
 4. **GitHub Actions triggers**:
    - `build-multiarch.yml` builds and pushes to Docker Hub
-   - `benchmark.yml` compares benchmark samples on pull requests and main-branch pushes, with weekly and on-demand historical comparisons
    - Artifacts available in GitHub Releases
 
 ## Questions?

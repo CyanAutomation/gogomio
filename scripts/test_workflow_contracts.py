@@ -117,54 +117,21 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("validate_release_tag_event.py", text)
 
     def test_pr_workflows_do_not_persist_checkout_credentials(self):
-        for name in ("benchmark.yml", "code-coverage-test.yml"):
-            with self.subTest(workflow=name):
-                self.assertGreaterEqual(workflow(name).count("persist-credentials: false"), 1)
-        benchmark = workflow("benchmark.yml")
-        history = workflow_job(benchmark, "history")
-        self.assertIn("GH_TOKEN: ${{ github.token }}", history)
+        self.assertGreaterEqual(
+            workflow("code-coverage-test.yml").count("persist-credentials: false"),
+            1,
+        )
 
     def test_pr_ci_cancels_obsolete_runs_without_cancelling_other_events(self):
-        for name in ("benchmark.yml", "code-coverage-test.yml"):
-            with self.subTest(workflow=name):
-                text = workflow(name)
-                self.assertIn(
-                    "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}",
-                    text,
-                )
-                self.assertIn(
-                    "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
-                    text,
-                )
-
-    def test_benchmark_history_api_permission_is_scoped_to_trusted_job(self):
-        text = workflow("benchmark.yml")
-        top_level = text.split("jobs:\n", 1)[0]
-        self.assertIn("contents: read", top_level)
-        self.assertNotIn("actions: read", top_level)
-
-        history = workflow_job(text, "history")
-        benchmark = workflow_job(text, "benchmark")
+        text = workflow("code-coverage-test.yml")
         self.assertIn(
-            "if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
-            history,
-        )
-        self.assertIn("actions: read", history)
-        self.assertNotIn("contents: read", history)
-        self.assertIn("GH_TOKEN: ${{ github.token }}", history)
-        self.assertIn("actions/download-artifact@", benchmark)
-        self.assertNotIn("GH_TOKEN:", benchmark)
-        self.assertIn("needs: history", benchmark)
-        self.assertIn("github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'", benchmark)
-
-    def test_benchmark_uses_tested_sample_count_policy_and_job_timeout(self):
-        text = workflow("benchmark.yml")
-        self.assertIn("timeout-minutes: 30", text)
-        self.assertIn(
-            'echo "BENCH_COUNT=$(scripts/benchmark-count.sh)" >> "$GITHUB_ENV"',
+            "group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}",
             text,
         )
-        self.assertGreaterEqual(text.count('-count="$BENCH_COUNT"'), 2)
+        self.assertIn(
+            "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+            text,
+        )
 
     def test_docker_release_tags_are_not_coalesced_or_used_for_latest(self):
         text = workflow("build-multiarch.yml")

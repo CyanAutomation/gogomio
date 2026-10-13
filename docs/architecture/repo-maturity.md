@@ -371,7 +371,7 @@ __✅ Tests executed in CI__
 [.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml) runs on every push and PR to `main`. Coverage gate: ≥75%.
 
 __✅ Multiple test types exist__  
-Comprehensive test suite: unit tests, integration tests, race condition tests (`*_race_test.go`), benchmark tests (`*_benchmark_test.go`), and E2E tests. E2E tests in [internal/api/handlers_e2e_test.go](../../internal/api/handlers_e2e_test.go) validate MJPEG streaming, snapshots, concurrent clients, health endpoints, and configuration.
+Comprehensive test suite: unit tests, integration tests, race condition tests (`*_race_test.go`), recovery tests, and E2E tests. E2E tests in [internal/api/handlers_e2e_test.go](../../internal/api/handlers_e2e_test.go) validate MJPEG streaming, snapshots, concurrent clients, health endpoints, and configuration.
 
 __✅ Build/test passes__  
 Latest CI test run = success.
@@ -381,7 +381,7 @@ Latest CI test run = success.
 #### 5. CI/CD & Delivery — __5/5__ ✅ (+10 points)
 
 __✅ CI workflow exists__  
-[.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml) present (test runner). [.github/workflows/benchmark.yml](.github/workflows/benchmark.yml) runs performance regression detection.
+[.github/workflows/code-coverage-test.yml](.github/workflows/code-coverage-test.yml) runs the project's test and coverage jobs.
 
 __✅ Build step exists__  
 CI includes `go build` and Docker multi-arch build (amd64, arm64) via [scripts/build-multiarch.sh](../../scripts/build-multiarch.sh).
@@ -590,7 +590,7 @@ GoGoMio is an __excellent, production-ready product__ achieving maximum maturity
 __Key Strengths:__
 
 * __Reproducible Setup__: One-command bootstrap script for rapid dev/demo setup
-* __Comprehensive Testing__: Unit, integration, E2E, race condition, and benchmark tests all passing
+* __Comprehensive Testing__: Unit, integration, E2E, and race condition tests
 * __Release Automation__: GoReleaser + GitHub Actions for multi-platform binary delivery
 * __Security & Automation__: Dependabot enabled, rate limiting, secure defaults, no credentials in repo
 * __Developer Experience__: Clear governance (labels, templates, CODEOWNERS), comprehensive documentation, working examples

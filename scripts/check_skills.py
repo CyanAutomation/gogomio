@@ -14,11 +14,9 @@ FRONT_MATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---(?:\s*\n|\Z)", re.DOTALL)
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 SKILL_LINK_RE = re.compile(r"\]\(\./([a-z0-9-]+)/SKILL\.md\)")
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-GO_TEST_FUNCTION_RE = re.compile(r"^func\s+(Test\w+|Benchmark\w+)\s*\(", re.MULTILINE)
+GO_TEST_FUNCTION_RE = re.compile(r"^func\s+(Test\w+)\s*\(", re.MULTILINE)
 GO_TEST_LINE_RE = re.compile(r"^\s*(?:\$\s*)?go\s+test(?:\s|$)")
 GO_TEST_FLAGS_WITH_VALUES = {
-    "-bench",
-    "-benchtime",
     "-count",
     "-coverprofile",
     "-cpu",
@@ -64,13 +62,13 @@ def _parse_go_test_command(command: str) -> tuple[list[str], list[tuple[str, str
         token = tokens[index]
         if token in GO_TEST_FLAGS_WITH_VALUES:
             if index + 1 < len(tokens):
-                if token in {"-run", "-bench"}:
+                if token == "-run":
                     selectors.append((token, tokens[index + 1]))
                 index += 2
                 continue
         elif any(token.startswith(flag + "=") for flag in GO_TEST_FLAGS_WITH_VALUES):
             flag, value = token.split("=", 1)
-            if flag in {"-run", "-bench"}:
+            if flag == "-run":
                 selectors.append((flag, value))
             index += 1
             continue
@@ -133,7 +131,7 @@ def _check_go_test_commands(path: Path, root: Path, errors: list[str]) -> None:
             }
             if not matching_names:
                 errors.append(
-                    f"{path}:{line_number}: {flag} selector {selector!r} matches no test or benchmark"
+                    f"{path}:{line_number}: {flag} selector {selector!r} matches no test"
                 )
 
 

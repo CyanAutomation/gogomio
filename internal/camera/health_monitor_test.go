@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -174,36 +173,5 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatalf("health monitor did not report reader error: want %q", want)
 		}
-	}
-}
-
-// BenchmarkHealthMonitorFrameProgressCheck benchmarks frame progress detection
-func BenchmarkHealthMonitorFrameProgressCheck(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		var frameSeq uint64
-		atomic.StoreUint64(&frameSeq, uint64(i))
-
-		_ = uint64(i - 1)
-	}
-}
-
-// BenchmarkHealthMonitorStallCalculation benchmarks stall duration calculation
-func BenchmarkHealthMonitorStallCalculation(b *testing.B) {
-	lastTime := time.Now()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		stallDuration := time.Since(lastTime)
-		if stallDuration > 10*time.Second {
-			_ = stallDuration
-		}
-	}
-}
-
-// BenchmarkHealthMonitorTickerCreation benchmarks ticker creation
-func BenchmarkHealthMonitorTickerCreation(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		ticker := time.NewTicker(10 * time.Second)
-		ticker.Stop()
 	}
 }

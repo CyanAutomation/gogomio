@@ -2,8 +2,6 @@ package settings
 
 import (
 	"encoding/json"
-	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -327,48 +325,6 @@ func TestSettingsTimestampedArchive(t *testing.T) {
 		t.Errorf("Archived filename not in expected format: %s", filename)
 		return
 	}
-}
-
-// BenchmarkSettingsPersist benchmarks the persist operation
-func BenchmarkSettingsPersist(b *testing.B) {
-	silenceSettingsBenchmarkLogs(b)
-
-	tmpDir, _ := os.MkdirTemp("", "gogomio_bench_*")
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	settingsPath := filepath.Join(tmpDir, "settings.json")
-	m := NewManager(settingsPath)
-	_ = m.Set("key", "value")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = m.persist()
-	}
-}
-
-// BenchmarkSettingsLoad benchmarks the load operation
-func BenchmarkSettingsLoad(b *testing.B) {
-	silenceSettingsBenchmarkLogs(b)
-
-	tmpDir, _ := os.MkdirTemp("", "gogomio_bench_*")
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	settingsPath := filepath.Join(tmpDir, "settings.json")
-	m := NewManager(settingsPath)
-	_ = m.Set("key", "value")
-	_ = m.persist()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = m.load()
-	}
-}
-
-func silenceSettingsBenchmarkLogs(b *testing.B) {
-	b.Helper()
-	originalLogWriter := log.Writer()
-	log.SetOutput(io.Discard)
-	b.Cleanup(func() { log.SetOutput(originalLogWriter) })
 }
 
 // TestSettingsRecoveryConcurrentWithWrite ensures recovery writes are serialized with concurrent persist writes.

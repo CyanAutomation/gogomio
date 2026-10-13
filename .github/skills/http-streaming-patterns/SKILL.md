@@ -29,10 +29,9 @@ Run the streaming endpoint, framing, and connection-limit tests:
 
 ```bash
 go test ./internal/api -run 'Test(StreamEndpoint|MJPEGStreamingEndpoint|StreamingConnectionLimit|StreamFrame|E2E_StreamEndpoint)' -race
-go test ./internal/api -run '^$' -bench 'Benchmark(WriteMultipartFrame|StreamFixedFrames)' -benchmem
 ```
 
-When changing frame bytes or multipart headers, update the focused handler tests and verify the declared boundary and part length against the written bytes. The benchmark command selects benchmark functions that exist in [`internal/api/handlers_benchmark_test.go`](../../../internal/api/handlers_benchmark_test.go).
+When changing frame bytes or multipart headers, update the focused handler tests and verify the declared boundary and part length against the written bytes.
 
 ## Related files
 
