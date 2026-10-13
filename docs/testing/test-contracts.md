@@ -11,6 +11,7 @@ guards a behavior that does not already have a traceable requirement or issue.
 | `TC-CONN-02` | Concurrent stream admission never exceeds the configured connection limit. | [Streaming behavior](../../README.md#features) |
 | `TC-FRAME-01` | Frame waits return a published frame, or return no frame when canceled or timed out. | [WaitFrame documentation](../../internal/camera/frame_buffer.go) |
 | `TC-FRAME-02` | Frame writes publish the latest bytes, advance the sequence, preserve mutable caller input, and record frames when the buffer creates its own stats collector. | [FrameBuffer documentation](../../internal/camera/frame_buffer.go) |
+| `TC-FRAME-03` | Immutable frame writes publish the supplied storage without copying it; callers must not mutate it afterwards. | [WriteImmutable documentation](../../internal/camera/frame_buffer.go) |
 | `TC-HTTP-01` | Snapshot responses contain a decodable JPEG; stream responses contain complete multipart JPEG frames. | [API reference](../reference/swagger.yaml) |
 | `TC-DIAG-01` | Detailed health reports failures divided by all capture attempts (captured frames plus failures), including failures before the first frame. | [Detailed health API](../reference/swagger.yaml#/definitions/api.DetailedHealthResponse) |
 | `TC-DIAG-02` | Detailed health classifies rates above 5% as degraded, and rates above 20% or more than five consecutive failures as poor. | [Detailed health API](../reference/swagger.yaml#/definitions/api.DetailedHealthResponse) |
