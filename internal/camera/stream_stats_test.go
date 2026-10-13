@@ -1,7 +1,6 @@
 package camera
 
 import (
-	"math"
 	"testing"
 	"time"
 )
@@ -172,20 +171,19 @@ func TestStreamStatsSnapshotConsistency(t *testing.T) {
 	<-done
 }
 
-// TestStreamStatsFPSWithZeroTimeSpan tests FPS when frames arrive simultaneously
-func TestStreamStatsFPSWithZeroTimeSpan(t *testing.T) {
+// Contract: TC-STATS-01 (docs/testing/test-contracts.md).
+func TestStreamStatsReportsZeroFPSForIdenticalTimestamps(t *testing.T) {
 	stats := NewStreamStats()
 
-	// Record 10 frames with identical timestamp
-	ts := time.Now().UnixNano()
+	const ts int64 = 1_700_000_000_000
 	for i := 0; i < 10; i++ {
 		stats.RecordFrame(ts)
 	}
 
 	_, _, fps := stats.Snapshot()
 
-	if !math.IsNaN(fps) && fps != 0 {
-		t.Errorf("FPS with zero time span should be 0 or NaN, got %v", fps)
+	if fps != 0 {
+		t.Fatalf("FPS for identical timestamps = %v, want 0", fps)
 	}
 }
 
