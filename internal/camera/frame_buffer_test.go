@@ -438,6 +438,31 @@ func TestFrameBufferGetFrameReturnsCopy(t *testing.T) {
 	}
 }
 
+// Contract: TC-FRAME-03 (docs/testing/test-contracts.md).
+func TestFrameBufferWriteImmutablePublishesWithoutCopying(t *testing.T) {
+	fb := NewFrameBuffer(NewStreamStats(), 0)
+	frame := []byte{4, 5, 6}
+
+	n, err := fb.WriteImmutable(frame)
+	if err != nil {
+		t.Fatalf("WriteImmutable returned error: %v", err)
+	}
+	if n != len(frame) {
+		t.Fatalf("WriteImmutable returned %d bytes, want %d", n, len(frame))
+	}
+
+	got, seq := fb.WaitFrame(0, 0)
+	if !bytes.Equal(got, frame) {
+		t.Fatalf("WaitFrame() = %v, want %v", got, frame)
+	}
+	if seq != 1 {
+		t.Fatalf("WaitFrame() sequence = %d, want 1", seq)
+	}
+	if len(got) == 0 || &got[0] != &frame[0] {
+		t.Fatal("WaitFrame() did not return the supplied frame storage")
+	}
+}
+
 // TestFrameBufferWriteCopiesInput ensures standard Write remains defensive for
 // mutable callers.
 func TestFrameBufferWriteCopiesInput(t *testing.T) {
