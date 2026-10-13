@@ -8,27 +8,30 @@ import (
 	"time"
 )
 
-// TestFrameBufferWrite tests basic frame writing and reading
-func TestFrameBufferWrite(t *testing.T) {
-	stats := NewStreamStats()
-	fb := NewFrameBuffer(stats, 0)
-
-	testFrame := []byte{0xFF, 0xD8, 0xFF, 0xE0} // JPEG SOI marker
-
-	n, err := fb.Write(testFrame)
-	if err != nil {
-		t.Errorf("Write returned error: %v", err)
-	}
-	if n != len(testFrame) {
-		t.Errorf("Write returned %d, want %d", n, len(testFrame))
+// Contract: TC-FRAME-02 (docs/testing/test-contracts.md).
+func TestFrameBufferWritePublishesLatestFrame(t *testing.T) {
+	fb := NewFrameBuffer(NewStreamStats(), 0)
+	frames := [][]byte{
+		{0xFF, 0xD8, 0xFF, 0xE0}, // JPEG SOI marker
+		{0x01, 0x02},
+		{0x03, 0x04, 0x05},
 	}
 
-	if fb.snapshot.data == nil {
-		t.Error("frame is nil after write")
+	for i, frame := range frames {
+		n, err := fb.Write(frame)
+		if err != nil {
+			t.Fatalf("Write(%d) returned error: %v", i, err)
+		}
+		if n != len(frame) {
+			t.Fatalf("Write(%d) returned %d bytes, want %d", i, n, len(frame))
+		}
 	}
 
-	if !bytes.Equal(fb.snapshot.data, testFrame) {
-		t.Errorf("frame mismatch: got %v, want %v", fb.snapshot.data, testFrame)
+	if got := fb.GetFrame(); !bytes.Equal(got, frames[len(frames)-1]) {
+		t.Fatalf("GetFrame() = %v, want latest frame %v", got, frames[len(frames)-1])
+	}
+	if got, want := fb.CurrentSequence(), uint64(len(frames)); got != want {
+		t.Fatalf("CurrentSequence() = %d, want %d", got, want)
 	}
 }
 
@@ -188,28 +191,6 @@ func TestFrameBufferConcurrentReads(t *testing.T) {
 	}
 }
 
-// TestFrameBufferMultipleWrites tests that latest frame is always available
-func TestFrameBufferMultipleWrites(t *testing.T) {
-	stats := NewStreamStats()
-	fb := NewFrameBuffer(stats, 0)
-
-	frames := [][]byte{
-		{1},
-		{2},
-		{3},
-		{4},
-		{5},
-	}
-
-	for _, frame := range frames {
-		_, _ = fb.Write(frame)
-	}
-
-	if !bytes.Equal(fb.snapshot.data, frames[len(frames)-1]) {
-		t.Errorf("last frame is %v, want %v", fb.snapshot.data, frames[len(frames)-1])
-	}
-}
-
 // TestFrameBufferWriteUpdatesStats tests that stats are updated on write
 func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 	stats := NewStreamStats()
@@ -230,45 +211,22 @@ func TestFrameBufferWriteUpdatesStats(t *testing.T) {
 	}
 }
 
-// TestFrameBufferWriteWithNilStats ensures writes and reads behave normally
-// when NewFrameBuffer is asked to create its own stats collector.
-func TestFrameBufferWriteWithNilStats(t *testing.T) {
+// Contract: TC-FRAME-02 (docs/testing/test-contracts.md).
+func TestFrameBufferWithoutStatsCollectorTracksPublishedFrames(t *testing.T) {
 	fb := NewFrameBuffer(nil, 0)
-	frame1 := []byte{0xAA, 0x01}
-	frame2 := []byte{0xBB, 0x02, 0x03}
-
-	n, err := fb.Write(frame1)
-	if err != nil {
-		t.Fatalf("first Write returned error: %v", err)
-	}
-	if n != len(frame1) {
-		t.Fatalf("first Write returned %d bytes, want %d", n, len(frame1))
-	}
-	if gotSeq := fb.CurrentSequence(); gotSeq != 1 {
-		t.Fatalf("sequence after first Write is %d, want 1", gotSeq)
-	}
-	gotFrame, firstSeq := fb.WaitFrame(0, 0)
-	if !bytes.Equal(gotFrame, frame1) || firstSeq != 1 {
-		t.Fatalf("first WaitFrame returned frame %v at sequence %d, want %v at sequence 1", gotFrame, firstSeq, frame1)
+	if fb.stats == nil {
+		t.Fatal("NewFrameBuffer(nil, 0) did not create a stats collector")
 	}
 
-	n, err = fb.Write(frame2)
-	if err != nil {
-		t.Fatalf("second Write returned error: %v", err)
-	}
-	if n != len(frame2) {
-		t.Fatalf("second Write returned %d bytes, want %d", n, len(frame2))
-	}
-	if gotSeq := fb.CurrentSequence(); gotSeq != firstSeq+1 {
-		t.Fatalf("sequence after second Write is %d, want %d", gotSeq, firstSeq+1)
+	for _, frame := range [][]byte{{0xAA, 0x01}, {0xBB, 0x02, 0x03}} {
+		if _, err := fb.Write(frame); err != nil {
+			t.Fatalf("Write returned error: %v", err)
+		}
 	}
 
-	if latest := fb.GetFrame(); !bytes.Equal(latest, frame2) {
-		t.Fatalf("latest frame is %v, want %v", latest, frame2)
-	}
-	gotFrame, secondSeq := fb.WaitFrame(0, firstSeq)
-	if !bytes.Equal(gotFrame, frame2) || secondSeq != 2 {
-		t.Fatalf("second WaitFrame returned frame %v at sequence %d, want %v at sequence 2", gotFrame, secondSeq, frame2)
+	got, _, _ := fb.stats.Snapshot()
+	if got != 2 {
+		t.Fatalf("fallback stats recorded %d frames, want 2", got)
 	}
 }
 
@@ -480,18 +438,28 @@ func TestFrameBufferGetFrameReturnsCopy(t *testing.T) {
 	}
 }
 
-// TestFrameBufferWriteImmutableAdoptsStorage ensures immutable writes do not
-// clone and readers observe the adopted shared bytes.
-func TestFrameBufferWriteImmutableAdoptsStorage(t *testing.T) {
-	stats := NewStreamStats()
-	fb := NewFrameBuffer(stats, 0)
+// Contract: TC-FRAME-03 (docs/testing/test-contracts.md).
+func TestFrameBufferWriteImmutablePublishesWithoutCopying(t *testing.T) {
+	fb := NewFrameBuffer(NewStreamStats(), 0)
 	frame := []byte{4, 5, 6}
 
-	_, _ = fb.WriteImmutable(frame)
-	current, _ := fb.WaitFrame(0, 0)
+	n, err := fb.WriteImmutable(frame)
+	if err != nil {
+		t.Fatalf("WriteImmutable returned error: %v", err)
+	}
+	if n != len(frame) {
+		t.Fatalf("WriteImmutable returned %d bytes, want %d", n, len(frame))
+	}
 
-	if &current[0] != &frame[0] {
-		t.Fatalf("expected adopted frame storage, got %p and %p", &current[0], &frame[0])
+	got, seq := fb.WaitFrame(0, 0)
+	if !bytes.Equal(got, frame) {
+		t.Fatalf("WaitFrame() = %v, want %v", got, frame)
+	}
+	if seq != 1 {
+		t.Fatalf("WaitFrame() sequence = %d, want 1", seq)
+	}
+	if len(got) == 0 || &got[0] != &frame[0] {
+		t.Fatal("WaitFrame() did not return the supplied frame storage")
 	}
 }
 

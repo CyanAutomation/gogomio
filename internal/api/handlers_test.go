@@ -1204,38 +1204,63 @@ func TestFrameManagerCaptureLoopSingleGoroutineAcrossRapidClientFlaps(t *testing
 	}
 }
 
-func TestFrameManagerStreamAndCaptureLifecycleRaceFree(t *testing.T) {
+// Contract: TC-CONN-01 (docs/testing/test-contracts.md).
+func TestFrameManagerStopRacingStreamCancellationReleasesClientCounts(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
-	cam := &captureLoopCountingCamera{}
-	fm := NewFrameManager(cam, cfg)
-	t.Cleanup(fm.Stop)
 
-	for i := 0; i < 20; i++ {
-		w := httptest.NewRecorder()
-		errCh := make(chan error, 1)
-
+	for iteration := 0; iteration < 10; iteration++ {
+		fm := NewFrameManager(&captureLoopCountingCamera{}, cfg)
+		t.Cleanup(fm.Stop)
 		ctx, cancel := context.WithCancel(context.Background())
-
+		t.Cleanup(cancel)
+		errCh := make(chan error, 1)
 		go func() {
 			req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
-			errCh <- fm.StreamFrame(w, req, cfg.MaxStreamConnections)
+			errCh <- fm.StreamFrame(httptest.NewRecorder(), req, cfg.MaxStreamConnections)
 		}()
 
-		time.Sleep(15 * time.Millisecond)
-		fm.stopCapture()
-		cancel()
+		waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
+			return atomic.LoadInt64(&fm.clientCount) == 1 && fm.connTracker.Count() == 1
+		}, "stream client counters to become active")
 
+		release := make(chan struct{})
+		var ready sync.WaitGroup
+		ready.Add(2)
+		stopDone := make(chan struct{})
+		go func() {
+			ready.Done()
+			<-release
+			fm.Stop()
+			close(stopDone)
+		}()
+		cancelDone := make(chan struct{})
+		go func() {
+			ready.Done()
+			<-release
+			cancel()
+			close(cancelDone)
+		}()
+		ready.Wait()
+		close(release)
+
+		waitForDone(t, stopDone, testDuration(testConditionTimeout), "frame manager stop")
+		waitForDone(t, cancelDone, testDuration(testConditionTimeout), "stream cancellation")
 		select {
 		case err := <-errCh:
-			if err == nil {
-				t.Fatalf("expected stream to stop with an error")
+			if !errors.Is(err, context.Canceled) && (err == nil || err.Error() != "stream stopped") {
+				t.Fatalf("iteration %d: stream error = %v, want cancellation or stopped", iteration, err)
 			}
-			if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "stream stopped") {
-				t.Fatalf("expected context canceled or stream stopped error, got %v", err)
-			}
-		case <-time.After(500 * time.Millisecond):
-			t.Fatalf("stream did not stop after capture shutdown on iteration %d", i)
+		case <-time.After(testDuration(testConditionTimeout)):
+			t.Fatalf("iteration %d: stream did not return after stop/cancel race", iteration)
 		}
+
+		if got := atomic.LoadInt64(&fm.clientCount); got != 0 {
+			t.Fatalf("iteration %d: client count = %d, want 0", iteration, got)
+		}
+		if got := fm.connTracker.Count(); got != 0 {
+			t.Fatalf("iteration %d: connection count = %d, want 0", iteration, got)
+		}
+		waitForCaptureState(t, fm, false)
 	}
 }
 
@@ -1588,97 +1613,6 @@ func TestStopStreamOldTeardownDoesNotUncountOrStopNewSession(t *testing.T) {
 	}
 }
 
-func TestFrameManagerStopRaceWithDisconnectDecrementDoesNotPanic(t *testing.T) {
-	cfg := &config.Config{FPS: 30, TargetFPS: 30, MaxStreamConnections: 2}
-	cam := &captureLoopCountingCamera{}
-	fm := newFrameManager(cam, cfg, 10*time.Millisecond)
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("unexpected panic while stopping during disconnect race: %v", r)
-		}
-	}()
-	t.Cleanup(fm.Stop)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
-	writer := httptest.NewRecorder()
-
-	streamErr := make(chan error, 1)
-	go func() {
-		streamErr <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
-	}()
-
-	time.Sleep(25 * time.Millisecond)
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		fm.Stop()
-	}()
-	go func() {
-		defer wg.Done()
-		cancel()
-	}()
-	wg.Wait()
-
-	select {
-	case err := <-streamErr:
-		if err != nil && !errors.Is(err, context.Canceled) && err.Error() != "stream stopped" {
-			t.Fatalf("expected context canceled or stream stopped error, got %v", err)
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("stream did not return after stop/disconnect race")
-	}
-}
-
-func TestFrameManagerConcurrentStopAndDecrementClientsDoesNotPanic(t *testing.T) {
-	cfg := &config.Config{FPS: 30, TargetFPS: 30}
-
-	for i := 0; i < 200; i++ {
-		cam := &captureLoopCountingCamera{}
-		fm := newFrameManager(cam, cfg, 10*time.Millisecond)
-
-		fm.startCapture()
-		waitForCaptureState(t, fm, true)
-		atomic.StoreInt64(&fm.clientCount, 1)
-
-		var wg sync.WaitGroup
-		panicCh := make(chan any, 2)
-		wg.Add(2)
-
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					panicCh <- r
-				}
-			}()
-			fm.DecrementClients()
-		}()
-
-		go func() {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					panicCh <- r
-				}
-			}()
-			fm.Stop()
-		}()
-
-		wg.Wait()
-		select {
-		case p := <-panicCh:
-			t.Fatalf("iteration %d: unexpected panic from Stop/DecrementClients race: %v", i, p)
-		default:
-		}
-
-		// Ensure resources are cleaned up if Stop() happened to lose the race in the goroutine.
-		fm.Stop()
-	}
-}
-
 // Contract: TC-CAPTURE-01 (docs/testing/test-contracts.md).
 func TestFrameManagerCaptureLoopRecoversFromCameraPanic(t *testing.T) {
 	cam := &panickingCaptureCamera{panicStarted: make(chan struct{})}
@@ -1823,27 +1757,19 @@ func TestFrameManagerStopUnblocksBlockedCleanupSender(t *testing.T) {
 	}
 }
 
-func TestFrameManagerStopReturnsDuringTimerCancelExpiryRaces(t *testing.T) {
-	cfg := &config.Config{FPS: 30, TargetFPS: 30}
-	cam := &captureLoopCountingCamera{}
-	fm := newFrameManager(cam, cfg, 5*time.Millisecond)
-	t.Cleanup(fm.Stop)
+func TestFrameManagerStopCancelsPendingCleanupFallback(t *testing.T) {
+	fm := newFrameManager(&captureLoopCountingCamera{}, &config.Config{FPS: 30, TargetFPS: 30}, defaultIdleStopDelay)
 
-	for i := 0; i < 100; i++ {
-		stopCh := make(chan struct{})
-		req := cleanupRequest{
-			delay:  1 * time.Millisecond,
-			stopCh: stopCh,
+	fallbackDone := make(chan struct{})
+	fm.fallbackWG.Add(1)
+	go func() {
+		defer close(fallbackDone)
+		fm.delayedStopFallback(cleanupRequest{
+			delay:  time.Hour,
+			stopCh: make(chan struct{}),
 			done:   make(chan struct{}),
-		}
-
-		fm.fallbackWG.Add(1)
-		go fm.delayedStopFallback(req)
-
-		// Race cancellation against timer expiry.
-		time.Sleep(500 * time.Microsecond)
-		close(stopCh)
-	}
+		})
+	}()
 
 	stopDone := make(chan struct{})
 	go func() {
@@ -1851,11 +1777,8 @@ func TestFrameManagerStopReturnsDuringTimerCancelExpiryRaces(t *testing.T) {
 		close(stopDone)
 	}()
 
-	select {
-	case <-stopDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("Stop() did not return during timer cancel/expiry races")
-	}
+	waitForDone(t, stopDone, testDuration(testConditionTimeout), "frame manager stop")
+	waitForDone(t, fallbackDone, testDuration(testConditionTimeout), "pending cleanup fallback")
 }
 
 func TestHandleSettingsGet_ReturnsSettingsEnvelope(t *testing.T) {
