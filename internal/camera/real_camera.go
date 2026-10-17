@@ -680,40 +680,27 @@ func (rc *RealCamera) launchContinuousProducer() (*exec.Cmd, io.WriteCloser, io.
 }
 
 func (rc *RealCamera) buildRpiCamVidCommand() *exec.Cmd {
-	// rpicam-vid uses JPEG quality with the same direction as app-level quality:
-	// higher number = better image quality (typically more CPU/bandwidth).
-	// Keep app contract fixed at 1-100 and clamp before passing to backend.
-	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
-	args := []string{
-		"rpicam-vid",
-		"--codec", "mjpeg",
-		"--nopreview",
-		"--timeout", "0",
-		"--width", fmt.Sprintf("%d", rc.width),
-		"--height", fmt.Sprintf("%d", rc.height),
-	}
-	if rc.sensorMode[0] > 0 && rc.sensorMode[1] > 0 {
-		args = append(args, "--mode", fmt.Sprintf("%d:%d", rc.sensorMode[0], rc.sensorMode[1]))
-	}
-	args = append(args,
-		"--framerate", fmt.Sprintf("%d", rc.fps),
-		"--quality", fmt.Sprintf("%d", nativeQuality),
-		"-o", "-",
-	)
-	return exec.Command(args[0], args[1:]...)
+	return rc.buildLibcameraFamilyCommand(BackendRpicam)
 }
 
 func (rc *RealCamera) buildLibcameraVidCommand() *exec.Cmd {
+	return rc.buildLibcameraFamilyCommand(BackendLibcamera)
+}
+
+// buildLibcameraFamilyCommand builds the capture command for the rpicam-vid /
+// libcamera-vid family, which share an identical flag surface; only the binary
+// differs.
+func (rc *RealCamera) buildLibcameraFamilyCommand(binary string) *exec.Cmd {
 	// Security note: All parameters (width, height, fps, jpegQuality, sensorMode, devicePath)
 	// come from config.LoadFromEnv() validation at deployment time, not from runtime API requests.
 	// These values are constrained by environment variables and are not user-controllable.
-	// libcamera-vid is invoked with separate arguments (exec.Command), not shell interpolation.
-	// libcamera-vid uses JPEG quality with the same direction as app-level quality:
+	// The binary is invoked with separate arguments (exec.Command), not shell interpolation.
+	// rpicam-vid/libcamera-vid use JPEG quality with the same direction as app-level quality:
 	// higher number = better image quality (typically more CPU/bandwidth).
 	// Keep app contract fixed at 1-100 and clamp before passing to backend.
 	nativeQuality := nativeMJPEGQualityFromQuality(rc.jpegQuality)
 	args := []string{
-		BackendLibcamera,
+		binary,
 		"--codec", "mjpeg",
 		"--nopreview",
 		"--timeout", "0",
