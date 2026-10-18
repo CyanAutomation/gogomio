@@ -254,8 +254,7 @@ paths:
       deprecated: true
       description: '**DEPRECATED in v0.1.0** - This endpoint mixes two concerns (static
         config + live metrics). **Migrate to**: Use /v1/config/camera for static settings,
-        and /v1/metrics/live for performance metrics. Legacy endpoint will be removed
-        in v0.3.0. See README for migration guide.'
+        and /v1/metrics/live for performance metrics. The endpoint remains available for backward compatibility; no removal date has been announced. See README for migration guide.'
       produces:
       - application/json
       responses:
@@ -278,8 +277,7 @@ paths:
       deprecated: true
       description: '**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed
         instead (identical response). Provides complete system diagnostics including
-        health status, metrics, error tracking, and failure statistics. Legacy endpoint
-        will be removed in v0.3.0. See README for migration guide.'
+        health status, metrics, error tracking, and failure statistics. The endpoint remains available for backward compatibility; no removal date has been announced. See README for migration guide.'
       produces:
       - application/json
       responses:
@@ -396,7 +394,7 @@ paths:
       - application/json
       deprecated: true
       description: '**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed
-        instead (identical response). Legacy endpoint will be removed in v0.3.0. See
+        instead (identical response). The endpoint remains available for backward compatibility; no removal date has been announced. See
         README for migration guide.'
       produces:
       - application/json
@@ -433,11 +431,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: Returns static camera configuration (encoded output resolution,
-        FPS, quality settings, connection limits). Resolution does not describe the
-        sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does
-        not include runtime metrics; use /v1/metrics/live for current performance data.
-        Values are immutable until process restart. Responses include an ETag and
+      description: >-
+        Returns static camera configuration (encoded output resolution, FPS, quality
+        settings, connection limits). Resolution does not describe the sensor field of
+        view, which is selected independently by MIO_SENSOR_MODE. Does not include
+        runtime metrics; use /v1/metrics/live for current performance data. Values are
+        immutable until process restart. Responses include an ETag and
         `Cache-Control: public, max-age=60, must-revalidate`; send If-None-Match to
         revalidate a cached representation.
       produces:
