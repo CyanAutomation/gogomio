@@ -26,26 +26,39 @@ func TestStreamStatsRecordFrame(t *testing.T) {
 	}
 }
 
-// TestStreamStatsFPSCalculation tests FPS calculation with multiple frames
+// TestStreamStatsFPSCalculation tests exact FPS calculation for regular frame cadences.
 func TestStreamStatsFPSCalculation(t *testing.T) {
-	stats := NewStreamStats()
-
-	// Record 10 frames at 1 ms intervals.
 	const baseTime int64 = 1_700_000_000_000
-	for i := 0; i < 10; i++ {
-		ts := baseTime + int64(i*1000000) // 1ms apart (nanoseconds)
-		stats.RecordFrame(ts)
-	}
+	const highFrequencyFrames = 30
+	const highFrequencyIntervalNS = int64(time.Second / 120)
+	highFrequencySpanNS := int64(highFrequencyFrames-1) * highFrequencyIntervalNS
+	highFrequencyFPS := float64(highFrequencyFrames-1) / (float64(highFrequencySpanNS) / 1e9)
+	for _, tt := range []struct {
+		name       string
+		frames     int
+		intervalNS int64
+		wantFPS    float64
+	}{
+		{name: "one thousand frames per second", frames: 10, intervalNS: 1_000_000, wantFPS: 1000},
+		{name: "high frequency frame cadence", frames: highFrequencyFrames, intervalNS: highFrequencyIntervalNS, wantFPS: highFrequencyFPS},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			stats := NewStreamStats()
+			for i := 0; i < tt.frames; i++ {
+				stats.RecordFrame(baseTime + int64(i)*tt.intervalNS)
+			}
 
-	frameCount, _, fps := stats.Snapshot()
-
-	if frameCount != 10 {
-		t.Errorf("frame count is %d, want 10", frameCount)
-	}
-
-	// Nine 1 ms intervals yield 1000 FPS.
-	if math.Abs(fps-1000) > 1e-9 {
-		t.Fatalf("FPS is %v, want 1000 ± 1e-9", fps)
+			frameCount, lastTime, fps := stats.Snapshot()
+			if frameCount != int64(tt.frames) {
+				t.Fatalf("frame count is %d, want %d", frameCount, tt.frames)
+			}
+			if lastTime == nil {
+				t.Fatal("last frame time is nil")
+			}
+			if math.Abs(fps-tt.wantFPS) > 1e-9 {
+				t.Fatalf("FPS is %v, want %v ± 1e-9 from fixed frame timestamps", fps, tt.wantFPS)
+			}
+		})
 	}
 }
 
@@ -184,29 +197,6 @@ func TestStreamStatsReportsZeroFPSForIdenticalTimestamps(t *testing.T) {
 
 	if fps != 0 {
 		t.Fatalf("FPS for identical timestamps = %v, want 0", fps)
-	}
-}
-
-// TestStreamStatsHighFrequency tests FPS calculation at high frequency (e.g., 120 FPS)
-func TestStreamStatsHighFrequency(t *testing.T) {
-	stats := NewStreamStats()
-
-	baseTime := time.Now().UnixNano()
-	targetFPS := 120.0
-	frameIntervalNS := int64(1e9 / targetFPS) // nanoseconds per frame
-
-	// Record 30 frames at 120 FPS
-	for i := 0; i < 30; i++ {
-		ts := baseTime + int64(i)*frameIntervalNS
-		stats.RecordFrame(ts)
-	}
-
-	_, _, fps := stats.Snapshot()
-
-	// Should be close to 120 FPS
-	tolerance := targetFPS * 0.1 // 10% tolerance
-	if fps < targetFPS-tolerance || fps > targetFPS+tolerance {
-		t.Errorf("FPS is %v, want ~%v (target with ±10%% tolerance)", fps, targetFPS)
 	}
 }
 
