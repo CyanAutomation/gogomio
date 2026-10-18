@@ -10,6 +10,17 @@
     return `${width} / ${height}`;
   }
 
+  // internal/web/src/api.ts
+  function requestCameraConfig(fetcher = fetch) {
+    return fetcher("/api/config");
+  }
+  function requestDiagnostics(fetcher = fetch) {
+    return fetcher("/api/diagnostics");
+  }
+  function requestStopStream(fetcher = fetch) {
+    return fetcher("/api/stream/stop", { method: "POST" });
+  }
+
   // internal/web/src/diagnostics-dialog.ts
   var FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   function focusableElements(modal) {
@@ -247,7 +258,7 @@
       this.imageElement.src = "/stream.mjpg?t=" + Date.now();
     }
     stopStream() {
-      fetch("/api/stream/stop", { method: "POST" }).catch((err) => console.error("Stop stream error:", err));
+      requestStopStream().catch((err) => console.error("Stop stream error:", err));
       if (this.streamAbortController) {
         this.streamAbortController.abort();
         this.streamAbortController = null;
@@ -283,7 +294,7 @@
     }
     async loadStats() {
       try {
-        const response = await fetch("/api/config");
+        const response = await requestCameraConfig();
         if (!response.ok) throw new Error("Failed to load stats");
         const config = await response.json();
         const aspectRatio = resolutionToAspectRatio(config.resolution);
@@ -392,7 +403,7 @@
     diagnosticsReturnFocus = null;
   }
   function fetchDiagnostics() {
-    fetch("/api/diagnostics").then((response) => {
+    requestDiagnostics().then((response) => {
       if (!response.ok) throw new Error("Failed to load diagnostics");
       return response.json();
     }).then((data) => {

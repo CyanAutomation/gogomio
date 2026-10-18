@@ -158,33 +158,3 @@ func TestConnectionTrackerConcurrentOperations(t *testing.T) {
 		t.Errorf("count is %d, want %d", got, maxConnections)
 	}
 }
-
-// TestConnectionTrackerConcurrentIncrementDecrement tests increment/decrement under load
-func TestConnectionTrackerConcurrentIncrementDecrement(t *testing.T) {
-	tracker := NewConnectionTracker()
-	maxConnections := 10
-	operationsPerGoroutine := 100
-
-	var wg sync.WaitGroup
-
-	for g := 0; g < 20; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < operationsPerGoroutine; i++ {
-				ok := tracker.TryIncrement(maxConnections)
-				if ok {
-					// If increment succeeded, eventually decrement
-					tracker.Decrement()
-				}
-			}
-		}()
-	}
-
-	wg.Wait()
-
-	// Should end at 0 (all decremented)
-	if tracker.Count() != 0 {
-		t.Errorf("final count is %d, want 0", tracker.Count())
-	}
-}

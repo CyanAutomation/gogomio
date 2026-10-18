@@ -1189,18 +1189,61 @@ func TestFrameManagerCaptureLoopSingleGoroutineWithConcurrentStarts(t *testing.T
 
 func TestFrameManagerCaptureLoopSingleGoroutineAcrossRapidClientFlaps(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
-	cam := &captureLoopCountingCamera{}
-	fm := newFrameManager(cam, cfg, 40*time.Millisecond)
+	cam := &captureLoopCountingCamera{
+		captureBegan:   make(chan struct{}),
+		releaseCapture: make(chan struct{}),
+	}
+	registrations := make(chan *fakeStopTimer, 16)
+	fm := newFrameManagerWithAfterFunc(cam, cfg, time.Hour, func(_ time.Duration, callback func()) stopTimer {
+		timer := newFakeStopTimer(callback)
+		registrations <- timer
+		return timer
+	})
 	t.Cleanup(fm.Stop)
 
-	for i := 0; i < 15; i++ {
-		fm.IncrementClients()
-		time.Sleep(6 * time.Millisecond)
-		fm.DecrementClients()
+	fm.IncrementClients()
+	select {
+	case <-cam.captureBegan:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("capture loop did not begin")
 	}
 
-	if max := atomic.LoadInt64(&cam.maxActive); max > 1 {
-		t.Fatalf("expected at most one active capture loop during rapid client flaps, saw %d", max)
+	const reconnects = 15
+	for i := 0; i < reconnects; i++ {
+		fm.DecrementClients()
+		var timer *fakeStopTimer
+		select {
+		case timer = <-registrations:
+		case <-time.After(testDuration(testConditionTimeout)):
+			t.Fatalf("idle stop timer %d was not registered", i+1)
+		}
+
+		fm.IncrementClients()
+		select {
+		case <-timer.stoppedDone:
+		case <-time.After(testDuration(testConditionTimeout)):
+			t.Fatalf("reconnect %d did not cancel its pending idle stop", i+1)
+		}
+		if starts := atomic.LoadInt64(&fm.captureStarts); starts != 1 {
+			t.Fatalf("capture loop starts after reconnect %d = %d, want 1", i+1, starts)
+		}
+	}
+
+	if max := atomic.LoadInt64(&cam.maxActive); max != 1 {
+		t.Fatalf("maximum concurrent captures = %d, want exactly 1", max)
+	}
+
+	fm.DecrementClients()
+	var finalTimer *fakeStopTimer
+	select {
+	case finalTimer = <-registrations:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("final idle stop timer was not registered")
+	}
+	finalTimer.trigger()
+	waitForCaptureState(t, fm, false)
+	if active := atomic.LoadInt64(&cam.activeCaptures); active != 0 {
+		t.Fatalf("active captures after idle stop = %d, want 0", active)
 	}
 }
 
@@ -1373,23 +1416,40 @@ func TestFrameManagerClientLifecycleWithExtraDecrementRemainsStable(t *testing.T
 func TestFrameManagerGetFrameBurstyAccessKeepsCaptureWarm(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
-	fm := newFrameManager(cam, cfg, 80*time.Millisecond)
+	const idleStopDelay = 80 * time.Millisecond
+	registrations := make(chan *fakeStopTimer, 8)
+	fm := newFrameManagerWithAfterFunc(cam, cfg, idleStopDelay, func(_ time.Duration, callback func()) stopTimer {
+		timer := newFakeStopTimer(callback)
+		registrations <- timer
+		return timer
+	})
 	t.Cleanup(fm.Stop)
 
+	var pending *fakeStopTimer
 	for i := 0; i < 8; i++ {
 		frame := fm.GetFrame()
 		if len(frame) == 0 {
 			t.Fatalf("expected non-empty frame on iteration %d", i)
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-
-	if starts := atomic.LoadInt64(&fm.captureStarts); starts != 1 {
-		t.Fatalf("expected one capture loop start during bursty snapshots, got %d", starts)
+		if pending != nil {
+			select {
+			case <-pending.stoppedDone:
+			case <-time.After(testDuration(testConditionTimeout)):
+				t.Fatalf("snapshot %d did not cancel the previous idle stop", i+1)
+			}
+		}
+		select {
+		case pending = <-registrations:
+		case <-time.After(testDuration(testConditionTimeout)):
+			t.Fatalf("snapshot %d did not schedule idle cleanup", i+1)
+		}
+		if starts := atomic.LoadInt64(&fm.captureStarts); starts != 1 {
+			t.Fatalf("capture loop starts after snapshot %d = %d, want 1", i+1, starts)
+		}
 	}
 
 	waitForCaptureState(t, fm, true)
-	time.Sleep(120 * time.Millisecond)
+	pending.trigger()
 	waitForCaptureState(t, fm, false)
 }
 
@@ -1484,6 +1544,7 @@ func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testin
 	t.Cleanup(fm.Stop)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
 	writer := httptest.NewRecorder()
 
@@ -1492,7 +1553,9 @@ func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testin
 		errCh <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
 	}()
 
-	time.Sleep(25 * time.Millisecond)
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
+		return atomic.LoadInt64(&fm.clientCount) == 1
+	}, "stream client count to reach 1 before request cancellation")
 	cancel()
 
 	select {
@@ -1526,7 +1589,9 @@ func TestStreamFrameReturnsPromptlyOnFrameManagerStop(t *testing.T) {
 		errCh <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
 	}()
 
-	time.Sleep(25 * time.Millisecond)
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
+		return atomic.LoadInt64(&fm.clientCount) == 1
+	}, "stream client count to reach 1 before frame manager stop")
 	fm.Stop()
 
 	select {
@@ -2059,11 +2124,22 @@ func TestFrameManager_StopCaptureIfIdle(t *testing.T) {
 }
 
 type fakeStopTimer struct {
-	callback func()
-	stopped  atomic.Bool
+	callback    func()
+	stopped     atomic.Bool
+	stoppedDone chan struct{}
 }
 
-func (timer *fakeStopTimer) Stop() bool { return !timer.stopped.Swap(true) }
+func newFakeStopTimer(callback func()) *fakeStopTimer {
+	return &fakeStopTimer{callback: callback, stoppedDone: make(chan struct{})}
+}
+
+func (timer *fakeStopTimer) Stop() bool {
+	if timer.stopped.Swap(true) {
+		return false
+	}
+	close(timer.stoppedDone)
+	return true
+}
 
 func (timer *fakeStopTimer) trigger() {
 	if !timer.stopped.Load() {
@@ -2088,7 +2164,7 @@ func TestFrameManager_ScheduleStopCapture(t *testing.T) {
 			}
 			registrations := make(chan registration, 2)
 			fm := setupIdleCaptureManager(t, idleStopDelay, func(delay time.Duration, callback func()) stopTimer {
-				timer := &fakeStopTimer{callback: callback}
+				timer := newFakeStopTimer(callback)
 				registrations <- registration{delay: delay, timer: timer}
 				return timer
 			})

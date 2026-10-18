@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 )
@@ -157,7 +156,9 @@ func TestSettingsCorruptionRecovery(t *testing.T) {
 
 	// Create new manager instance - should recover from backup
 	m2 := NewManager(settingsPath)
-	_ = m2.load()
+	if err := m2.load(); err != nil {
+		t.Fatalf("load recovered settings: %v", err)
+	}
 
 	// Verify recovery
 	if m2.Get("test_key") != "test_value" {
@@ -167,41 +168,39 @@ func TestSettingsCorruptionRecovery(t *testing.T) {
 
 // TestSettingsCorruptedFileArchiving tests that corrupted files are archived
 func TestSettingsCorruptedFileArchiving(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gogomio_test_*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	settingsPath := filepath.Join(tmpDir, "settings.json")
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	corruptContent := []byte("{corrupt}")
 
 	// Write corrupted file with no backup
-	if err := os.WriteFile(settingsPath, []byte("{corrupt}"), 0644); err != nil {
+	if err := os.WriteFile(settingsPath, corruptContent, 0644); err != nil {
 		t.Fatalf("Failed to write corrupted file: %v", err)
 	}
 
-	// Create manager - should archive corrupted file
+	// Loading without a valid backup should archive the original and start clean.
 	m := NewManager(settingsPath)
-	_ = m.load()
+	if err := m.load(); err != nil {
+		t.Fatalf("load corrupted settings: %v", err)
+	}
 
-	// Verify original file was archived
-	// Look for files matching pattern: settings.json.corrupted.*
-	files, err := filepath.Glob(filepath.Join(tmpDir, "settings.json.corrupted.*"))
+	files, err := filepath.Glob(settingsPath + ".corrupted.*")
 	if err != nil {
-		t.Fatalf("Failed to glob for archived files: %v", err)
+		t.Fatalf("find archived settings: %v", err)
 	}
-
-	if len(files) == 0 {
-		t.Error("Corrupted file was not archived")
+	if len(files) != 1 {
+		t.Fatalf("archived settings files = %d, want exactly 1", len(files))
 	}
-
-	// Verify primary file now contains valid JSON
-	content, err := os.ReadFile(settingsPath)
-	if err == nil {
-		var data map[string]interface{}
-		if err := json.Unmarshal(content, &data); err != nil {
-			t.Errorf("Recovered settings file contains invalid JSON: %v", err)
-		}
+	archivedContent, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatalf("read archived settings: %v", err)
+	}
+	if string(archivedContent) != string(corruptContent) {
+		t.Fatalf("archived content = %q, want original corrupt content %q", archivedContent, corruptContent)
+	}
+	if got := m.GetAll(); len(got) != 0 {
+		t.Fatalf("settings after recovery = %v, want an empty map", got)
+	}
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Fatalf("corrupt primary file should be moved to archive; stat error = %v", err)
 	}
 }
 
@@ -283,47 +282,12 @@ func TestSettingsEmptyFileRecovery(t *testing.T) {
 
 	// Create manager - should recover from backup
 	m := NewManager(settingsPath)
-	_ = m.load()
+	if err := m.load(); err != nil {
+		t.Fatalf("load settings recovered from empty primary file: %v", err)
+	}
 
 	if m.Get("key") != "value" {
 		t.Error("Failed to recover from backup with empty primary file")
-	}
-}
-
-// TestSettingsTimestampedArchive verifies archived files have timestamps
-func TestSettingsTimestampedArchive(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gogomio_test_*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	settingsPath := filepath.Join(tmpDir, "settings.json")
-
-	// Write corrupted file
-	if err := os.WriteFile(settingsPath, []byte("{corrupt}"), 0644); err != nil {
-		t.Fatalf("Failed to write corrupted file: %v", err)
-	}
-
-	m := NewManager(settingsPath)
-	_ = m.load()
-
-	// Check that archived file has timestamp in name
-	files, err := filepath.Glob(filepath.Join(tmpDir, "settings.json.corrupted.*"))
-	if err != nil {
-		t.Fatalf("Failed to glob for archived files: %v", err)
-	}
-
-	if len(files) == 0 {
-		t.Error("No archived files found")
-		return
-	}
-
-	// Verify archived file exists and contains the original corrupted content
-	filename := filepath.Base(files[0])
-	if !strings.Contains(filename, "settings.json.corrupted.") {
-		t.Errorf("Archived filename not in expected format: %s", filename)
-		return
 	}
 }
 
