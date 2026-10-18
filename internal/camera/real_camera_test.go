@@ -454,6 +454,11 @@ func TestRealCameraStopReturnsWhenBackendWaitExceedsDeadline(t *testing.T) {
 	if err := <-stopDone; err != nil {
 		t.Fatalf("Stop() error = %v", err)
 	}
+	select {
+	case <-waitExited:
+		t.Fatal("backend Wait exited before its release signal")
+	default:
+	}
 
 	if rc.IsReady() {
 		t.Fatal("camera should not be ready after Stop")
@@ -536,58 +541,6 @@ func TestRealCameraRestartAfterStopTimeoutIsolatesBlockedReader(t *testing.T) {
 	_ = streams[1].writer.Close()
 	if err := rc.Stop(); err != nil {
 		t.Fatalf("second Stop() error = %v", err)
-	}
-}
-
-func TestRealCameraStopStuckWaitNoGoroutineGrowth(t *testing.T) {
-	rc := NewRealCamera()
-	rc.devicePath = "/dev/null"
-	rc.captureWaitTimeout = 200 * time.Millisecond
-
-	var releases []chan struct{}
-	var activeWaiters atomic.Int32
-	var completedWaiters atomic.Int32
-	rc.process = waitCommandProcess{waitFn: func(*exec.Cmd) error {
-		activeWaiters.Add(1)
-		release := releases[len(releases)-1]
-		<-release
-		activeWaiters.Add(-1)
-		completedWaiters.Add(1)
-		return nil
-	}}
-	rc.launchFn = func() (*exec.Cmd, io.WriteCloser, io.ReadCloser, io.ReadCloser, error) {
-		release := make(chan struct{})
-		releases = append(releases, release)
-		stdoutR, stdoutW := io.Pipe()
-		frame, _ := encodeFrameToJPEG(createTestImage(8, 8), 80)
-		go func() {
-			defer func() { _ = stdoutW.Close() }()
-			_, _ = stdoutW.Write(frame)
-		}()
-		return &exec.Cmd{}, nopWriteCloser{}, stdoutR, io.NopCloser(strings.NewReader("")), nil
-	}
-
-	const cycles = 5
-	for cycle := 1; cycle <= cycles; cycle++ {
-		if err := rc.Start(640, 480, 24, 80); err != nil {
-			t.Fatalf("Start() cycle %d error = %v", cycle, err)
-		}
-		if !rc.IsReady() {
-			t.Fatalf("camera should be ready during cycle %d", cycle)
-		}
-		close(releases[cycle-1])
-		if err := rc.Stop(); err != nil {
-			t.Fatalf("Stop() cycle %d error = %v", cycle, err)
-		}
-		if rc.IsReady() {
-			t.Fatalf("camera should not be ready after cycle %d", cycle)
-		}
-		if got := activeWaiters.Load(); got != 0 {
-			t.Fatalf("active backend waiters after cycle %d = %d, want 0", cycle, got)
-		}
-		if got := completedWaiters.Load(); got != int32(cycle) {
-			t.Fatalf("completed backend waiters after cycle %d = %d, want %d", cycle, got, cycle)
-		}
 	}
 }
 

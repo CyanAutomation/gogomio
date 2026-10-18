@@ -236,6 +236,8 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
   }
   ```
 
+- **POST `/api/stream/stop`** - Stops the current stream session and returns a JSON status.
+
 ### Health Checks
 
 - **GET `/health`** - Liveness probe (always 200 OK if running)
