@@ -1,4 +1,5 @@
 import { resolutionToAspectRatio } from "./aspect-ratio";
+import { requestCameraConfig, requestDiagnostics, requestStopStream } from "./api";
 import {
     handleKeydown,
     rememberReturnFocus,
@@ -267,7 +268,7 @@ class StreamController {
 
     stopStream(): void {
         // Call server endpoint to cleanly stop the stream
-        fetch("/api/stream/stop", { method: "POST" })
+        requestStopStream()
             .catch(err => console.error("Stop stream error:", err));
 
         // Remove image source to stop displaying stream in UI
@@ -311,7 +312,7 @@ class StreamController {
 
     async loadStats(): Promise<void> {
         try {
-            const response = await fetch("/api/config");
+            const response = await requestCameraConfig();
             if (!response.ok) throw new Error("Failed to load stats");
 
             const config = await response.json() as CameraConfigResponse;
@@ -452,7 +453,7 @@ function closeDiagnosticsModal(): void {
 }
 
 function fetchDiagnostics(): void {
-    fetch("/api/diagnostics")
+    requestDiagnostics()
         .then((response) => {
             if (!response.ok) throw new Error("Failed to load diagnostics");
             return response.json() as Promise<DiagnosticsResponse>;
