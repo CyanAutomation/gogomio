@@ -59,11 +59,17 @@ Prerequisite: Go 1.27.2 or newer.
 MOCK_CAMERA=true go run ./cmd/gogomio
 
 # In another terminal, check readiness and capture a frame
-curl http://localhost:8000/ready
+curl -sS -w '\nHTTP %{http_code}\n' http://localhost:8000/ready
 curl http://localhost:8000/snapshot.jpg -o frame.jpg
 ```
 
-The web interface is available at <http://localhost:8000/>. Stop the Go process with Ctrl+C.
+When the camera is ready, the first request returns `{"status":"ready"}` and
+HTTP 200. While it initializes, it returns `{"status":"initializing"}` and
+HTTP 503; retry after a moment before requesting a snapshot. A successful
+snapshot is saved as `frame.jpg`.
+
+The web interface is available at <http://localhost:8000/>. Stop the Go process
+with Ctrl+C.
 
 ### Quick Start (Published Mock Container)
 
@@ -74,7 +80,9 @@ docker-compose -f docker-compose.mock.yml up
 ```
 
 This Compose file runs `docker.io/cyanautomation/gogomio:latest`; it does not build the source in your checkout. The optional `./scripts/bootstrap.sh` helper prepares `.env`, checks for `docker-compose`, and prints this start command. It does **not** start the service itself.
-The mock Compose configuration pins the container to `linux/amd64`; ARM hosts may need emulation. The published image supports both `amd64` and `arm64` for normal deployments.
+The mock Compose configuration pins the container to `linux/amd64`; ARM hosts
+may need emulation. See [Supported Environments](#supported-environments) for
+the published image targets.
 
 ### Development (Mock Camera - No Hardware)
 
@@ -98,7 +106,7 @@ curl http://localhost:8000/api/config | jq
 
 **Prerequisites:**
 
-- Raspberry Pi 3B+, 4, or 5 (arm64)
+- Raspberry Pi 4 or 5 (arm64; these are the models covered by the build guide)
 - CSI camera connected and enabled
 - Docker Engine and Docker Compose installed using the official instructions for your Raspberry Pi OS release
 
@@ -535,6 +543,12 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
   - Fallback: `libcamera-vid` via `libcamera-tools` / `libcamera-apps-lite`
 - `ffmpeg` fallback backend is installed in Docker images for compatibility
 
+### Supported Environments
+
+- **Published containers:** the multi-architecture build targets `linux/amd64` and `linux/arm64`; the mock Compose file deliberately pins `linux/amd64`. See the [build workflow](.github/workflows/build-multiarch.yml).
+- **Raspberry Pi CSI camera:** use 64-bit Raspberry Pi OS (arm64). The maintained [Pi build guide](docs/guides/RASPBERRY_PI_BUILD.md) covers Raspberry Pi 4 and 5.
+- **Source builds:** require Go 1.27.2 or newer; source runs in mock-camera mode need no camera hardware. CI runs the Go suite on Ubuntu, and the repository does not publish a broader native host-OS support matrix.
+
 ## Release History
 
 See [CHANGELOG.md](CHANGELOG.md) for released capabilities and changes on `main`.
@@ -616,7 +630,7 @@ Contributions and feedback are appreciated!
 
 ## License
 
-This project is licensed under the [BSD 3-Clause License](./LICENSE). See the LICENSE file for details.
+This project is licensed under the [MIT License](./LICENSE). See the LICENSE file for details.
 
 ---
 
