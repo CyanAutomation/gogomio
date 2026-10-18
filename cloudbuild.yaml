@@ -44,7 +44,22 @@ substitutions:
   _SERVICE_PORT: "8000"
 
 steps:
-  # ---- Step 1: Build image ----
+  # ---- Step 1: Build the embedded TypeScript web UI ----
+  - name: node:22
+    id: build-web-ui
+    entrypoint: bash
+    args:
+      - -e
+      - -u
+      - -o
+      - pipefail
+      - -c
+      - |
+        npm ci
+        npm run build:web
+        npm run check:web
+
+  # ---- Step 2: Build image ----
   # Plain docker build with BuildKit enabled — no Buildx or QEMU needed.
   # Cloud Run only runs linux/amd64, so cross-compilation is unnecessary here.
   # For production Pi deployments, use the existing docker.io build workflow.
@@ -52,6 +67,8 @@ steps:
     id: build-and-push
     env:
       - DOCKER_BUILDKIT=1
+    waitFor:
+      - build-web-ui
     args:
       - build
       - --file
@@ -70,7 +87,7 @@ steps:
       - PORT=${_SERVICE_PORT}
       - .
 
-  # ---- Step 2: Push image to GAR ----
+  # ---- Step 3: Push image to GAR ----
   - name: gcr.io/cloud-builders/docker
     id: push-image
     args:
@@ -80,7 +97,7 @@ steps:
     waitFor:
       - build-and-push
 
-  # ---- Step 3: Deploy to Cloud Run (demo) ----
+  # ---- Step 4: Deploy to Cloud Run (demo) ----
   # Uses MOCK_CAMERA=true since Cloud Run has no CSI camera hardware.
   # For production Pi deployments, pull from docker.io and run locally.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk

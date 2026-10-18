@@ -1,6 +1,11 @@
 version: 2
 project_name: gogomio
 
+before:
+  hooks:
+    - cmd: npm ci
+    - cmd: npm run build:web
+
 env:
   - GO111MODULE=on
 
