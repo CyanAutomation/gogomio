@@ -1544,6 +1544,7 @@ func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testin
 	t.Cleanup(fm.Stop)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	req := httptest.NewRequest(http.MethodGet, "/stream.mjpg", nil).WithContext(ctx)
 	writer := httptest.NewRecorder()
 
@@ -1552,7 +1553,9 @@ func TestStreamFrameReturnsOnRequestContextCancelAndDecrementsCounters(t *testin
 		errCh <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
 	}()
 
-	time.Sleep(25 * time.Millisecond)
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
+		return atomic.LoadInt64(&fm.clientCount) == 1
+	}, "stream client count to reach 1 before request cancellation")
 	cancel()
 
 	select {
@@ -1586,7 +1589,9 @@ func TestStreamFrameReturnsPromptlyOnFrameManagerStop(t *testing.T) {
 		errCh <- fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
 	}()
 
-	time.Sleep(25 * time.Millisecond)
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
+		return atomic.LoadInt64(&fm.clientCount) == 1
+	}, "stream client count to reach 1 before frame manager stop")
 	fm.Stop()
 
 	select {
