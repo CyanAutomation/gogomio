@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   markdown:
-    name: Markdown and link checks
+    name: Documentation checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,6 +22,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      - name: Check source-backed documentation contracts
+        run: python3 scripts/test_documentation_contracts.py
 
       - name: Lint canonical documentation
         uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20
@@ -32,6 +35,7 @@ jobs:
             CONTRIBUTING.md
             docs/README.md
             docs/guides/*.md
+            docs/testing/*.md
 
       - name: Check canonical documentation links
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
@@ -41,4 +45,4 @@ jobs:
             --verbose --no-progress --exclude-loopback --exclude-private --exclude-link-local
             --exclude '^http://raspberrypi\.local:8000/'
             --retry-wait-time 2 --accept 200..=299,403,429
-            README.md CONTRIBUTING.md docs/README.md 'docs/guides/*.md'
+            README.md CONTRIBUTING.md docs/README.md 'docs/guides/*.md' 'docs/testing/*.md'

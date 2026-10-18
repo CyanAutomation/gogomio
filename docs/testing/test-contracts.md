@@ -28,3 +28,4 @@ guards a behavior that does not already have a traceable requirement or issue.
 | `TC-WEB-04` | Dashboard API requests use the documented paths and HTTP methods for configuration, diagnostics, and stopping a stream. | [API endpoints](../../README.md#api) |
 | `TC-CI-01` | The coverage report upload is attempted even after the test job fails. | [Coverage workflow](../../.github/workflows/code-coverage-test.yml) |
 | `TC-CI-03` | The coverage gate accepts totals at or above 75% and rejects below-threshold or malformed totals. | [Coverage guidance](../../CONTRIBUTING.md#guidelines) |
+| `TC-DOC-01` | README and OpenAPI license labels match the canonical `LICENSE`, removal-date statements agree across docs, and documented API operations match registered Go handlers. | [Documentation contract check](../../scripts/test_documentation_contracts.py) |
