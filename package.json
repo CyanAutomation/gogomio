@@ -1,0 +1,19 @@
+{
+  "name": "gogomio-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build:web": "mkdir -p internal/web/generated && esbuild internal/web/src/app.ts --bundle --format=iife --target=es2020 --outfile=internal/web/generated/app.js && tsx scripts/version_web_assets.ts",
+    "typecheck:web": "tsc --noEmit",
+    "test:web": "tsx --test internal/web/src/*.test.ts",
+    "check:web": "npm run typecheck:web && npm run test:web && npm run verify:web",
+    "verify:web": "tsx scripts/check_web_assets.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "esbuild": "^0.25.5",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}
