@@ -5,9 +5,11 @@ import {
     restoreReturnFocus,
     type ReturnFocusTarget,
 } from "./diagnostics-dialog";
+import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
 type MessageTone = "info" | "success" | "warning" | "error";
+type IconName = "alert" | "camera" | "chart" | "clock" | "close" | "grid" | "image" | "info" | "link" | "play" | "quality" | "refresh" | "settings" | "stop";
 
 interface Pose {
     src: string;
@@ -47,7 +49,7 @@ function getElement<T extends HTMLElement = HTMLElement>(id: string): T {
     return element as T;
 }
 
-const iconMarkup = (name: string): string => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
+const iconMarkup = (name: IconName): string => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
 
 function escapeHTML(value: unknown): string {
     const entities: Record<string, string> = {
@@ -60,7 +62,7 @@ function escapeHTML(value: unknown): string {
     return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]!);
 }
 
-function diagnosticMetric(label: string, value: unknown, icon: string, valueClass = ""): string {
+function diagnosticMetric(label: string, value: unknown, icon: IconName, valueClass = ""): string {
     return `<div class="metric-row">
         <span class="metric-row__label">${iconMarkup(icon)}<span>${label}</span></span>
         <span class="metric-row__value ${valueClass}">${escapeHTML(value)}</span>
@@ -208,14 +210,16 @@ class StreamController {
             this.imageElement.classList.add("is-hidden");
             this.setIdlePose("warning");
 
-            if (this.streamRetryCount < this.maxStreamRetries) {
-                this.streamRetryCount++;
+            const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
+            if (nextRetryCount !== null) {
+                this.streamRetryCount = nextRetryCount;
                 this.placeholderText.textContent = "Connection lost";
                 this.placeholderDesc.textContent = `Retrying (${this.streamRetryCount}/${this.maxStreamRetries})...`;
                 this.showMessage(`Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, "warning");
                 this.setLoadingPose("running");
+                const scheduledRetryCount = nextRetryCount;
                 window.setTimeout(() => {
-                    if (!this.isStreaming && this.streamRetryCount < this.maxStreamRetries) {
+                    if (shouldRunStreamRetry(this.isStreaming, scheduledRetryCount, this.streamRetryCount)) {
                         this.imageElement.src = "/stream.mjpg?t=" + Date.now();
                     }
                 }, 2000);
@@ -262,15 +266,8 @@ class StreamController {
     }
 
     stopStream(): void {
-        console.log("Stop Stream button clicked - calling /api/stream/stop");
-
         // Call server endpoint to cleanly stop the stream
         fetch("/api/stream/stop", { method: "POST" })
-            .then(response => {
-                console.log("Stop stream response:", response.status);
-                return response.json();
-            })
-            .then(data => console.log("Stop stream data:", data))
             .catch(err => console.error("Stop stream error:", err));
 
         // Remove image source to stop displaying stream in UI

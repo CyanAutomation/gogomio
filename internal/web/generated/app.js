@@ -52,6 +52,14 @@
     }
   }
 
+  // internal/web/src/stream-retry.ts
+  function nextStreamRetryCount(current, maxRetries) {
+    return current < maxRetries ? current + 1 : null;
+  }
+  function shouldRunStreamRetry(isStreaming, scheduledRetryCount, currentRetryCount) {
+    return !isStreaming && scheduledRetryCount === currentRetryCount;
+  }
+
   // internal/web/src/app.ts
   function getElement(id) {
     const element = document.getElementById(id);
@@ -192,14 +200,16 @@
         this.loadingElement.classList.remove("is-hidden");
         this.imageElement.classList.add("is-hidden");
         this.setIdlePose("warning");
-        if (this.streamRetryCount < this.maxStreamRetries) {
-          this.streamRetryCount++;
+        const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
+        if (nextRetryCount !== null) {
+          this.streamRetryCount = nextRetryCount;
           this.placeholderText.textContent = "Connection lost";
           this.placeholderDesc.textContent = `Retrying (${this.streamRetryCount}/${this.maxStreamRetries})...`;
           this.showMessage(`Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, "warning");
           this.setLoadingPose("running");
+          const scheduledRetryCount = nextRetryCount;
           window.setTimeout(() => {
-            if (!this.isStreaming && this.streamRetryCount < this.maxStreamRetries) {
+            if (shouldRunStreamRetry(this.isStreaming, scheduledRetryCount, this.streamRetryCount)) {
               this.imageElement.src = "/stream.mjpg?t=" + Date.now();
             }
           }, 2e3);
@@ -237,11 +247,7 @@
       this.imageElement.src = "/stream.mjpg?t=" + Date.now();
     }
     stopStream() {
-      console.log("Stop Stream button clicked - calling /api/stream/stop");
-      fetch("/api/stream/stop", { method: "POST" }).then((response) => {
-        console.log("Stop stream response:", response.status);
-        return response.json();
-      }).then((data) => console.log("Stop stream data:", data)).catch((err) => console.error("Stop stream error:", err));
+      fetch("/api/stream/stop", { method: "POST" }).catch((err) => console.error("Stop stream error:", err));
       if (this.streamAbortController) {
         this.streamAbortController.abort();
         this.streamAbortController = null;
