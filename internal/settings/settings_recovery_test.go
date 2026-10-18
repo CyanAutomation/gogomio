@@ -156,7 +156,9 @@ func TestSettingsCorruptionRecovery(t *testing.T) {
 
 	// Create new manager instance - should recover from backup
 	m2 := NewManager(settingsPath)
-	_ = m2.load()
+	if err := m2.load(); err != nil {
+		t.Fatalf("load recovered settings: %v", err)
+	}
 
 	// Verify recovery
 	if m2.Get("test_key") != "test_value" {
@@ -280,7 +282,9 @@ func TestSettingsEmptyFileRecovery(t *testing.T) {
 
 	// Create manager - should recover from backup
 	m := NewManager(settingsPath)
-	_ = m.load()
+	if err := m.load(); err != nil {
+		t.Fatalf("load settings recovered from empty primary file: %v", err)
+	}
 
 	if m.Get("key") != "value" {
 		t.Error("Failed to recover from backup with empty primary file")
