@@ -3,6 +3,7 @@
 
 import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,8 +14,10 @@ REMOVAL_DATE = re.compile(
     re.IGNORECASE,
 )
 GO_ROUTE = re.compile(r'HandleFunc\("([A-Z]+)\s+([^\"]+)"')
+YAML_PATHS = re.compile(r"^paths:\s*(?:#.*)?$")
 YAML_PATH = re.compile(r"^  (/[^:]+):\s*$")
 YAML_METHOD = re.compile(r"^    (get|post|put|delete|patch|options|head):\s*$", re.IGNORECASE)
+HTTP_METHODS = {"get", "post", "put", "delete", "patch", "options", "head"}
 LICENSE_IDENTIFIERS = {
     "MIT License": "MIT",
     "Apache License, Version 2.0": "Apache-2.0",
@@ -25,7 +28,16 @@ LICENSE_IDENTIFIERS = {
 def _yaml_operations(path: Path) -> set[tuple[str, str]]:
     operations: set[tuple[str, str]] = set()
     current_path = None
+    in_paths = False
     for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            in_paths = YAML_PATHS.match(line) is not None
+            current_path = None
+            continue
+        if not in_paths:
+            continue
         path_match = YAML_PATH.match(line)
         if path_match:
             current_path = path_match.group(1)
@@ -43,6 +55,7 @@ def _json_operations(path: Path) -> set[tuple[str, str]]:
         (method.lower(), route)
         for route, operations in spec["paths"].items()
         for method in operations
+        if method.lower() in HTTP_METHODS
     }
 
 
@@ -90,6 +103,39 @@ class DocumentationContractTests(unittest.TestCase):
         json_operations = _json_operations(ROOT / "docs/reference/swagger.json")
 
         self.assertEqual(yaml_operations, json_operations)
+
+    def test_yaml_operations_ignore_method_like_keys_outside_paths(self):
+        yaml_spec = '''swagger: "2.0"
+paths:
+  /widgets:
+    get:
+      responses: {}
+x-example:
+  schema:
+    post:
+      summary: arbitrary extension data
+'''
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "swagger.yaml"
+            spec_path.write_text(yaml_spec, encoding="utf-8")
+
+            self.assertEqual(_yaml_operations(spec_path), {("get", "/widgets")})
+
+    def test_json_operations_ignore_path_level_parameters(self):
+        json_spec = {
+            "swagger": "2.0",
+            "paths": {
+                "/widgets": {
+                    "parameters": [{"name": "id", "in": "path"}],
+                    "get": {"responses": {}},
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            spec_path = Path(temp_dir) / "swagger.json"
+            spec_path.write_text(json.dumps(json_spec), encoding="utf-8")
+
+            self.assertEqual(_json_operations(spec_path), {("get", "/widgets")})
 
     def test_documented_api_operations_are_registered_in_go_handlers(self):
         handlers = (ROOT / "internal/api/handlers.go").read_text(encoding="utf-8")
