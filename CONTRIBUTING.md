@@ -45,6 +45,7 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 - **Go 1.27.2 or newer** — Install from [go.dev](https://go.dev/dl/). This is
   the minimum declared in `go.mod`; the Docker builder and CI use Go 1.27.2.
+- **Node.js 22 and npm** — Required to type-check, test, and rebuild the embedded TypeScript web UI.
 - **Docker** — For multi-architecture builds and deployment testing
 - **Git** — For version control
 
@@ -67,8 +68,10 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 3. **Run tests locally** (before any commits):
 
    ```bash
+   npm ci
+   npm run build:web
+   npm run check:web
    go test ./... -v -race -cover
-   node --test internal/web/aspect-ratio.test.js
    ```
 
 ## Making Changes
@@ -81,7 +84,7 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 - **`internal/cli/`** — CLI commands and command dispatch
 - **`internal/config/`** — Configuration management
 - **`internal/settings/`** — Persistent settings
-- **`internal/web/`** — Web UI and static assets
+- **`internal/web/`** — TypeScript web UI, generated browser bundle, and static assets
 
 ### Guidelines
 

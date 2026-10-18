@@ -10,12 +10,12 @@ RUNNER = ROOT / "scripts" / "test-ci-helpers.sh"
 
 
 class CIRunnerTests(unittest.TestCase):
-    # Keeps the JavaScript contracts TC-WEB-02 and TC-WEB-03 in the test run.
+    # Keeps the web TypeScript tests, typecheck, and generated bundle current in CI.
     def test_runner_executes_each_registered_helper_suite(self):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             calls_file = temp / "calls.log"
-            for tool in ("python3", "bash", "node"):
+            for tool in ("python3", "bash", "npm"):
                 shim = temp / tool
                 shim.write_text(
                     "#!/bin/sh\n"
@@ -44,7 +44,8 @@ class CIRunnerTests(unittest.TestCase):
                     "bash\tscripts/test-docker-tags.sh",
                     "bash\tscripts/test-docker-go-tests.sh",
                     "python3\t-B -m unittest discover -s scripts -p test_*.py",
-                    "node\t--test internal/web/aspect-ratio.test.js internal/web/diagnostics-dialog.test.js",
+                    "npm\tci",
+                    "npm\trun check:web",
                 ],
             )
 

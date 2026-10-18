@@ -172,6 +172,22 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-go-ci.sh", workflow(name))
 
+        for name in ("code-coverage-test.yml", "build-multiarch.yml", "goreleaser.yml"):
+            with self.subTest(node_workflow=name):
+                self.assertIn("actions/setup-node@", workflow(name))
+                self.assertIn("node-version: 22", workflow(name))
+
+        docker_build = workflow_job(workflow("build-multiarch.yml"), "build")
+        self.assertIn("npm run build:web", docker_build)
+        self.assertLess(docker_build.index("npm run build:web"), docker_build.index("docker/build-push-action"))
+        go_releaser = (ROOT / ".goreleaser.yml").read_text()
+        self.assertIn("- cmd: npm run build:web", go_releaser)
+
+        cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
+        self.assertIn("id: build-web-ui", cloudbuild)
+        self.assertIn("npm run build:web", cloudbuild)
+        self.assertIn("waitFor:\n      - build-web-ui", cloudbuild)
+
         lint = workflow_step(
             workflow("code-coverage-test.yml"), "Lint GitHub Actions workflows"
         )

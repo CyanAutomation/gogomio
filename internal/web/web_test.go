@@ -38,8 +38,7 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		`id="start-stream"`,
 		`id="stop-stream"`,
 		`id="diagnostics-btn"`,
-		`<script src="/static/aspect-ratio.js?v=`,
-		`<script src="/static/diagnostics-dialog.js?v=`,
+		`<script src="/static/app.js?v=`,
 	}
 
 	for _, hook := range runtimeHooks {
@@ -48,16 +47,23 @@ func TestWebUIIncludesBootstrapScriptAndPublicAPIRoutes(t *testing.T) {
 		}
 	}
 
-	// Validate references to public API routes consumed by the UI.
+	app, err := webFS.ReadFile("generated/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Validate references to public API routes consumed by the generated UI bundle.
 	publicRoutes := []string{
 		"/api/config",
 		"/api/stream/stop",
 		"/api/diagnostics",
 	}
 	for _, route := range publicRoutes {
-		if !strings.Contains(body, route) {
-			t.Errorf("missing public route reference %q in root HTML", route)
+		if !strings.Contains(string(app), route) {
+			t.Errorf("missing public route reference %q in generated UI script", route)
 		}
+	}
+	if strings.Contains(body, "<script>") {
+		t.Error("root HTML must load the generated UI script instead of containing inline JavaScript")
 	}
 
 }
@@ -201,14 +207,18 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	app, err := webFS.ReadFile("generated/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui := append(index, app...)
 
 	assets := []struct {
 		url  string
 		file string
 		fs   fs.ReadFileFS
 	}{
-		{url: "/static/aspect-ratio.js", file: "aspect-ratio.js", fs: webFS},
-		{url: "/static/diagnostics-dialog.js", file: "diagnostics-dialog.js", fs: webFS},
+		{url: "/static/app.js", file: "generated/app.js", fs: webFS},
 		{url: "/static/mio/mio_pose_idle.png", file: "mio/mio_pose_idle.png", fs: mioFS},
 		{url: "/static/mio/mio_pose_sleeping.png", file: "mio/mio_pose_sleeping.png", fs: mioFS},
 		{url: "/static/mio/mio_pose_curious.png", file: "mio/mio_pose_curious.png", fs: mioFS},
@@ -224,8 +234,8 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 		}
 		sum := sha256.Sum256(data)
 		want := asset.url + "?v=" + hex.EncodeToString(sum[:])
-		if !bytes.Contains(index, []byte(want)) {
-			t.Errorf("index.html does not reference content-versioned URL %q", want)
+		if !bytes.Contains(ui, []byte(want)) {
+			t.Errorf("web UI does not reference content-versioned URL %q", want)
 		}
 	}
 }
@@ -280,7 +290,7 @@ func TestUIScriptsAreImmutable(t *testing.T) {
 	router := http.NewServeMux()
 	RegisterStaticFiles(router)
 
-	for _, asset := range []string{"aspect-ratio.js", "diagnostics-dialog.js"} {
+	for _, asset := range []string{"app.js"} {
 		t.Run(asset, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "/static/"+asset+"?v=test", nil)
 			w := httptest.NewRecorder()

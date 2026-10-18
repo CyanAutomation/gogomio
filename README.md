@@ -430,13 +430,22 @@ export MIO_JPEG_QUALITY=45
 | `internal/cli/` | CLI commands and HTTP client |
 | `internal/config/` | Environment loading, defaults, and validation |
 | `internal/settings/` | File-backed runtime settings |
-| `internal/web/` | Embedded HTML, JavaScript, and image assets |
+| `internal/web/` | Embedded HTML, TypeScript sources, generated browser bundle, and image assets |
 | `docs/reference/` | Embedded OpenAPI specifications and API reference page |
 | `docs/guides/` | Deployment, CLI, and build guides |
 
 ### Build & Test
 
+The Go service can be built directly. Web UI changes require Node.js 22 and npm;
+rebuild the embedded browser bundle, then type-check the sources and verify the
+generated bundle with the commands below.
+
 ```bash
+# Check and build the browser UI
+npm ci
+npm run build:web
+npm run check:web
+
 # Run all tests
 go test ./... -v
 

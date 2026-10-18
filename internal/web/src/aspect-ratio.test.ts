@@ -1,7 +1,7 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
+import assert from "node:assert/strict";
+import { test } from "node:test";
 
-const { resolutionToAspectRatio } = require("./aspect-ratio.js");
+import { resolutionToAspectRatio } from "./aspect-ratio";
 
 test("uses configured resolution dimensions for the stream aspect ratio", () => {
     assert.equal(resolutionToAspectRatio([800, 600]), "800 / 600");
