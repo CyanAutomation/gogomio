@@ -804,7 +804,7 @@ func TestIndexEndpoint(t *testing.T) {
 	}
 
 	body := w.Body.String()
-	if !strings.Contains(body, "<title>GoGoMio | Camera Dashboard</title>") {
+	if !strings.Contains(body, "<title>GoGoMio | Camera dashboard</title>") {
 		t.Fatalf("expected response body to contain embedded UI title marker")
 	}
 }
