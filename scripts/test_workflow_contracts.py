@@ -38,9 +38,12 @@ class WorkflowContractTests(unittest.TestCase):
                 caller = workflow(name)
                 self.assertIn("uses: ./.github/workflows/kaseki-sweep.yml", caller)
                 self.assertIn("if: github.ref == 'refs/heads/main'", caller)
+                self.assertNotIn("KASEKI_API_TOKEN:", caller)
         self.assertIn("if: github.ref == 'refs/heads/main'", reusable)
         self.assertIn("REF: main", reusable)
         self.assertIn('publishMode: "pr"', reusable)
+        self.assertIn("environment: kaseki-agent", reusable)
+        self.assertNotIn("KASEKI_API_TOKEN:", reusable.split("\njobs:", 1)[0])
         self.assertIn("KASEKI_ALLOWED_HOSTS", reusable)
         job_environment = reusable.split("\njobs:\n  sweep:", 1)[1].split("\n    steps:", 1)[0]
         self.assertNotIn("KASEKI_API_TOKEN:", job_environment)
@@ -69,14 +72,20 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_docker_publisher_validates_scans_verifies_and_attests_before_promotion(self):
         text = workflow("build-multiarch.yml")
-        self.assertIn("github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'", text)
+        events = text.split("\npermissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", events)
+        self.assertNotRegex(events, r"(?m)^  (?:push|schedule):")
+        self.assertIn("release_tag:", events)
         self.assertIn("concurrency:", text)
         self.assertIn("sbom: true", text)
         self.assertIn("provenance: true", text)
         self.assertIn("needs: [validate, build, verify, scan]", text)
         self.assertIn("docker buildx imagetools create", text)
         self.assertIn("IMAGE_DIGEST", text)
-        self.assertIn("validate_release_tag_event.py", text)
+        self.assertIn("validate_release_source.py", text)
+        self.assertNotIn("validate_release_tag_event.py", text)
+        self.assertIn("goreleaser/goreleaser-action", text)
+        self.assertIn("needs: [validate, build, verify, scan, promote]", workflow_job(text, "release"))
         self.assertRegex(text, r"(?m)^\s+timeout-minutes:")
 
     def test_docker_images_use_patched_go_and_upgrade_debian_base_packages(self):
@@ -93,15 +102,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn(f"go {go_version}", go_mod)
         self.assertIn("apt-get upgrade -y --quiet --no-install-recommends", dockerfile)
 
-    def test_docker_images_are_refreshed_and_scanned_per_architecture(self):
+    def test_docker_images_are_pulled_and_scanned_per_architecture(self):
         text = workflow("build-multiarch.yml")
         build = workflow_step(text, "Build candidate and generate attestations")
         resolve = workflow_step(text, "Resolve candidate platform digests")
         scan = workflow_job(text, "scan")
 
-        self.assertIn("schedule:", text)
+        events = text.split("\npermissions:", 1)[0]
+        self.assertNotIn("schedule:", events)
         self.assertIn("pull: true", build)
-        self.assertIn("no-cache: ${{ github.event_name == 'schedule' }}", build)
+        self.assertNotIn("no-cache:", build)
         self.assertIn("verify_docker_manifest.py --github-output", resolve)
         self.assertIn("steps.platform-digests.outputs.amd64_digest", workflow_job(text, "build"))
         self.assertIn("steps.platform-digests.outputs.arm64_digest", workflow_job(text, "build"))
@@ -109,12 +119,24 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("matrix.architecture == 'amd64'", scan)
         self.assertIn("version: v0.75.0", scan)
 
-    def test_release_workflow_checks_tag_commit_is_on_main(self):
-        text = workflow("goreleaser.yml")
-        self.assertIn("validate_release_source.py", text)
-        self.assertIn("fetch-depth: 0", text)
-        self.assertIn("git fetch origin main", text)
-        self.assertIn("validate_release_tag_event.py", text)
+    def test_manual_release_checks_tag_commit_is_on_main(self):
+        text = workflow("build-multiarch.yml")
+        release = workflow_job(text, "release")
+        validate = workflow_job(text, "validate")
+        self.assertIn("if: inputs.release_tag != ''", release)
+        self.assertIn("validate_release_source.py", validate)
+        self.assertIn("git fetch origin main", validate)
+        self.assertIn(
+            "steps.validate-source.outputs.source_sha || steps.manual-source.outputs.source_sha",
+            validate,
+        )
+        self.assertIn(
+            "ref: ${{ steps.validate-source.outputs.source_sha || steps.manual-source.outputs.source_sha }}",
+            validate,
+        )
+        self.assertLess(validate.index("Checkout validated source"), validate.index("Run shared CI helper tests"))
+        self.assertIn("ref: ${{ needs.validate.outputs.source_sha }}", release)
+        self.assertNotIn("goreleaser.yml", [path.name for path in (ROOT / ".github/workflows").iterdir()])
 
     def test_pr_workflows_do_not_persist_checkout_credentials(self):
         self.assertGreaterEqual(
@@ -133,13 +155,13 @@ class WorkflowContractTests(unittest.TestCase):
             text,
         )
 
-    def test_docker_release_tags_are_not_coalesced_or_used_for_latest(self):
+    def test_manual_docker_publishes_serialize_and_combine_release_tags(self):
         text = workflow("build-multiarch.yml")
         self.assertIn(
-            "group: docker-publish-${{ github.repository }}-${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && github.run_id) || 'latest' }}",
+            "group: docker-publish-${{ github.repository }}-manual",
             text,
         )
-        self.assertIn('requested_tags="${GITHUB_REF_NAME}"', text)
+        self.assertIn('requested_tags="${RELEASE_TAG},${requested_tags}"', text)
         self.assertNotIn('requested_tags="${GITHUB_REF_NAME},latest"', text)
 
     def test_pull_only_docker_jobs_use_read_only_credentials_and_scan_has_no_github_permissions(self):
@@ -168,11 +190,11 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-ci-helpers.sh", workflow(name))
 
-        for name in ("build-multiarch.yml", "goreleaser.yml"):
+        for name in ("build-multiarch.yml",):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-go-ci.sh", workflow(name))
 
-        for name in ("code-coverage-test.yml", "build-multiarch.yml", "goreleaser.yml"):
+        for name in ("code-coverage-test.yml", "build-multiarch.yml"):
             with self.subTest(node_workflow=name):
                 self.assertIn("actions/setup-node@", workflow(name))
                 self.assertIn("node-version: 22", workflow(name))
@@ -207,6 +229,19 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("if: always()", step)
         self.assertIn("uses: actions/upload-artifact", step)
         self.assertIn("path: coverage.out", step)
+
+    def test_kaseki_completion_checks_actual_changed_files_against_allowlist(self):
+        reusable = workflow("kaseki-sweep.yml")
+        wait = workflow_step(reusable, "Wait for Kaseki completion")
+        self.assertIn("/api/v1/runs/$RUN_ID/analysis", wait)
+        self.assertIn("scripts/validate_kaseki_changed_files.py", wait)
+
+    def test_documentation_link_check_does_not_accept_http_errors_globally(self):
+        text = workflow("documentation.yml")
+        args = workflow_step(text, "Check canonical documentation links")
+        self.assertIn("--accept 200..=299", args)
+        self.assertNotIn("403", args)
+        self.assertNotIn("429", args)
 
 if __name__ == "__main__":
     unittest.main()

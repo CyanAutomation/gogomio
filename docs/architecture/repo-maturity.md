@@ -390,10 +390,10 @@ __✅ Test step exists__
 CI includes `go test ./... -v -race -coverprofile=coverage.out`; coverage reports are retained as GitHub Actions artifacts.
 
 __✅ Artifact or package produced__  
-Docker images pushed to Docker Hub (multi-arch: `linux/amd64`, `linux/arm64`). [.goreleaser.yml](.goreleaser.yml) configured to build cross-platform binaries (Linux/macOS, amd64/arm64) and generate `.tar.gz` archives, `.deb`/`.rpm` packages, checksums, and release notes.
+Docker images pushed to Docker Hub (multi-arch: `linux/amd64`, `linux/arm64`). [.goreleaser.yml](../../.goreleaser.yml) builds cross-platform binaries (Linux/macOS, amd64/arm64) and generates `.tar.gz` archives, `.deb`/`.rpm` packages, checksums, and release notes.
 
 __✅ Release mechanism exists__  
-[.github/workflows/goreleaser.yml](.github/workflows/goreleaser.yml) publishes GitHub Releases when a `v`-prefixed version tag is pushed. It uses the matching `CHANGELOG.md` section for release notes, then attaches binaries, packages, checksums, and installation instructions. [GitHub Release v0.1.0](https://github.com/CyanAutomation/gogomio/releases/tag/v0.1.0) is live with comprehensive documentation and quick-start guides.
+[.github/workflows/build-multiarch.yml](../../.github/workflows/build-multiarch.yml) is started manually from the GitHub Actions UI on `main`. Supplying an existing `v`-prefixed tag builds and publishes the Docker image and GoReleaser assets after validation; leaving it blank publishes only the selected Docker tags. It uses the matching `CHANGELOG.md` section for release notes. [GitHub Release v0.1.0](https://github.com/CyanAutomation/gogomio/releases/tag/v0.1.0) remains available.
 
 ⸻
 
@@ -554,7 +554,7 @@ The following gaps identified in earlier assessments have been __completed__:
 | ----- | -------- | -- | ----------- | ------- |
 | One-command bootstrap | ✅ Complete | [scripts/bootstrap.sh](../../scripts/bootstrap.sh) automates `.env` setup and Docker start | +1 → Setup: 4→5/5 | May 1, 2026 |
 | E2E testing | ✅ Complete | [handlers_e2e_test.go](../../internal/api/handlers_e2e_test.go) with 8+ E2E test functions | +1 → Testing: 4→5/5 | May 1, 2026 |
-| GoReleaser workflow | ✅ Complete | [.goreleaser.yml](.goreleaser.yml) + [.github/workflows/goreleaser.yml](.github/workflows/goreleaser.yml) (publishes on `v`-prefixed tag pushes) | +2 → CI/CD: 3→5/5 | May 1, 2026 |
+| GoReleaser workflow | ✅ Complete | [.goreleaser.yml](.goreleaser.yml) + the manually dispatched [.github/workflows/build-multiarch.yml](../../.github/workflows/build-multiarch.yml) release job | +2 → CI/CD: 3→5/5 | May 1, 2026 |
 | GitHub Release page | ✅ Complete | [v0.1.0 Release](https://github.com/CyanAutomation/gogomio/releases/tag/v0.1.0) with release notes & docs | +0 (included in CI/CD) | May 1, 2026 |
 | Dependabot automation | ✅ Complete | [.github/dependabot.yml](../../.github/dependabot.yml) configured for weekly Go + Actions updates | +1 → Security: 4→5/5 | April 2026 |
 | GitHub custom labels | ✅ Complete | 13 custom labels configured (bug, feature, documentation, dependencies, etc.) | +2 → Governance: 3→5/5 | April 2026 |

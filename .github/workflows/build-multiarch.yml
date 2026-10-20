@@ -1,19 +1,18 @@
-name: Build Multi-Architecture Docker Image
+name: Manual Release
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
-  schedule:
-    - cron: '17 6 * * 1'
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: 'Existing v-prefixed Git tag to publish as a release (optional)'
+        required: false
+        default: ''
+        type: string
       tags:
-        description: 'Docker image tags (comma-separated; manual runs cannot publish v-prefixed release tags)'
+        description: 'Additional Docker image tags (comma-separated; defaults to latest)'
         required: false
         default: 'latest'
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -22,20 +21,52 @@ permissions:
   contents: read
 
 concurrency:
-  # Version tags run independently; non-tag builds serialize mutable tags such as `latest`.
-  group: docker-publish-${{ github.repository }}-${{ github.ref_type == 'tag' && github.ref_name || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && github.run_id) || 'latest' }}
+  # All manual publishes serialize because version releases can also update `latest`.
+  group: docker-publish-${{ github.repository }}-manual
   cancel-in-progress: false
 
 jobs:
   validate:
     name: Validate source and tests
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      source_sha: ${{ steps.validate-source.outputs.source_sha || steps.manual-source.outputs.source_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag and source
+        id: validate-source
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate_release_tag.py "$RELEASE_TAG"
+          git fetch origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}" --force
+          git fetch origin main:refs/remotes/origin/main --force
+          release_sha="$(git rev-parse --verify "${RELEASE_TAG}^{commit}")"
+          python3 scripts/validate_release_source.py "$release_sha" refs/remotes/origin/main
+          echo "source_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Select manually dispatched source
+        id: manual-source
+        if: inputs.release_tag == ''
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout validated source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ steps.validate-source.outputs.source_sha || steps.manual-source.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -45,22 +76,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Validate release source
-        if: github.ref_type == 'tag'
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-          RELEASE_SHA: ${{ github.sha }}
-          RELEASE_BEFORE: ${{ github.event.before }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/validate_release_tag.py "$RELEASE_TAG"
-          python3 scripts/validate_release_tag_event.py "$RELEASE_BEFORE"
-          git fetch origin main:refs/remotes/origin/main --force
-          python3 scripts/validate_release_source.py "$RELEASE_SHA" refs/remotes/origin/main
-
       - name: Validate manual tags
-        if: github.event_name == 'workflow_dispatch'
         env:
           INPUT_TAGS: ${{ inputs.tags }}
         run: python3 scripts/validate_docker_dispatch_tags.py "$INPUT_TAGS"
@@ -94,6 +110,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ needs.validate.outputs.source_sha }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -112,16 +129,14 @@ jobs:
         id: meta
         env:
           INPUT_TAGS: ${{ inputs.tags }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            requested_tags="$(python3 scripts/validate_docker_dispatch_tags.py "$INPUT_TAGS")"
-          elif [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            python3 scripts/validate_release_tag.py "$GITHUB_REF_NAME"
-            requested_tags="${GITHUB_REF_NAME}"
-          else
-            requested_tags=latest
+          requested_tags="$(python3 scripts/validate_docker_dispatch_tags.py "$INPUT_TAGS")"
+          if [[ -n "$RELEASE_TAG" ]]; then
+            python3 scripts/validate_release_tag.py "$RELEASE_TAG"
+            requested_tags="${RELEASE_TAG},${requested_tags}"
           fi
 
           final_image_tags="$(bash scripts/docker-tags.sh "$requested_tags")"
@@ -151,7 +166,6 @@ jobs:
           push: true
           tags: cyanautomation/gogomio:${{ steps.meta.outputs.candidate_tag }}
           pull: true
-          no-cache: ${{ github.event_name == 'schedule' }}
           sbom: true
           provenance: true
           cache-from: type=gha
@@ -300,3 +314,59 @@ jobs:
             docker buildx imagetools inspect --raw "cyanautomation/gogomio:$image_tag" \
               | python3 scripts/verify_docker_manifest.py
           done
+
+  release:
+    name: Publish GitHub binary release
+    if: inputs.release_tag != ''
+    needs: [validate, build, verify, scan, promote]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          release_notes="$RUNNER_TEMP/release-notes.md"
+          if ! awk -v version="$version" '
+            BEGIN { header = "## [" version "]" }
+            index($0, header) == 1 && (length($0) == length(header) || substr($0, length(header) + 1, 1) == " ") { in_section=1; next }
+            /^## \[/ && in_section { exit }
+            in_section { print }
+          ' CHANGELOG.md > "$release_notes" || [[ ! -s "$release_notes" ]]; then
+            git log -1 --pretty=format:%B > "$release_notes"
+          fi
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
+        with:
+          version: v2.18.0
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
