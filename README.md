@@ -113,7 +113,7 @@ curl http://localhost:8000/api/config | jq
 **Important:** The arm64 Docker image installs `rpicam-apps` or `libcamera-apps` in the container. The Compose deployment also exposes Raspberry Pi device nodes. See the [Raspberry Pi Build Guide](docs/guides/RASPBERRY_PI_BUILD.md) for:
 
 - Build instructions
-- Camera initialization troubleshooting  
+- Camera initialization troubleshooting
 - Performance optimization
 - Cross-compilation from x86/amd64
 - 64-bit Raspberry Pi OS (arm64) is required for the native camera packages included in the image
@@ -170,12 +170,18 @@ Query a running server with CLI commands:
 ./gogomio status                           # Show streaming status
 ./gogomio diagnostics                      # System info
 ./gogomio health check                     # Quick health check
+./gogomio health detailed                  # Detailed health info
 ./gogomio version                          # Version info
 
 # Configuration
 ./gogomio config                           # Show all config
 ./gogomio config get fps                   # Get specific value
 ./gogomio config get resolution
+
+# Runtime settings
+./gogomio settings get                     # Show all settings
+./gogomio settings get jpeg_quality        # Get one setting value
+./gogomio settings set jpeg_quality=90     # Set a persistent setting
 
 # Stream management
 ./gogomio stream info                      # Metrics
@@ -212,6 +218,14 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
   - `Content-Type: image/jpeg`
   - Returns 503 if camera not ready
 
+- **GET `/webcam`** - OctoPrint-compatible alias for `/stream.mjpg` (same MJPEG stream)
+
+- **GET `/v1/stream.mjpg`** - Versioned alias for `/stream.mjpg`
+
+- **GET `/v1/snapshot.jpg`** - Versioned alias for `/snapshot.jpg`
+
+- **GET `/v1/webcam`** - Versioned alias for `/webcam`
+
 ### API
 
 - **GET `/api/config`** - Server configuration and stats
@@ -224,6 +238,10 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
     "fps": 24,
     "target_fps": 24,
     "jpeg_quality": 90,
+    "mock_camera": false,
+    "timestamp_iso8601": "2026-04-19T15:30:45Z",
+    "api_version": "1",
+    "_deprecated": "use /v1/config/camera and /v1/metrics/live instead",
     "max_stream_connections": 2,
     "current_stream_connections": 0,
     "frames_captured": 12345,
@@ -250,6 +268,14 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
 
 - **GET `/health`** - Liveness probe (always 200 OK if running)
 - **GET `/ready`** - Readiness probe (200 if camera ready, 503 if initializing)
+- **GET `/v1/health`** - Versioned liveness probe (same as `/health`)
+- **GET `/v1/ready`** - Versioned readiness probe (same as `/ready`)
+
+### Monitoring
+
+- **GET `/metrics`** - Prometheus-compatible metrics
+  - `Content-Type: text/plain; version=0.0.4; charset=utf-8`
+  - Pulled by Prometheus scraping setups; no third-party dependencies
 
 ### API Documentation
 
@@ -332,7 +358,7 @@ The versioned settings API reads and writes arbitrary JSON key/value settings. T
 ```bash
 curl http://localhost:8000/v1/api/settings
 
-curl -X PUT http://localhost:8000/v1/api/settings \
+curl -X POST http://localhost:8000/v1/api/settings \
   -H 'Content-Type: application/json' \
   -d '{"settings":{"example":"value"}}'
 ```
@@ -634,5 +660,5 @@ This project is licensed under the [MIT License](./LICENSE). See the LICENSE fil
 
 ---
 
-**Motion In Ocean Go** - Built with 🐹 Go, 🎥 for Raspberry Pi  
+**Motion In Ocean Go** - Built with 🐹 Go, 🎥 for Raspberry Pi
 Made by [CyanAutomation](https://github.com/CyanAutomation)
