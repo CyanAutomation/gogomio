@@ -358,7 +358,7 @@ The versioned settings API reads and writes arbitrary JSON key/value settings. T
 ```bash
 curl http://localhost:8000/v1/api/settings
 
-curl -X PUT http://localhost:8000/v1/api/settings \
+curl -X POST http://localhost:8000/v1/api/settings \
   -H 'Content-Type: application/json' \
   -d '{"settings":{"example":"value"}}'
 ```
