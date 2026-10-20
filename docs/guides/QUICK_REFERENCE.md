@@ -77,7 +77,7 @@ curl http://localhost:8000/api/config | jq
 # Save settings
 curl -X POST http://localhost:8000/v1/api/settings \
   -H "Content-Type: application/json" \
-  -d '{"brightness": 150, "contrast": 120}'
+  -d '{"settings":{"brightness":150,"contrast":120}}'
 
 # Get settings
 curl http://localhost:8000/v1/api/settings | jq
@@ -227,13 +227,11 @@ docker exec gogomio-gogomio-1 cat /tmp/gogomio/settings.json > settings.json
 
 | Feature | Description |
 | --------- | ------------- |
+| **Start/Stop Stream** | Stream is stopped until you click Start Stream; Stop cleanly ends it via the API |
 | **Live Stream** | Real-time MJPEG display with auto-reconnect |
-| **Brightness** | 0-200% slider with real-time display |
-| **Contrast** | 0-200% slider with real-time display |
-| **Saturation** | 0-200% slider with real-time display |
-| **Save Settings** | Persist preferences via API |
-| **Statistics** | Live FPS, resolution, quality, connections |
-| **Status** | Connection indicator (green/red) |
+| **Diagnostics** | Modal showing system and camera diagnostics, refreshed every 3 seconds |
+| **Statistics** | Stat cards for FPS, resolution, JPEG quality, and active connections |
+| **Status** | Connection indicator (active/inactive) |
 | **Mobile** | Fully responsive design |
 
 ## Security Notes
