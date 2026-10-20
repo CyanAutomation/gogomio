@@ -30,7 +30,7 @@ interface Pose {
 interface CameraConfigResponse {
     resolution: [number, number];
     fps: number;
-    target_fps: number;
+    target_fps?: number | null;
     current_fps: number;
     jpeg_quality: number;
     mock_camera: boolean;
@@ -51,7 +51,7 @@ interface DiagnosticsResponse {
     resolution: string;
     jpeg_quality: number;
     frames_captured: number;
-    last_frame_age_seconds: number;
+    last_frame_age_seconds?: number | null;
     message: string;
 }
 
@@ -97,7 +97,6 @@ class StreamController {
     isStreaming = false;
     private streamState: StreamState = "ready";
     private statsInterval: number | null = null;
-    private streamAbortController: AbortController | null = null;
     private streamRetryCount = 0;
     private readonly maxStreamRetries = 3;
     private poseResetTimer: number | null = null;
@@ -280,8 +279,6 @@ class StreamController {
         this.updateStreamControls();
         this.streamRetryCount = 0;
 
-        // Use fetch with AbortController for clean stream control
-        this.streamAbortController = new AbortController();
         // Add cache buster to ensure fresh stream
         this.imageElement.src = "/stream.mjpg?t=" + Date.now();
     }
@@ -292,12 +289,7 @@ class StreamController {
             .then(() => this.loadStats())
             .catch(err => console.error("Stop stream error:", err));
 
-        // Remove image source to stop displaying stream in UI
-        if (this.streamAbortController) {
-            this.streamAbortController.abort();
-            this.streamAbortController = null;
-        }
-
+        // Remove the image source to close the MJPEG request.
         this.imageElement.removeAttribute("src");
         this.isStreaming = false;
         this.streamRetryCount = 0;
@@ -346,7 +338,7 @@ class StreamController {
             getElement("feed-mode-badge").hidden = config.mock_camera !== true;
             // Show measured FPS and color it against the configured target while live.
             const fps = Number(config.current_fps);
-            const targetFps = config.target_fps || fps || 30;
+            const targetFps = config.target_fps ?? Number.NaN;
             const fpsEl = getElement("stat-fps");
             fpsEl.textContent = formatFrameRate(fps);
             fpsEl.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
@@ -527,7 +519,7 @@ function fetchDiagnostics(): void {
                         ${diagnosticMetric("Resolution", formatResolution(data.resolution), "grid")}
                         ${diagnosticMetric("JPEG quality", `${Number(data.jpeg_quality || 0)}%`, "quality")}
                         ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
-                        ${diagnosticMetric("Last frame age", formatFrameAge(Number(data.last_frame_age_seconds)), "clock")}
+                        ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
                         ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
                         ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}

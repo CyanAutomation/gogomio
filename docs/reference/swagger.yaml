@@ -12,7 +12,7 @@ definitions:
         example: 30
         type: integer
       jpeg_quality:
-        description: JPEG compression quality (0-100)
+        description: JPEG compression quality (1-100)
         example: 85
         type: integer
       max_stream_connections:
@@ -82,7 +82,7 @@ definitions:
         example: Excellent
         type: string
       jpeg_quality:
-        description: JPEG quality setting (0-100)
+        description: JPEG quality setting (1-100)
         example: 85
         type: integer
       last_frame_age_seconds:

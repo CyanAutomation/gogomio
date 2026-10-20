@@ -57,7 +57,7 @@
     return `${activeText} / ${maximumText}`;
   }
   function formatFrameAge(ageSeconds) {
-    return Number.isFinite(ageSeconds) && ageSeconds >= 0 ? `${ageSeconds.toFixed(2)}s ago` : "No frames yet";
+    return typeof ageSeconds === "number" && Number.isFinite(ageSeconds) && ageSeconds >= 0 ? `${ageSeconds.toFixed(2)}s ago` : "No frames yet";
   }
 
   // internal/web/src/diagnostics-dialog.ts
@@ -138,7 +138,6 @@
       this.isStreaming = false;
       this.streamState = "ready";
       this.statsInterval = null;
-      this.streamAbortController = null;
       this.streamRetryCount = 0;
       this.maxStreamRetries = 3;
       this.poseResetTimer = null;
@@ -300,15 +299,10 @@
       this.updateStatus("connecting");
       this.updateStreamControls();
       this.streamRetryCount = 0;
-      this.streamAbortController = new AbortController();
       this.imageElement.src = "/stream.mjpg?t=" + Date.now();
     }
     stopStream() {
       requestStopStream().then(() => this.loadStats()).catch((err) => console.error("Stop stream error:", err));
-      if (this.streamAbortController) {
-        this.streamAbortController.abort();
-        this.streamAbortController = null;
-      }
       this.imageElement.removeAttribute("src");
       this.isStreaming = false;
       this.streamRetryCount = 0;
@@ -349,7 +343,7 @@
         }
         getElement("feed-mode-badge").hidden = config.mock_camera !== true;
         const fps = Number(config.current_fps);
-        const targetFps = config.target_fps || fps || 30;
+        const targetFps = config.target_fps ?? Number.NaN;
         const fpsEl = getElement("stat-fps");
         fpsEl.textContent = formatFrameRate(fps);
         fpsEl.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
@@ -494,7 +488,7 @@
                         ${diagnosticMetric("Resolution", formatResolution(data.resolution), "grid")}
                         ${diagnosticMetric("JPEG quality", `${Number(data.jpeg_quality || 0)}%`, "quality")}
                         ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
-                        ${diagnosticMetric("Last frame age", formatFrameAge(Number(data.last_frame_age_seconds)), "clock")}
+                        ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
                         ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
                         ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}
