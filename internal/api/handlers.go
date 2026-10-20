@@ -781,7 +781,7 @@ type CameraConfigResponse struct {
 	FPS int `json:"fps" example:"30"`
 	// Target FPS for frame buffer
 	TargetFPS int `json:"target_fps" example:"30"`
-	// JPEG compression quality (0-100)
+	// JPEG compression quality (1-100)
 	JPEGQuality int `json:"jpeg_quality" example:"85"`
 	// Maximum concurrent stream connections allowed
 	MaxStreamConnections int `json:"max_stream_connections" example:"5"`
@@ -857,7 +857,7 @@ type DetailedHealthResponse struct {
 	LastFrameAgeSeconds float64 `json:"last_frame_age_seconds" example:"0.034"`
 	// Resolution as string (e.g., '1920x1080')
 	Resolution string `json:"resolution" example:"1920x1080"`
-	// JPEG quality setting (0-100)
+	// JPEG quality setting (1-100)
 	JPEGQuality int `json:"jpeg_quality" example:"85"`
 	// Maximum concurrent connections
 	MaxConnections int `json:"max_stream_connections" example:"5"`

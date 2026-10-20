@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoGoMio | Camera Dashboard</title>
+    <title>GoGoMio | Camera dashboard</title>
     <style>
         /* ====== DESIGN SYSTEM ====== */
         :root {
-            /* Color Palette */
-            --color-primary: #5FA8D3;
-            --color-primary-dark: #2A5F8A;
+            /* Brand and action colors */
+            --color-primary: #2A5F8A;
+            --color-primary-dark: #214A6B;
             --color-primary-light: #A7D3E8;
+            --color-brand-accent: #5FA8D3;
             --color-success: #10b981;
             --color-success-light: #d1fae5;
             --color-success-dark: #065f46;
@@ -21,31 +22,22 @@
             --color-warning-light: #fef3c7;
             --color-warning-dark: #78350f;
 
-            /* MIO Ocean Palette */
-            --mio-primary: #5FA8D3;
-            --mio-secondary: #3C7DC4;
-            --mio-dark: #2A5F8A;
-            --mio-highlight: #A7D3E8;
-            --mio-belly: #F2F4F7;
-            --mio-outline: #0F1A2B;
-
             /* Info Message Colors */
-            --color-info: #A7D3E8;
+            --color-info: #5FA8D3;
             --color-info-light: #e0f2fb;
-            --color-info-dark: #2A5F8A;
+            --color-info-dark: var(--color-primary);
 
             /* Neutral Colors */
             --color-bg: #f0f7fc;
             --color-bg-secondary: #e8f2f8;
             --color-border: #e2e8f0;
             --color-text: #1e293b;
-            --color-text-secondary: #64748b;
-            --color-text-tertiary: #94a3b8;
+            --color-text-secondary: #52657A;
             
             /* Surfaces */
             --color-surface: #ffffff;
             --color-surface-hover: #f8fafc;
-            --color-focus-ring: rgba(60, 125, 196, 0.35);
+            --color-focus-ring: rgba(42, 95, 138, 0.35);
             
             /* Spacing */
             --spacing-xs: 4px;
@@ -128,7 +120,7 @@
 
         /* ====== HEADER ====== */
         header {
-            background: linear-gradient(135deg, var(--mio-primary) 0%, var(--mio-dark) 100%);
+            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
             color: white;
             padding: var(--spacing-sm) 0;
             text-align: center;
@@ -172,14 +164,14 @@
         }
 
         h1 {
-            font-size: 26px;
+            font-size: var(--font-size-2xl);
             font-weight: 700;
             margin-bottom: 2px;
             letter-spacing: -0.3px;
         }
 
         .subtitle {
-            font-size: 13px;
+            font-size: var(--font-size-sm);
             opacity: 0.95;
             font-weight: 400;
         }
@@ -210,7 +202,7 @@
         }
 
         .card {
-            border-top: 3px solid var(--mio-primary);
+            border-top: 3px solid var(--color-brand-accent);
             padding: var(--spacing-2xl);
             display: flex;
             flex-direction: column;
@@ -326,24 +318,28 @@
 
         .status-indicator {
             display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            animation: pulse 2s infinite;
             flex-shrink: 0;
-            box-shadow: 0 0 8px currentColor;
         }
 
-        .status-indicator.active {
+        .status-indicator--neutral {
+            background: var(--color-text-secondary);
+        }
+
+        .status-indicator--success {
             background: var(--color-success);
-            color: var(--color-success);
+            box-shadow: 0 0 8px var(--color-success);
         }
 
-        .status-indicator.inactive {
+        .status-indicator--warning {
+            background: var(--color-warning);
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator--error {
             background: var(--color-error);
-            animation: none;
-            color: var(--color-error);
-            box-shadow: none;
         }
 
         #status-text {
@@ -378,8 +374,8 @@
             font-weight: 600;
             color: var(--color-text);
             font-size: var(--font-size-sm);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            text-transform: none;
+            letter-spacing: normal;
         }
 
         .form-group > div:first-child {
@@ -515,13 +511,13 @@
         }
 
         .button--primary {
-            background: var(--mio-secondary);
+            background: var(--color-primary);
             color: white;
             box-shadow: var(--shadow-md);
         }
 
         .button--primary:hover:not(:disabled) {
-            background: var(--mio-dark);
+            background: var(--color-primary-dark);
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(42, 95, 138, 0.4);
         }
@@ -598,8 +594,8 @@
             color: var(--color-text-secondary);
             margin-bottom: var(--spacing-sm);
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            text-transform: none;
+            letter-spacing: normal;
         }
 
         .metric-card__value {
@@ -608,29 +604,57 @@
             color: var(--color-primary);
         }
 
-        .metric-card__value--good {
-            color: var(--color-success);
+        .metric-card__value--compact {
+            font-size: var(--font-size-xl);
+            white-space: nowrap;
         }
 
         .metric-card__value--success {
-            color: var(--color-success);
+            color: var(--color-success-dark);
         }
 
         .metric-card__value--warning {
-            color: var(--color-warning);
+            color: var(--color-warning-dark);
         }
 
         .metric-card__value--error {
-            color: var(--color-error);
+            color: var(--color-error-dark);
         }
 
-        /* ====== MESSAGES ====== */
-        .message {
+        /* ====== NOTICES ====== */
+        .notice {
             padding: var(--spacing-lg);
             border-radius: var(--radius-md);
+            border-left: 4px solid;
+        }
+
+        .notice--success {
+            background: var(--color-success-light);
+            border-color: var(--color-success);
+            color: var(--color-success-dark);
+        }
+
+        .notice--error {
+            background: var(--color-error-light);
+            border-color: var(--color-error);
+            color: var(--color-error-dark);
+        }
+
+        .notice--warning {
+            background: var(--color-warning-light);
+            border-color: var(--color-warning);
+            color: var(--color-warning-dark);
+        }
+
+        .notice--info {
+            background: var(--color-info-light);
+            border-color: var(--color-info);
+            color: var(--color-info-dark);
+        }
+
+        .message {
             margin-bottom: var(--spacing-lg);
             display: none;
-            border-left: 4px solid;
             animation: slideDown var(--transition-fast) ease;
             font-weight: 500;
             font-size: var(--font-size-sm);
@@ -653,30 +677,6 @@
                 transform: translateY(0);
                 max-height: 500px;
             }
-        }
-
-        .message.success {
-            background: var(--color-success-light);
-            border-color: var(--color-success);
-            color: var(--color-success-dark);
-        }
-
-        .message.error {
-            background: var(--color-error-light);
-            border-color: var(--color-error);
-            color: var(--color-error-dark);
-        }
-
-        .message.warning {
-            background: var(--color-warning-light);
-            border-color: var(--color-warning);
-            color: var(--color-warning-dark);
-        }
-
-        .message.info {
-            background: var(--color-info-light);
-            border-color: var(--color-info);
-            color: var(--color-info-dark);
         }
 
         /* ====== FOOTER ====== */
@@ -880,26 +880,6 @@
             text-align: right;
         }
 
-        .diagnostic-notice {
-            padding: var(--spacing-lg);
-            border-left: 4px solid var(--color-success);
-            border-radius: var(--radius-md);
-            color: var(--color-success-dark);
-            background: var(--color-success-light);
-        }
-
-        .diagnostic-notice--warning {
-            border-color: var(--color-warning);
-            color: var(--color-warning-dark);
-            background: var(--color-warning-light);
-        }
-
-        .diagnostic-notice--error {
-            border-color: var(--color-error);
-            color: var(--color-error-dark);
-            background: var(--color-error-light);
-        }
-
         .diagnostic-notice p {
             margin: var(--spacing-xs) 0 0;
             font-size: var(--font-size-sm);
@@ -910,7 +890,7 @@
             align-items: center;
             justify-content: center;
             gap: var(--spacing-sm);
-            color: var(--color-text-tertiary);
+            color: var(--color-text-secondary);
             font-size: var(--font-size-xs);
         }
 
@@ -990,6 +970,10 @@
             .metric-card__value {
                 font-size: clamp(1rem, 4.5vw, var(--font-size-2xl));
                 overflow-wrap: anywhere;
+            }
+
+            .metric-card__value--compact {
+                font-size: clamp(0.875rem, 4.5vw, var(--font-size-xl));
             }
 
             .modal-overlay {
@@ -1114,7 +1098,7 @@
             <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO mascot" class="mio-header-avatar mio-blink">
             <div class="brand-copy">
                 <h1>GoGoMio</h1>
-                <p class="subtitle">Live camera streaming</p>
+            <p class="subtitle">Your camera stream, with MIO</p>
             </div>
         </div>
     </header>
@@ -1125,7 +1109,7 @@
             <section class="card surface-panel video-section" aria-labelledby="stream-title">
                 <h2 class="section-title" id="stream-title">
                     <svg class="icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
-                    <span>Live Stream</span>
+                    <span>Live stream</span>
                 </h2>
                 <div id="stream-container" class="stream-viewer">
                     <img id="stream-img" class="stream-image is-hidden" alt="Live camera stream">
@@ -1139,32 +1123,32 @@
                                     <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="MIO is resting" class="mio-state-image mio-blink">
                                 </div>
                             </div>
-                            <p id="stream-placeholder-text" class="stream-placeholder__text">Ready to stream</p>
-                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Select Start Stream to begin viewing.</p>
+                            <p id="stream-placeholder-text" class="stream-placeholder__text">MIO's ready when you are.</p>
+                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Start the stream to see what's happening.</p>
                         </div>
                     </div>
                     <span id="feed-mode-badge" class="feed-mode-badge" hidden>Simulated feed</span>
                 </div>
                 <div class="stream-controls" role="group" aria-label="Stream controls">
-                    <button type="button" class="button button--primary" id="start-stream" aria-label="Start live stream">
+                    <button type="button" class="button button--primary" id="start-stream" aria-label="Start stream">
                         <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
-                        <span>Start Stream</span>
+                        <span>Start stream</span>
                     </button>
-                    <button type="button" class="button button--secondary" id="stop-stream" aria-label="Stop live stream" disabled>
+                    <button type="button" class="button button--secondary" id="stop-stream" aria-label="Stop stream" disabled>
                         <svg class="icon" aria-hidden="true"><use href="#icon-stop"></use></svg>
-                        <span>Stop Stream</span>
+                        <span>Stop stream</span>
                     </button>
                 </div>
                 <div class="stream-status" role="status" aria-live="polite">
-                    <span class="status-indicator inactive" id="status-indicator" aria-hidden="true"></span>
-                    <span id="status-text">Stopped</span>
+                    <span class="status-indicator status-indicator--neutral" id="status-indicator" aria-hidden="true"></span>
+                    <span id="status-text">Ready</span>
                 </div>
             </section>
 
             <section class="card surface-panel controls-section" aria-labelledby="status-title">
                 <h2 class="section-title" id="status-title">
                     <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
-                    <span>System Status</span>
+                    <span>Camera overview</span>
                 </h2>
 
                 <div id="message" class="message" role="alert" aria-live="assertive"></div>
@@ -1174,21 +1158,21 @@
                     <span>Diagnostics</span>
                 </button>
 
-                <div class="stats" aria-label="Current stream metrics">
+                <div class="stats" aria-label="Camera metrics">
                     <div class="metric-card">
-                        <div class="metric-card__label">FPS</div>
+                        <div class="metric-card__label">Frame rate</div>
                         <div class="metric-card__value" id="stat-fps">--</div>
                     </div>
                     <div class="metric-card">
                         <div class="metric-card__label">Resolution</div>
-                        <div class="metric-card__value" id="stat-resolution">--</div>
+                        <div class="metric-card__value metric-card__value--compact" id="stat-resolution">--</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-card__label">Quality</div>
+                        <div class="metric-card__label">JPEG quality</div>
                         <div class="metric-card__value" id="stat-quality">--</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-card__label">Connections</div>
+                        <div class="metric-card__label">Active streams</div>
                         <div class="metric-card__value" id="stat-connections">--</div>
                     </div>
                 </div>
@@ -1207,7 +1191,7 @@
     <div id="diagnostics-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
         <div class="modal-inner surface-panel">
             <div class="modal-header">
-                <h2 id="diagnostics-title" class="modal-title">System Diagnostics</h2>
+                <h2 id="diagnostics-title" class="modal-title">System diagnostics</h2>
                 <button type="button" id="diagnostics-close" class="button button--icon" aria-label="Close diagnostics">
                     <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
                 </button>
@@ -1219,6 +1203,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=2bc184705b59fe508680d2e0890aeb21876223bdfee2c7a3951563e4359dff4a"></script>
+    <script src="/static/app.js?v=010f17837fcdb43201c69ffd6dfe17c84b19805566aadaedffc4fd32da5cb684"></script>
 </body>
 </html>

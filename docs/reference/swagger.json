@@ -467,7 +467,7 @@
                     "example": 30
                 },
                 "jpeg_quality": {
-                    "description": "JPEG compression quality (0-100)",
+                    "description": "JPEG compression quality (1-100)",
                     "type": "integer",
                     "example": 85
                 },
@@ -555,7 +555,7 @@
                     "example": "Excellent"
                 },
                 "jpeg_quality": {
-                    "description": "JPEG quality setting (0-100)",
+                    "description": "JPEG quality setting (1-100)",
                     "type": "integer",
                     "example": 85
                 },
