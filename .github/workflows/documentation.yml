@@ -44,5 +44,5 @@ jobs:
           args: >-
             --verbose --no-progress --exclude-loopback --exclude-private --exclude-link-local
             --exclude '^http://raspberrypi\.local:8000/'
-            --retry-wait-time 2 --accept 200..=299,403,429
+            --retry-wait-time 2 --accept 200..=299
             README.md CONTRIBUTING.md docs/README.md 'docs/guides/*.md' 'docs/testing/*.md'
