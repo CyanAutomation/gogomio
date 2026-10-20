@@ -114,7 +114,7 @@ environment:
 
 ### Prerequisites
 
-- Raspberry Pi 3/4/5 with 64-bit OS
+- Raspberry Pi 4 or 5 with 64-bit OS
 - Docker and Docker Compose installed
 - Raspberry Pi Camera Module (CSI or USB)
 - Camera backend packages on Pi/container runtime:
@@ -188,7 +188,7 @@ curl http://localhost:8000/snapshot.jpg -o frame.jpg
 # Save settings
 curl -X POST http://localhost:8000/v1/api/settings \
   -H "Content-Type: application/json" \
-  -d '{"brightness": 150, "contrast": 120}'
+  -d '{"settings":{"brightness":150,"contrast":120}}'
 
 # Get settings
 curl http://localhost:8000/v1/api/settings | jq
@@ -198,19 +198,18 @@ curl http://localhost:8000/v1/api/settings | jq
 
 1. **Live Stream Viewer**
    - Real-time MJPEG display
+   - Stream is stopped until you click **Start Stream**; **Stop Stream** cleanly ends it via the API
    - Auto-reconnect on disconnect
    - Connection status indicator
 
-2. **Settings Controls**
-   - Brightness, Contrast, Saturation sliders
-   - Save/Reset buttons
-   - Persistent across restarts
+2. **Diagnostics Modal**
+   - Opens from the **Diagnostics** button
+   - Shows system and camera diagnostics
+   - Refreshes automatically every 3 seconds while open
 
 3. **Statistics Dashboard**
-   - FPS counter (updates every 2 seconds)
-   - Camera resolution
-   - JPEG quality
-   - Active connection count
+   - Stat cards for FPS, camera resolution, JPEG quality, and active connections
+   - Connection count resets when the stream stops
 
 ---
 
@@ -266,7 +265,7 @@ Edit `docker-compose.yml`:
 deploy:
   resources:
     limits:
-      cpus: '1'           # Raspberry Pi 3: use '0.5'
+      cpus: '1'           # Lower-end Pi 4: use '0.5'
       memory: 256M        # Reduce to 128M if needed
 ```
 
