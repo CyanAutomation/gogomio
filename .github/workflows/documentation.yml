@@ -41,8 +41,10 @@ jobs:
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           lycheeVersion: v0.24.2
+          # Raspberry Pi blocks CI link crawlers; keep this exception scoped to its camera docs page.
           args: >-
             --verbose --no-progress --exclude-loopback --exclude-private --exclude-link-local
             --exclude '^http://raspberrypi\.local:8000/'
+            --exclude '^https://www\.raspberrypi\.com/documentation/computers/camera_software\.html'
             --retry-wait-time 2 --accept 200..=299
             README.md CONTRIBUTING.md docs/README.md 'docs/guides/*.md' 'docs/testing/*.md'

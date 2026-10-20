@@ -242,6 +242,10 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("--accept 200..=299", args)
         self.assertNotIn("403", args)
         self.assertNotIn("429", args)
+        self.assertIn(
+            r"--exclude '^https://www\.raspberrypi\.com/documentation/computers/camera_software\.html'",
+            args,
+        )
 
 if __name__ == "__main__":
     unittest.main()
