@@ -21,6 +21,45 @@
     return fetcher("/api/stream/stop", { method: "POST" });
   }
 
+  // internal/web/src/dashboard-presentation.ts
+  var streamStatuses = {
+    ready: { label: "Ready", tone: "neutral" },
+    connecting: { label: "Connecting\u2026", tone: "warning" },
+    live: { label: "Live", tone: "success" },
+    reconnecting: { label: "Reconnecting\u2026", tone: "warning" },
+    unavailable: { label: "Unavailable", tone: "error" }
+  };
+  function getStreamStatusPresentation(state) {
+    return streamStatuses[state];
+  }
+  function formatFrameRate(frameRate) {
+    return Number.isFinite(frameRate) && frameRate >= 0 ? `${frameRate.toFixed(1)} fps` : "--";
+  }
+  function getFrameRateTone(frameRate, targetFrameRate, isLive) {
+    if (!isLive || !Number.isFinite(frameRate) || !Number.isFinite(targetFrameRate) || targetFrameRate <= 0) {
+      return "neutral";
+    }
+    const ratio = frameRate / targetFrameRate;
+    return ratio >= 0.9 ? "success" : ratio >= 0.5 ? "warning" : "error";
+  }
+  function formatResolution(resolution) {
+    if (Array.isArray(resolution)) {
+      const [width, height] = resolution;
+      return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 ? `${width} \xD7 ${height}` : "--";
+    }
+    if (typeof resolution !== "string") return "--";
+    const match = resolution.match(/^\s*(\d+)\s*[x×]\s*(\d+)\s*$/i);
+    return match ? `${match[1]} \xD7 ${match[2]}` : "--";
+  }
+  function formatStreamConnections(active, maximum) {
+    const activeText = Number.isFinite(active) && active >= 0 ? String(active) : "--";
+    const maximumText = Number.isFinite(maximum) && maximum >= 0 ? String(maximum) : "--";
+    return `${activeText} / ${maximumText}`;
+  }
+  function formatFrameAge(ageSeconds) {
+    return typeof ageSeconds === "number" && Number.isFinite(ageSeconds) && ageSeconds >= 0 ? `${ageSeconds.toFixed(2)}s ago` : "No frames yet";
+  }
+
   // internal/web/src/diagnostics-dialog.ts
   var FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
   function focusableElements(modal) {
@@ -97,8 +136,8 @@
   var StreamController = class {
     constructor() {
       this.isStreaming = false;
+      this.streamState = "ready";
       this.statsInterval = null;
-      this.streamAbortController = null;
       this.streamRetryCount = 0;
       this.maxStreamRetries = 3;
       this.poseResetTimer = null;
@@ -151,6 +190,7 @@
           animationClass: "mio-float"
         }
       };
+      this.updateStatus("ready");
       this.initializeStream();
       this.attachEventListeners();
       this.loadStats();
@@ -202,10 +242,12 @@
         this.idleElement.classList.add("is-hidden");
         this.schedulePoseResetToIdle();
         this.updateStreamControls();
-        this.updateStatus("Streaming", true);
+        this.updateStatus("live");
+        this.loadStats();
         this.startStatsPolling();
       };
       this.imageElement.onerror = () => {
+        if (!this.imageElement.getAttribute("src")) return;
         this.isStreaming = false;
         this.imageElement.removeAttribute("src");
         this.loadingElement.classList.remove("is-hidden");
@@ -214,9 +256,10 @@
         const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
         if (nextRetryCount !== null) {
           this.streamRetryCount = nextRetryCount;
-          this.placeholderText.textContent = "Connection lost";
-          this.placeholderDesc.textContent = `Retrying (${this.streamRetryCount}/${this.maxStreamRetries})...`;
-          this.showMessage(`Stream reconnecting... (Attempt ${this.streamRetryCount}/${this.maxStreamRetries})`, "warning");
+          this.placeholderText.textContent = "We lost the stream.";
+          this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`;
+          this.updateStatus("reconnecting");
+          this.showMessage(`MIO is reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`, "warning");
           this.setLoadingPose("running");
           const scheduledRetryCount = nextRetryCount;
           window.setTimeout(() => {
@@ -225,20 +268,21 @@
             }
           }, 2e3);
         } else {
-          this.placeholderText.textContent = "Stream unavailable";
-          this.placeholderDesc.textContent = "Max retries exceeded. Click Start to try again.";
-          this.showMessage("Stream connection failed after multiple attempts. Please check the server is running.", "error");
+          this.placeholderText.textContent = "We couldn't reconnect.";
+          this.placeholderDesc.textContent = "Check the camera connection, then try again.";
+          this.updateStatus("unavailable");
+          this.showMessage("MIO couldn't reconnect. Check the camera connection, then try again.", "error");
         }
         this.updateStreamControls();
-        this.updateStatus("Disconnected", false);
         this.stopStatsPolling();
-        getElement("stat-connections").textContent = "0";
       };
       this.updateStreamControls();
     }
-    updateStatus(text, isActive) {
-      this.statusText.textContent = text;
-      this.statusIndicator.className = isActive ? "status-indicator active" : "status-indicator inactive";
+    updateStatus(state) {
+      this.streamState = state;
+      const presentation = getStreamStatusPresentation(state);
+      this.statusText.textContent = presentation.label;
+      this.statusIndicator.className = `status-indicator status-indicator--${presentation.tone}`;
     }
     attachEventListeners() {
       this.startButton.addEventListener("click", () => this.startStream());
@@ -246,23 +290,19 @@
     }
     startStream() {
       if (this.isStreaming) return;
-      this.placeholderText.textContent = "Connecting to stream...";
-      this.placeholderDesc.textContent = "Establishing connection...";
+      this.placeholderText.textContent = "MIO is warming things up\u2026";
+      this.placeholderDesc.textContent = "Your camera stream should be ready in a moment.";
       this.loadingElement.classList.remove("is-hidden");
       this.setLoadingPose("loading");
       this.clearPoseResetTimer();
       this.imageElement.classList.add("is-hidden");
-      this.updateStatus("Starting...", false);
+      this.updateStatus("connecting");
+      this.updateStreamControls();
       this.streamRetryCount = 0;
-      this.streamAbortController = new AbortController();
       this.imageElement.src = "/stream.mjpg?t=" + Date.now();
     }
     stopStream() {
-      requestStopStream().catch((err) => console.error("Stop stream error:", err));
-      if (this.streamAbortController) {
-        this.streamAbortController.abort();
-        this.streamAbortController = null;
-      }
+      requestStopStream().then(() => this.loadStats()).catch((err) => console.error("Stop stream error:", err));
       this.imageElement.removeAttribute("src");
       this.isStreaming = false;
       this.streamRetryCount = 0;
@@ -270,16 +310,16 @@
       this.loadingElement.classList.remove("is-hidden");
       this.setIdlePose("idle");
       this.clearPoseResetTimer();
-      this.placeholderText.textContent = "Stream stopped";
-      this.placeholderDesc.textContent = "Select Start Stream to begin viewing.";
+      this.placeholderText.textContent = "MIO's ready when you are.";
+      this.placeholderDesc.textContent = "Start the stream to see what's happening.";
+      this.updateStatus("ready");
       this.updateStreamControls();
-      this.updateStatus("Stopped", false);
       this.stopStatsPolling();
-      getElement("stat-connections").textContent = "0";
     }
     updateStreamControls() {
-      this.startButton.disabled = this.isStreaming;
-      this.stopButton.disabled = !this.isStreaming;
+      const canStop = this.streamState === "connecting" || this.streamState === "live" || this.streamState === "reconnecting";
+      this.startButton.disabled = canStop;
+      this.stopButton.disabled = !canStop;
     }
     startStatsPolling() {
       if (this.statsInterval !== null) return;
@@ -295,26 +335,26 @@
     async loadStats() {
       try {
         const response = await requestCameraConfig();
-        if (!response.ok) throw new Error("Failed to load stats");
+        if (!response.ok) throw new Error("Failed to load camera metrics");
         const config = await response.json();
         const aspectRatio = resolutionToAspectRatio(config.resolution);
         if (aspectRatio) {
           getElement("stream-container").style.aspectRatio = aspectRatio;
         }
         getElement("feed-mode-badge").hidden = config.mock_camera !== true;
-        const fps = config.fps || 0;
-        const targetFps = config.target_fps || fps || 30;
+        const fps = Number(config.current_fps);
+        const targetFps = config.target_fps ?? Number.NaN;
         const fpsEl = getElement("stat-fps");
-        fpsEl.textContent = fps ? String(fps) : "--";
-        fpsEl.classList.remove("metric-card__value--good", "metric-card__value--warning", "metric-card__value--error");
-        if (fps) {
-          const ratio = fps / targetFps;
-          const tone = ratio >= 0.9 ? "good" : ratio >= 0.5 ? "warning" : "error";
-          fpsEl.classList.add(`metric-card__value--${tone}`);
-        }
-        getElement("stat-resolution").textContent = config.resolution ? `${config.resolution[0]}x${config.resolution[1]}` : "--";
+        fpsEl.textContent = formatFrameRate(fps);
+        fpsEl.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
+        const fpsTone = getFrameRateTone(fps, targetFps, this.streamState === "live");
+        if (fpsTone !== "neutral") fpsEl.classList.add(`metric-card__value--${fpsTone}`);
+        getElement("stat-resolution").textContent = formatResolution(config.resolution);
         getElement("stat-quality").textContent = (config.jpeg_quality || "--") + "%";
-        getElement("stat-connections").textContent = String(config.current_stream_connections);
+        getElement("stat-connections").textContent = formatStreamConnections(
+          config.current_stream_connections,
+          config.max_stream_connections
+        );
       } catch (error) {
         console.error("Error loading stats:", error);
       }
@@ -322,7 +362,7 @@
     showMessage(text, type = "info") {
       const msg = getElement("message");
       msg.textContent = text;
-      msg.className = `message show ${type}`;
+      msg.className = `message notice notice--${type}`;
       if (!this.isStreaming) {
         if (type === "success") {
           this.setIdlePose("success");
@@ -419,7 +459,7 @@
                 <div class="metric-card__value">${cameraStatus}</div>
             </div>`;
       const healthCard = `<div class="metric-card metric-card--status metric-card--${healthTone}">
-                <div class="metric-card__label">Health</div>
+                <div class="metric-card__label">System health</div>
                 <div class="metric-card__value">${escapeHTML(data.health_status || "Unknown")}</div>
             </div>`;
       const totalFailures = Number(data.capture_failures_total || 0);
@@ -436,40 +476,40 @@
                         <div class="metric-card__value">${formatUptime(Number(data.uptime_seconds || 0))}</div>
                     </div>
                     <div class="metric-card">
-                        <div class="metric-card__label">${iconMarkup("alert")} Error Rate</div>
+                        <div class="metric-card__label">${iconMarkup("alert")} Error rate</div>
                         <div class="metric-card__value metric-card__value--${healthTone}">${errorRate.toFixed(1)}%</div>
                     </div>
                 </div>
 
                 <section class="diagnostics-details" aria-labelledby="diagnostics-metrics-title">
-                    <h3 class="diagnostics-subtitle" id="diagnostics-metrics-title">Detailed Metrics</h3>
+                    <h3 class="diagnostics-subtitle" id="diagnostics-metrics-title">Detailed metrics</h3>
                     <div class="diagnostic-metric-list">
-                        ${diagnosticMetric("Frame Rate", `${Number(data.fps_current || 0).toFixed(1)} fps`, "camera")}
-                        ${diagnosticMetric("Resolution", data.resolution || "Unknown", "grid")}
-                        ${diagnosticMetric("JPEG Quality", `${Number(data.jpeg_quality || 0)}%`, "quality")}
-                        ${diagnosticMetric("Frames Captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
-                        ${diagnosticMetric("Last Frame Age", `${Number(data.last_frame_age_seconds || 0).toFixed(2)}s ago`, "clock")}
-                        ${diagnosticMetric("Active Streams", `${Number(data.stream_connections || 0)}/${Number(data.max_stream_connections || 0)}`, "link")}
-                        ${diagnosticMetric("Recent Failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
-                        ${diagnosticMetric("Total Failures", totalFailures, "chart")}
+                        ${diagnosticMetric("Frame rate", formatFrameRate(Number(data.fps_current ?? Number.NaN)), "camera")}
+                        ${diagnosticMetric("Resolution", formatResolution(data.resolution), "grid")}
+                        ${diagnosticMetric("JPEG quality", `${Number(data.jpeg_quality || 0)}%`, "quality")}
+                        ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
+                        ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
+                        ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
+                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
+                        ${diagnosticMetric("Total failures", totalFailures, "chart")}
                     </div>
                 </section>
 
-                <div class="diagnostic-notice diagnostic-notice--${noticeTone}">
-                    <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System Status</strong>
-                    <p>${escapeHTML(data.message || "No status details are available.")}</p>
+                <div class="notice notice--${noticeTone} diagnostic-notice">
+                    <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System status</strong>
+                    <p>${escapeHTML(data.message || "No status details right now.")}</p>
                 </div>
 
-                <div class="refresh-indicator">${iconMarkup("refresh")}<span>Updates every 3 seconds</span></div>
+                <div class="refresh-indicator">${iconMarkup("refresh")}<span>Refreshes every 3 seconds</span></div>
             `;
     }).catch((error) => {
+      console.error("Diagnostics request failed:", error);
       const controller = getStreamController();
       if (controller && !controller.isStreaming) {
         controller.setIdlePose("warning");
       }
       const content = getElement("diagnostics-content");
-      const detail = error instanceof Error ? error.message : error;
-      content.innerHTML = `<div class="message show error">Diagnostics are unavailable. ${escapeHTML(detail)}</div>`;
+      content.innerHTML = `<div class="notice notice--error message show" role="alert">MIO couldn't load diagnostics just now. Please try again in a moment.</div>`;
     });
   }
   function formatUptime(seconds) {
