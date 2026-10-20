@@ -1242,6 +1242,14 @@ func TestFrameManagerCaptureLoopSingleGoroutineAcrossRapidClientFlaps(t *testing
 	}
 	finalTimer.trigger()
 	waitForCaptureState(t, fm, false)
+	fm.captureMu.Lock()
+	loopDone := fm.captureLoopDone
+	fm.captureMu.Unlock()
+	select {
+	case <-loopDone:
+	case <-time.After(testDuration(testConditionTimeout)):
+		t.Fatal("capture loop did not exit after idle stop")
+	}
 	if active := atomic.LoadInt64(&cam.activeCaptures); active != 0 {
 		t.Fatalf("active captures after idle stop = %d, want 0", active)
 	}

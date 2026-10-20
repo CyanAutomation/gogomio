@@ -105,14 +105,13 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 
 | Signal | Status | Evidence | Notes |
 | -------- | -------- | ---------- | ------- |
-| CI workflow exists | ✅ Met | [.github/workflows/build-multiarch.yml](../../.github/workflows/) | Automated Docker multi-arch builds |
+| CI workflow exists | ✅ Met | [Manual Release workflow](../../.github/workflows/build-multiarch.yml) | Multi-arch builds run when started from the GitHub Actions UI |
 | Build step exists | ✅ Met | Build-multiarch workflow includes `go build` in Docker | Builds for linux/amd64 and linux/arm64 |
-| Test step exists | ❌ **NOT MET** | No `go test` step in CI workflows | Tests run locally but not in CI |
-| Artifact or package produced | ✅ Met | Docker images pushed to [docker.io/cyanautomation/gogomio](https://hub.docker.com/r/cyanautomation/gogomio) | Multi-tagged releases (latest, v0.1.0-arm64, etc.) |
-| Release mechanism exists | ✅ Met | GitHub releases + Docker image tags | Git tag triggers Docker Hub release |
+| Test step exists | ✅ Met | Go coverage workflow and manual release validation job | Go race tests, vet, helper tests, and web checks run in Actions |
+| Artifact or package produced | ✅ Met | Docker images pushed to [docker.io/cyanautomation/gogomio](https://hub.docker.com/r/cyanautomation/gogomio) | Docker tags and GitHub release assets publish only after a manual dispatch |
+| Release mechanism exists | ✅ Met | GitHub releases + Docker image tags | Manually dispatched from the GitHub Actions UI |
 
-**Category Score: 4/5** | **Contribution: (4/5) × 10 = 8.0 points**  
-**Gap**: Missing test execution in CI
+**Category Score: 5/5** | **Contribution: (5/5) × 10 = 10.0 points**
 
 ---
 

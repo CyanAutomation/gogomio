@@ -3,7 +3,7 @@
 # Purpose: Builds and deploys a demo instance to Google Cloud Run.
 #          This is NOT the production image — real users pull from docker.io/DockerHub.
 #
-# Trigger: Manual or automatic on version tags (configure in GCP Console → Cloud Build → Triggers)
+# Trigger: Manual only via Cloud Build UI or `gcloud builds submit`; do not configure tag triggers.
 # Platform: linux/amd64 (Cloud Run is amd64-only; no QEMU/Buildx needed)
 # Registry: Google Artifact Registry (GAR)
 #
