@@ -51,8 +51,8 @@ export function formatStreamConnections(active: number, maximum: number): string
     return `${activeText} / ${maximumText}`;
 }
 
-export function formatFrameAge(ageSeconds: number): string {
-    return Number.isFinite(ageSeconds) && ageSeconds >= 0
+export function formatFrameAge(ageSeconds: unknown): string {
+    return typeof ageSeconds === "number" && Number.isFinite(ageSeconds) && ageSeconds >= 0
         ? `${ageSeconds.toFixed(2)}s ago`
         : "No frames yet";
 }
