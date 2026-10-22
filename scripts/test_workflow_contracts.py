@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DOCKER_WORKFLOW = "build-docker.yml"
 
 
 def workflow(name):
@@ -71,7 +72,7 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
     def test_docker_publisher_validates_scans_verifies_and_attests_before_promotion(self):
-        text = workflow("build-multiarch.yml")
+        text = workflow(DOCKER_WORKFLOW)
         events = text.split("\npermissions:", 1)[0]
         self.assertIn("workflow_dispatch:", events)
         self.assertNotRegex(events, r"(?m)^  (?:push|schedule):")
@@ -103,7 +104,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("apt-get upgrade -y --quiet --no-install-recommends", dockerfile)
 
     def test_docker_images_are_pulled_and_scanned_per_architecture(self):
-        text = workflow("build-multiarch.yml")
+        text = workflow(DOCKER_WORKFLOW)
         build = workflow_step(text, "Build candidate and generate attestations")
         resolve = workflow_step(text, "Resolve candidate platform digests")
         scan = workflow_job(text, "scan")
@@ -120,7 +121,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("version: v0.75.0", scan)
 
     def test_docker_image_version_tag_commit_is_on_main(self):
-        text = workflow("build-multiarch.yml")
+        text = workflow(DOCKER_WORKFLOW)
         validate = workflow_job(text, "validate")
         self.assertIn("if: inputs.image_version_tag != ''", validate)
         self.assertIn("validate_release_source.py", validate)
@@ -155,7 +156,7 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
     def test_manual_docker_publishes_serialize_and_combine_image_version_tags(self):
-        text = workflow("build-multiarch.yml")
+        text = workflow(DOCKER_WORKFLOW)
         self.assertIn(
             "group: docker-publish-${{ github.repository }}-manual",
             text,
@@ -164,7 +165,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn('requested_tags="${GITHUB_REF_NAME},latest"', text)
 
     def test_pull_only_docker_jobs_use_read_only_credentials_and_scan_has_no_github_permissions(self):
-        text = workflow("build-multiarch.yml")
+        text = workflow(DOCKER_WORKFLOW)
         for name in ("verify", "scan"):
             with self.subTest(job=name):
                 job = workflow_job(text, name)
@@ -185,20 +186,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("seq 1 185", wait)
 
     def test_ci_workflows_invoke_shared_test_runners(self):
-        for name in ("code-coverage-test.yml", "build-multiarch.yml"):
+        for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-ci-helpers.sh", workflow(name))
 
-        for name in ("build-multiarch.yml",):
+        for name in (DOCKER_WORKFLOW,):
             with self.subTest(workflow=name):
                 self.assertIn("bash scripts/test-go-ci.sh", workflow(name))
 
-        for name in ("code-coverage-test.yml", "build-multiarch.yml"):
+        for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(node_workflow=name):
                 self.assertIn("actions/setup-node@", workflow(name))
                 self.assertIn("node-version: 22", workflow(name))
 
-        docker_build = workflow_job(workflow("build-multiarch.yml"), "build")
+        docker_build = workflow_job(workflow(DOCKER_WORKFLOW), "build")
         self.assertIn("npm run build:web", docker_build)
         self.assertLess(docker_build.index("npm run build:web"), docker_build.index("docker/build-push-action"))
         go_releaser = (ROOT / ".goreleaser.yml").read_text()
