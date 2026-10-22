@@ -314,19 +314,19 @@ Use format: `<type>: <description>`
 
 ### Version Numbering
 
-Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
+Use the project's release format `vMAJOR.MINOR` (for example, `v1.0`).
 
-- `0.1.0` — API stability not guaranteed (pre-1.0)
-- `1.0.0` — First stable release
-- `1.1.0` — New features added (backward compatible)
-- `1.1.1` — Bug fixes only
+- `v0.1` — API stability not guaranteed (pre-1.0)
+- `v1.0` — First stable release
+- `v1.1` — New features added
+- `v1.2` — Further changes
 
 ### Releasing a New Version
 
 1. **Update CHANGELOG.md**:
 
    ```markdown
-   ## [0.2.0] - 2026-05-15
+   ## [1.1] - 2026-05-15
    
    ### Added
    - Real Pi camera support via libcamera
@@ -345,16 +345,14 @@ Uses [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`
    # No version field in go.mod for apps, but mention in git tag
    ```
 
-3. **Create git tag**:
+3. **Publish a GitHub release**:
+   - Open the repository's **Releases** page and choose **Draft a new release**.
+   - Create or select a `vX.Y` tag (for example, `v1.0`) and target `main`.
+   - Use the same `vX.Y` string as the release title, add release notes, and publish.
 
-   ```bash
-   git tag -a v0.2.0 -m "Release version 0.2.0"
-   git push origin v0.2.0
-   ```
-
-4. **GitHub Actions triggers**:
-   - `build-multiarch.yml` builds and pushes to Docker Hub
-   - Artifacts available in GitHub Releases
+4. **Publish a Docker image (optional)**:
+   - Run **Build Multi-Architecture Docker Image** from the GitHub Actions UI.
+   - Set `image_version_tag` to the existing `vX.Y` tag when you want that tag included in Docker Hub tags.
 
 ## Questions?
 

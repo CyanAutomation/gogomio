@@ -44,26 +44,27 @@ I've created `.github/workflows/build-multiarch.yml` which:
    git push origin main
    ```
 
-**Triggering builds:**
+**Triggering image builds:**
 
-Run **Manual Release** from the GitHub Actions UI on `main`. Leave `release_tag`
-blank to publish only the Docker tags in the `tags` input. To publish a version,
-first create its `v`-prefixed tag manually, then enter that existing tag in
-`release_tag`. The workflow validates that the tagged commit is on `main`, scans
-the Docker image, and then publishes the Docker image and GitHub release assets.
+Run **Build Multi-Architecture Docker Image** from the GitHub Actions UI on
+`main`. Set `image_version_tag` to an existing `vX.Y` tag when you want the Docker
+image tagged with that version. The workflow validates that the tagged commit is
+on `main`, scans the Docker image, and publishes it to Docker Hub. It does not
+create GitHub Releases; create those manually from the repository's **Releases**
+page.
 
 **Monitor the build:**
 
 - <https://github.com/CyanAutomation/gogomio/actions>
-- Look for the "Manual Release" workflow
+- Look for the "Build Multi-Architecture Docker Image" workflow
 
 ## What Gets Built
 
 After setup, you'll have:
 
 - ✅ `cyanautomation/gogomio:latest` (both amd64 + arm64)
-- ✅ `cyanautomation/gogomio:v0.2.0` (manually dispatched tagged releases)
-- ✅ `cyanautomation/gogomio:v0.2.0-arm64` (ARM64 variant)
+- ✅ `cyanautomation/gogomio:v1.0` (when `image_version_tag` is supplied)
+- ✅ `cyanautomation/gogomio:v1.0-arm64` (ARM64 variant)
 - ✅ Automatic manifest handling for multi-arch support
 - ✅ Works on both x86 and Raspberry Pi
 
