@@ -1,7 +1,7 @@
 # Motion In Ocean - Go Edition 🌊
 
 [![Test](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml)
-[![Build Multi-Architecture Docker Image](https://github.com/CyanAutomation/gogomio/actions/workflows/build-multiarch.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/build-multiarch.yml)
+[![Build Multi-Architecture Docker Image](https://github.com/CyanAutomation/gogomio/actions/workflows/build-docker.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/build-docker.yml)
 
 GoGoMio is a Go service that streams Raspberry Pi CSI camera video over MJPEG/HTTP. It includes a mock camera for development, an embedded web interface, and a CLI for managing a running server. It is intended for Raspberry Pi camera operators and developers integrating camera streams.
 
@@ -571,7 +571,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 ### Supported Environments
 
-- **Published containers:** the multi-architecture build targets `linux/amd64` and `linux/arm64`; the mock Compose file deliberately pins `linux/amd64`. See the [build workflow](.github/workflows/build-multiarch.yml).
+- **Published containers:** the multi-architecture build targets `linux/amd64` and `linux/arm64`; the mock Compose file deliberately pins `linux/amd64`. See the [build workflow](.github/workflows/build-docker.yml).
 - **Raspberry Pi CSI camera:** use 64-bit Raspberry Pi OS (arm64). The maintained [Pi build guide](docs/guides/RASPBERRY_PI_BUILD.md) covers Raspberry Pi 4 and 5.
 - **Source builds:** require Go 1.27.2 or newer; source runs in mock-camera mode need no camera hardware. CI runs the Go suite on Ubuntu, and the repository does not publish a broader native host-OS support matrix.
 
