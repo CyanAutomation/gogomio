@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate v-prefixed release versions that can also be Docker tags."""
+"""Validate v-prefixed version tags that can be used as Docker tags."""
 
 import re
 import sys
@@ -11,7 +11,7 @@ PRERELEASE_IDENTIFIER = r"(?:{}|{})".format(
     NUMERIC_IDENTIFIER, NON_NUMERIC_IDENTIFIER
 )
 RELEASE_TAG_RE = re.compile(
-    r"^v{}\.{}\.{}(?:-{}(?:\.{})*)?$".format(
+    r"^v{}\.{}(?:\.{})?(?:-{}(?:\.{})*)?$".format(
         NUMERIC_IDENTIFIER,
         NUMERIC_IDENTIFIER,
         NUMERIC_IDENTIFIER,
@@ -38,7 +38,7 @@ def main(argv=None):
         return 2
     if not is_valid_release_tag(args[0]):
         print(
-            "Release tag must be a v-prefixed version with valid numeric core "
+            "Version tag must be vX.Y or vX.Y.Z with valid numeric components "
             "and optional prerelease, fit within 122 characters to allow the "
             "-arm64 Docker tag, and omit build metadata.",
             file=sys.stderr,

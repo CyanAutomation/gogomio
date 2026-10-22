@@ -75,7 +75,7 @@ class WorkflowContractTests(unittest.TestCase):
         events = text.split("\npermissions:", 1)[0]
         self.assertIn("workflow_dispatch:", events)
         self.assertNotRegex(events, r"(?m)^  (?:push|schedule):")
-        self.assertIn("release_tag:", events)
+        self.assertIn("image_version_tag:", events)
         self.assertIn("concurrency:", text)
         self.assertIn("sbom: true", text)
         self.assertIn("provenance: true", text)
@@ -84,8 +84,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("IMAGE_DIGEST", text)
         self.assertIn("validate_release_source.py", text)
         self.assertNotIn("validate_release_tag_event.py", text)
-        self.assertIn("goreleaser/goreleaser-action", text)
-        self.assertIn("needs: [validate, build, verify, scan, promote]", workflow_job(text, "release"))
+        self.assertNotIn("goreleaser/goreleaser-action", text)
+        self.assertNotRegex(text, r"(?m)^  release:\n")
         self.assertRegex(text, r"(?m)^\s+timeout-minutes:")
 
     def test_docker_images_use_patched_go_and_upgrade_debian_base_packages(self):
@@ -119,11 +119,10 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("matrix.architecture == 'amd64'", scan)
         self.assertIn("version: v0.75.0", scan)
 
-    def test_manual_release_checks_tag_commit_is_on_main(self):
+    def test_docker_image_version_tag_commit_is_on_main(self):
         text = workflow("build-multiarch.yml")
-        release = workflow_job(text, "release")
         validate = workflow_job(text, "validate")
-        self.assertIn("if: inputs.release_tag != ''", release)
+        self.assertIn("if: inputs.image_version_tag != ''", validate)
         self.assertIn("validate_release_source.py", validate)
         self.assertIn("git fetch origin main", validate)
         self.assertIn(
@@ -135,8 +134,8 @@ class WorkflowContractTests(unittest.TestCase):
             validate,
         )
         self.assertLess(validate.index("Checkout validated source"), validate.index("Run shared CI helper tests"))
-        self.assertIn("ref: ${{ needs.validate.outputs.source_sha }}", release)
-        self.assertNotIn("goreleaser.yml", [path.name for path in (ROOT / ".github/workflows").iterdir()])
+        self.assertIn("ref: ${{ needs.validate.outputs.source_sha }}", workflow_job(text, "build"))
+        self.assertNotRegex(text, r"(?m)^  release:\n")
 
     def test_pr_workflows_do_not_persist_checkout_credentials(self):
         self.assertGreaterEqual(
@@ -155,13 +154,13 @@ class WorkflowContractTests(unittest.TestCase):
             text,
         )
 
-    def test_manual_docker_publishes_serialize_and_combine_release_tags(self):
+    def test_manual_docker_publishes_serialize_and_combine_image_version_tags(self):
         text = workflow("build-multiarch.yml")
         self.assertIn(
             "group: docker-publish-${{ github.repository }}-manual",
             text,
         )
-        self.assertIn('requested_tags="${RELEASE_TAG},${requested_tags}"', text)
+        self.assertIn('requested_tags="${IMAGE_VERSION_TAG},${requested_tags}"', text)
         self.assertNotIn('requested_tags="${GITHUB_REF_NAME},latest"', text)
 
     def test_pull_only_docker_jobs_use_read_only_credentials_and_scan_has_no_github_permissions(self):

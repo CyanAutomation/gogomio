@@ -317,7 +317,7 @@ __✅ Topics present__
 Repository tags: `golang`, `mjpeg`, `streaming`, `raspberry-pi`, `csi-camera`, etc. (≥1 topic).
 
 __✅ Version signal exists__  
-Git tags present; latest release: `v0.1.0` (tagged 2026-04-30 per [CHANGELOG.md](../../CHANGELOG.md)). Version also embedded in `go.mod` module declarations.
+Latest GitHub release: [`v1.0`](https://github.com/CyanAutomation/gogomio/releases/tag/v1.0), tagged from current `main` on 2026-10-22.
 
 ⸻
 
@@ -390,10 +390,10 @@ __✅ Test step exists__
 CI includes `go test ./... -v -race -coverprofile=coverage.out`; coverage reports are retained as GitHub Actions artifacts.
 
 __✅ Artifact or package produced__  
-Docker images pushed to Docker Hub (multi-arch: `linux/amd64`, `linux/arm64`). [.goreleaser.yml](../../.goreleaser.yml) builds cross-platform binaries (Linux/macOS, amd64/arm64) and generates `.tar.gz` archives, `.deb`/`.rpm` packages, checksums, and release notes.
+Docker images are pushed to Docker Hub (multi-arch: `linux/amd64`, `linux/arm64`) by the manual image build workflow. The GoReleaser configuration remains available for local packaging, but GitHub Releases are created manually from the repository's Releases page.
 
 __✅ Release mechanism exists__  
-[.github/workflows/build-multiarch.yml](../../.github/workflows/build-multiarch.yml) is started manually from the GitHub Actions UI on `main`. Supplying an existing `v`-prefixed tag builds and publishes the Docker image and GoReleaser assets after validation; leaving it blank publishes only the selected Docker tags. It uses the matching `CHANGELOG.md` section for release notes. [GitHub Release v0.1.0](https://github.com/CyanAutomation/gogomio/releases/tag/v0.1.0) remains available.
+Create GitHub Releases from the repository's **Releases** page with a `vX.Y` tag and matching title (for example, `v1.0`). Docker image publishing remains a separate manual workflow; it does not create GitHub Releases or binary assets.
 
 ⸻
 
@@ -482,7 +482,7 @@ __✅ Ownership defined__
 [CODEOWNERS](../../CODEOWNERS) file present defining review authority per package.
 
 __✅ Activity signal present__  
-Recent commits, active development. Latest release: v0.1.0 (May 1, 2026). Marked "stable" in README. Tag pushed to GitHub and GitHub Release page created with comprehensive release notes.
+Recent commits, active development. Latest release: `v1.0`, published manually from current `main` through the GitHub Releases UI.
 
 ⸻
 
@@ -554,8 +554,8 @@ The following gaps identified in earlier assessments have been __completed__:
 | ----- | -------- | -- | ----------- | ------- |
 | One-command bootstrap | ✅ Complete | [scripts/bootstrap.sh](../../scripts/bootstrap.sh) automates `.env` setup and Docker start | +1 → Setup: 4→5/5 | May 1, 2026 |
 | E2E testing | ✅ Complete | [handlers_e2e_test.go](../../internal/api/handlers_e2e_test.go) with 8+ E2E test functions | +1 → Testing: 4→5/5 | May 1, 2026 |
-| GoReleaser workflow | ✅ Complete | [.goreleaser.yml](.goreleaser.yml) + the manually dispatched [.github/workflows/build-multiarch.yml](../../.github/workflows/build-multiarch.yml) release job | +2 → CI/CD: 3→5/5 | May 1, 2026 |
-| GitHub Release page | ✅ Complete | [v0.1.0 Release](https://github.com/CyanAutomation/gogomio/releases/tag/v0.1.0) with release notes & docs | +0 (included in CI/CD) | May 1, 2026 |
+| GoReleaser workflow | Removed | GitHub Releases are created manually from the Releases UI; Docker publishing remains in the separate image build workflow | — | Oct 22, 2026 |
+| GitHub Release page | ✅ Reset | [v1.0 Release](https://github.com/CyanAutomation/gogomio/releases/tag/v1.0) from current `main` | +0 (included in CI/CD) | Oct 22, 2026 |
 | Dependabot automation | ✅ Complete | [.github/dependabot.yml](../../.github/dependabot.yml) configured for weekly Go + Actions updates | +1 → Security: 4→5/5 | April 2026 |
 | GitHub custom labels | ✅ Complete | 13 custom labels configured (bug, feature, documentation, dependencies, etc.) | +2 → Governance: 3→5/5 | April 2026 |
 
@@ -579,7 +579,7 @@ __Go Version:__ 1.25
 __Key Dependencies:__ Go standard library
 __Build:__ Multi-arch Docker images (linux/amd64, linux/arm64)  
 __CI Status:__ ✅ Passing (≥75% coverage gate)
-__Last Release:__ v0.1.0 (2026-04-30)  
+__Last Release:__ v1.0 (2026-10-22)
 
 ⸻
 
@@ -591,7 +591,7 @@ __Key Strengths:__
 
 * __Reproducible Setup__: One-command bootstrap script for rapid dev/demo setup
 * __Comprehensive Testing__: Unit, integration, E2E, and race condition tests
-* __Release Automation__: GoReleaser + GitHub Actions for multi-platform binary delivery
+* __Manual Releases__: GitHub Releases use a concise `vX.Y` tag and title; multi-arch Docker images use a separate Actions workflow
 * __Security & Automation__: Dependabot enabled, rate limiting, secure defaults, no credentials in repo
 * __Developer Experience__: Clear governance (labels, templates, CODEOWNERS), comprehensive documentation, working examples
 * __Runtime Maturity__: Real-time streaming, graceful degradation, mock/demo mode, health checks, detailed metrics

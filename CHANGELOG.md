@@ -2,11 +2,15 @@
 
 All notable changes to GoGoMio are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GitHub release tags use the project's `vMAJOR.MINOR` format, such as `v1.0`.
 
 ---
 
 ## [Unreleased]
+
+---
+
+## [1.0] - 2026-10-22
 
 ### Added
 
@@ -28,7 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
-## [0.1.0] - 2026-04-30
+## 0.1.0 - 2026-04-30
 
 Initial public release of GoGoMio — a high-performance MJPEG streaming server for Raspberry Pi CSI cameras.
 
@@ -65,5 +69,5 @@ Initial public release of GoGoMio — a high-performance MJPEG streaming server 
 - No credentials or secrets in repository
 - Designed for internal network deployment; reverse proxy guidance documented
 
-[Unreleased]: https://github.com/CyanAutomation/gogomio/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/CyanAutomation/gogomio/releases/tag/v0.1.0
+[Unreleased]: https://github.com/CyanAutomation/gogomio/compare/v1.0...HEAD
+[1.0]: https://github.com/CyanAutomation/gogomio/releases/tag/v1.0

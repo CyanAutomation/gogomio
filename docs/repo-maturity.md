@@ -52,7 +52,7 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 | License exists | ✅ Met | [LICENSE](../../LICENSE) (MIT) | Properly declared in repo root |
 | Description set | ✅ Met | GitHub repo meta | Non-empty: "High-performance MJPEG streaming server for Raspberry Pi CSI cameras" |
 | Topics present | ✅ Met | GitHub topics | Tagged with: mjpeg, streaming, raspberry-pi, golang, etc. |
-| Version signal exists | ✅ Met | [go.mod](../../go.mod) has v0.1.0; Git tags present | Multi-arch version tags available |
+| Version signal exists | ✅ Met | [`v1.0` release tag](https://github.com/CyanAutomation/gogomio/releases/tag/v1.0) | Latest release is published from current `main` |
 
 **Category Score: 5/5** | **Contribution: (5/5) × 10 = 10.0 points**
 
@@ -105,11 +105,11 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 
 | Signal | Status | Evidence | Notes |
 | -------- | -------- | ---------- | ------- |
-| CI workflow exists | ✅ Met | [Manual Release workflow](../../.github/workflows/build-multiarch.yml) | Multi-arch builds run when started from the GitHub Actions UI |
+| CI workflow exists | ✅ Met | [Docker image build workflow](../../.github/workflows/build-multiarch.yml) | Multi-arch builds run when started from the GitHub Actions UI |
 | Build step exists | ✅ Met | Build-multiarch workflow includes `go build` in Docker | Builds for linux/amd64 and linux/arm64 |
-| Test step exists | ✅ Met | Go coverage workflow and manual release validation job | Go race tests, vet, helper tests, and web checks run in Actions |
-| Artifact or package produced | ✅ Met | Docker images pushed to [docker.io/cyanautomation/gogomio](https://hub.docker.com/r/cyanautomation/gogomio) | Docker tags and GitHub release assets publish only after a manual dispatch |
-| Release mechanism exists | ✅ Met | GitHub releases + Docker image tags | Manually dispatched from the GitHub Actions UI |
+| Test step exists | ✅ Met | Go coverage workflow and Docker image build validation job | Go race tests, vet, helper tests, and web checks run in Actions |
+| Artifact or package produced | ✅ Met | Docker images pushed to [docker.io/cyanautomation/gogomio](https://hub.docker.com/r/cyanautomation/gogomio) | Docker tags publish only after a manual image build dispatch |
+| Release mechanism exists | ✅ Met | GitHub Releases page | Published manually with a `vX.Y` tag and matching title |
 
 **Category Score: 5/5** | **Contribution: (5/5) × 10 = 10.0 points**
 
