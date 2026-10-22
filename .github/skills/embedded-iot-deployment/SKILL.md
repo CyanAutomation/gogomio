@@ -34,7 +34,7 @@ These settings are loaded by [`internal/config/config.go`](../../../internal/con
 
 ## Container and architecture changes
 
-- Match the existing [`Dockerfile`](../../../Dockerfile), [historical multi-architecture build report](../../../docs/archive/MULTI_ARCH_BUILD.md), and [build workflow](../../../.github/workflows/build-multiarch.yml). The checked-in build script currently targets `linux/amd64` and `linux/arm64`, not ARM32v7.
+- Match the existing [`Dockerfile`](../../../Dockerfile), [historical multi-architecture build report](../../../docs/archive/MULTI_ARCH_BUILD.md), and [build workflow](../../../.github/workflows/build-docker.yml). The checked-in build script currently targets `linux/amd64` and `linux/arm64`, not ARM32v7.
 - Do not copy package versions, CGO flags, camera packages, or build commands from generic examples without checking the current image and workflow.
 - For camera startup problems, use the [Raspberry Pi build guide](../../../docs/guides/RASPBERRY_PI_BUILD.md) and [deployment guide](../../../docs/guides/DEPLOYMENT_GUIDE.md).
 
