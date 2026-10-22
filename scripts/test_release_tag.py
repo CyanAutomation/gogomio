@@ -5,12 +5,13 @@ from validate_release_tag import is_valid_release_tag
 
 class ReleaseTagValidationTests(unittest.TestCase):
     def test_accepts_stable_and_prerelease_versions(self):
-        for tag in ("v0.1.0", "v1.2.3-rc.1", "v2.0.0-preview-2.4"):
+        for tag in ("v1.0", "v0.1.0", "v1.2.3-rc.1", "v2.0.0-preview-2.4"):
             with self.subTest(tag=tag):
                 self.assertTrue(is_valid_release_tag(tag))
 
     def test_rejects_malformed_versions(self):
         for tag in (
+            "v1",
             "1.2.3",
             "v01.2.3",
             "v1.02.3",
@@ -20,6 +21,7 @@ class ReleaseTagValidationTests(unittest.TestCase):
             "v1.2.3-foo..bar",
             "v1.2.3-01",
             "v1.2.3+build.1",
+            "v1.2.3.4",
             "v1.2.3; touch /tmp/unexpected",
         ):
             with self.subTest(tag=tag):
