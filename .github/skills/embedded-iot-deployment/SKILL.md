@@ -23,7 +23,7 @@ These settings are loaded by [`internal/config/config.go`](../../../internal/con
 | `MOCK_CAMERA` | Set to `true` or `1` to use generated frames instead of hardware. |
 | `MIO_TRUSTED_PROXY_CIDRS` | Optional comma-separated trusted proxy ranges. |
 
-`MIO_ENABLE_PPROF=true` enables pprof on port `6060`; there is no configurable pprof port. See [`cmd/gogomio/main.go`](../../../cmd/gogomio/main.go).
+`MIO_ENABLE_PPROF=true` starts an unauthenticated pprof server on wildcard address `:6060`; neither its bind address nor port is configurable. Leave it disabled unless network access is restricted to trusted operators. See [`cmd/gogomio/main.go`](../../../cmd/gogomio/main.go) and [`.env.example`](../../../.env.example).
 
 ## Resource behavior
 
