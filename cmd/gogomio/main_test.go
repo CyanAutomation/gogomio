@@ -231,6 +231,56 @@ func TestInitializeCameraLoadsTimedFixturesForMockAndFallback(t *testing.T) {
 	}
 }
 
+func TestInitializeCameraUsesSyntheticFramesWhenFallbackFixturesAreInvalid(t *testing.T) {
+	missingFixtures := filepath.Join(t.TempDir(), "missing-fixtures")
+
+	t.Run("real camera fallback continues with synthetic frames", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.Resolution = [2]int{16, 12}
+		cfg.MockFrameDir = missingFixtures
+		mockCam := camera.NewMockCamera()
+		var logs bytes.Buffer
+		logger := log.New(&logs, "", 0)
+
+		got, backend, err := initializeCameraWithLogger(
+			logger,
+			cfg,
+			func() camera.Camera { return &fakeCamera{startErr: errors.New("camera unavailable")} },
+			func() camera.Camera { return mockCam },
+		)
+		if err != nil {
+			t.Fatalf("initializeCameraWithLogger failed: %v", err)
+		}
+		if backend != "mock-fallback" || got != mockCam {
+			t.Fatalf("camera/backend = %T/%q, want configured mock-fallback", got, backend)
+		}
+		if !strings.Contains(logs.String(), "using synthetic frames") {
+			t.Fatalf("fallback warning missing from logs: %s", logs.String())
+		}
+		frame, err := got.CaptureFrame()
+		if err != nil {
+			t.Fatalf("synthetic fallback CaptureFrame failed: %v", err)
+		}
+		if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
+			t.Fatalf("synthetic fallback returned an invalid JPEG: %v", err)
+		}
+		t.Cleanup(func() { _ = got.Stop() })
+	})
+
+	t.Run("explicit mock mode rejects invalid fixtures", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.MockCamera = true
+		cfg.MockFrameDir = missingFixtures
+		_, _, err := initializeCamera(cfg,
+			func() camera.Camera { return &fakeCamera{} },
+			func() camera.Camera { return camera.NewMockCamera() },
+		)
+		if err == nil || !strings.Contains(err.Error(), "load mock camera frame sequence") {
+			t.Fatalf("initializeCamera error = %v, want invalid fixture error", err)
+		}
+	})
+}
+
 func TestInitializeCamera_RealFailureLogsMockFallbackRuntimeSwitch(t *testing.T) {
 	cfg := testConfig()
 	realCam := &fakeCamera{startErr: errors.New("device missing")}
