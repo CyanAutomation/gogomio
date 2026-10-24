@@ -10,6 +10,7 @@ These repository skills give GitHub Copilot focused guidance for specialized GoG
 | [Embedded Deployment](./embedded-iot-deployment/SKILL.md) | Deploying to Raspberry Pi or changing resource limits, Docker images, or architecture targets. |
 | [Go CLI Design](./go-cli-design/SKILL.md) | Changing the CLI dispatcher, commands, API client, help, or output. |
 | [Front-end Design](./front-end-design/SKILL.md) | Redesigning the visual hierarchy or interaction design of a web page or app surface. |
+| [API and Settings Patterns](./api-and-settings-patterns/SKILL.md) | Changing HTTP routes, middleware, OpenAPI contracts, or persistent settings behavior. |
 
 ## Keep skills current
 

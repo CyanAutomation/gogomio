@@ -24,3 +24,14 @@ Use this guide when changing `internal/cli/` or the CLI entrypoint in `cmd/gogom
 - Keep HTTP timeouts and response-body cleanup in the client layer.
 - Keep output formatting separate from request handling where practical.
 - Test the dispatcher with help, unknown commands, nested commands, and required-argument cases. Test command behavior with `httptest` servers.
+
+## Verification
+
+Run the CLI package tests for dispatch, command behavior, and HTTP responses. If changing how the executable chooses server or CLI mode, also run the entrypoint tests:
+
+```bash
+go test ./internal/cli
+go test ./cmd/gogomio
+```
+
+See [`internal/cli/commands_test.go`](../../../internal/cli/commands_test.go), [`internal/cli/client_test.go`](../../../internal/cli/client_test.go), and [`cmd/gogomio/main_test.go`](../../../cmd/gogomio/main_test.go).
