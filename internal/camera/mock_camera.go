@@ -19,10 +19,12 @@ type MockCamera struct {
 	fps           int
 	jpegQuality   int
 	lastFrameTime time.Time
+	startedAt     time.Time
 	frameCounter  int64
 	now           func() time.Time
 	sleep         func(time.Duration)
 	frameSequence [][]byte
+	timedSequence [][]byte
 	captureErrors map[int64]error
 }
 
@@ -59,6 +61,23 @@ func (mc *MockCamera) SetFrameSequence(frames [][]byte) {
 
 	mc.mu.Lock()
 	mc.frameSequence = sequence
+	mc.timedSequence = nil
+	mc.mu.Unlock()
+}
+
+// SetTimedFrameSequence configures a looping fixture sequence that advances
+// according to elapsed playback time at the configured capture FPS. The camera
+// copies the supplied bytes. Passing an empty sequence restores generated
+// synthetic frames unless an attempt-indexed sequence is configured later.
+func (mc *MockCamera) SetTimedFrameSequence(frames [][]byte) {
+	sequence := make([][]byte, len(frames))
+	for i, frame := range frames {
+		sequence[i] = append([]byte(nil), frame...)
+	}
+
+	mc.mu.Lock()
+	mc.timedSequence = sequence
+	mc.frameSequence = nil
 	mc.mu.Unlock()
 }
 
@@ -98,7 +117,9 @@ func (mc *MockCamera) Start(width, height, fps, jpegQuality int) error {
 	mc.fps = fps
 	mc.jpegQuality = jpegQuality
 	mc.ready = true
-	mc.lastFrameTime = mc.now()
+	now := mc.now()
+	mc.startedAt = now
+	mc.lastFrameTime = now
 	mc.frameCounter = 0
 
 	return nil
@@ -129,22 +150,36 @@ func (mc *MockCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, erro
 	frameNum := mc.frameCounter
 	fps := mc.fps
 	lastFrameTime := mc.lastFrameTime
+	startedAt := mc.startedAt
 	captureErr := mc.captureErrors[frameNum]
 	var configuredFrame []byte
-	hasConfiguredFrame := len(mc.frameSequence) > 0
-	if hasConfiguredFrame {
+	hasConfiguredFrame := false
+	now := mc.now()
+	frameInterval := time.Duration(float64(time.Second) / float64(fps))
+	if len(mc.timedSequence) > 0 {
+		elapsed := now.Sub(startedAt)
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		frameIndex := int((elapsed / frameInterval) % time.Duration(len(mc.timedSequence)))
+		configuredFrame = mc.timedSequence[frameIndex]
+		hasConfiguredFrame = true
+	} else if len(mc.frameSequence) > 0 {
 		frameIndex := int(frameNum % int64(len(mc.frameSequence)))
 		configuredFrame = mc.frameSequence[frameIndex]
+		hasConfiguredFrame = true
 	}
 
 	// Reserve frame number and update timing under one critical section.
 	mc.frameCounter++
-	frameInterval := time.Duration(float64(time.Second) / float64(fps))
-	now := mc.now()
 	sleepDuration := time.Duration(0)
 	nextFrameTime := lastFrameTime.Add(frameInterval)
 	if elapsed := now.Sub(lastFrameTime); elapsed < frameInterval {
 		sleepDuration = frameInterval - elapsed
+	} else {
+		// Drop missed frame slots instead of trying to catch up after an idle
+		// period or a slow JPEG encode. Real cameras deliver the latest frame.
+		nextFrameTime = now
 	}
 	mc.lastFrameTime = nextFrameTime
 	mc.mu.Unlock()

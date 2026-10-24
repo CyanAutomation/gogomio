@@ -78,7 +78,7 @@ definitions:
         example: 216000
         type: integer
       health_status:
-        description: 'Health status text: Excellent, Degraded, Poor'
+        description: 'Health status text: Excellent, Idle, Degraded, Poor'
         example: Excellent
         type: string
       jpeg_quality:
@@ -102,7 +102,7 @@ definitions:
         example: 1920x1080
         type: string
       status:
-        description: 'Overall status: ok, degraded, error'
+        description: 'Overall status: ok, idle, degraded, error'
         example: ok
         type: string
       stream_connections:
@@ -154,7 +154,7 @@ definitions:
         example: 29.8
         type: number
       status:
-        description: 'Overall status: ok, degraded, error'
+        description: 'Overall status: ok, idle, degraded, error'
         example: ok
         type: string
       stream_connections:

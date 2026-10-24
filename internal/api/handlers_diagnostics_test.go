@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -126,6 +127,89 @@ func TestDiagnosticsHealthStatusThresholds(t *testing.T) {
 				t.Fatalf("health_status: got %q, want %q", response.HealthStatus, tt.expectedStatus)
 			}
 		})
+	}
+}
+
+func TestDetailedHealthMarksStaleFramesIdleWithoutCaptureConsumers(t *testing.T) {
+	cam := &readinessCamera{ready: true}
+	cfg := &config.Config{FPS: 24, TargetFPS: 24, Resolution: [2]int{640, 480}, JPEGQuality: 90, MaxStreamConnections: 2}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+	now := time.Now()
+	fm.streamStats.RecordFrame(now.Add(-11 * time.Second).UnixNano())
+	fm.streamStats.RecordFrame(now.Add(-10 * time.Second).UnixNano())
+
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/health/detailed", nil))
+
+	var health DetailedHealthResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &health); err != nil {
+		t.Fatalf("decode detailed health: %v", err)
+	}
+	if health.Status != "idle" || health.HealthStatus != "Idle" {
+		t.Fatalf("stale idle status = %q/%q, want idle/Idle", health.Status, health.HealthStatus)
+	}
+	if health.FPSCurrent != 0 {
+		t.Fatalf("idle fps_current = %v, want 0", health.FPSCurrent)
+	}
+}
+
+func TestDetailedHealthDegradesWhenAnActiveConsumerHasStaleFrames(t *testing.T) {
+	cam := &readinessCamera{ready: true}
+	cfg := &config.Config{FPS: 24, TargetFPS: 24, Resolution: [2]int{640, 480}, JPEGQuality: 90, MaxStreamConnections: 2}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+	now := time.Now()
+	fm.streamStats.RecordFrame(now.Add(-11 * time.Second).UnixNano())
+	fm.streamStats.RecordFrame(now.Add(-10 * time.Second).UnixNano())
+	atomic.StoreInt64(&fm.clientCount, 1)
+
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/health/detailed", nil))
+
+	var health DetailedHealthResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &health); err != nil {
+		t.Fatalf("decode detailed health: %v", err)
+	}
+	if health.Status != "degraded" || health.HealthStatus != "Degraded" {
+		t.Fatalf("stale active status = %q/%q, want degraded/Degraded", health.Status, health.HealthStatus)
+	}
+	if !health.Degraded {
+		t.Fatal("stale active health should set degraded=true")
+	}
+	if health.FPSCurrent != 0 {
+		t.Fatalf("stale fps_current = %v, want 0", health.FPSCurrent)
+	}
+}
+
+func TestLiveMetricsZeroCurrentFPSWhenFramesAreStale(t *testing.T) {
+	cam := &readinessCamera{ready: true}
+	cfg := &config.Config{FPS: 24, TargetFPS: 24, Resolution: [2]int{640, 480}, JPEGQuality: 90, MaxStreamConnections: 2}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+	fm.streamStats.RecordFrame(time.Now().Add(-10 * time.Second).UnixNano())
+	fm.streamStats.RecordFrame(time.Now().Add(-9 * time.Second).UnixNano())
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/metrics/live", nil))
+	var metrics LiveMetricsResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &metrics); err != nil {
+		t.Fatalf("decode live metrics: %v", err)
+	}
+	if metrics.FPSCurrent != 0 {
+		t.Fatalf("stale fps_current = %v, want 0", metrics.FPSCurrent)
+	}
+	if metrics.LastFrameAgeSeconds < 9 {
+		t.Fatalf("last_frame_age_seconds = %v, want at least 9", metrics.LastFrameAgeSeconds)
+	}
+
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if !strings.Contains(response.Body.String(), "gogomio_fps_current 0") {
+		t.Fatalf("Prometheus metrics reported stale FPS: %s", response.Body.String())
 	}
 }
 

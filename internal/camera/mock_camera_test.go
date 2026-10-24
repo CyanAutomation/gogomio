@@ -85,6 +85,72 @@ func TestMockCameraConfiguredFrameSequenceLoopsAndCopiesFrames(t *testing.T) {
 	}
 }
 
+func TestMockCameraTimedFrameSequenceFollowsElapsedTime(t *testing.T) {
+	frames := [][]byte{
+		encodeMockCameraTestJPEG(t, color.RGBA{R: 220, G: 20, B: 20, A: 255}),
+		encodeMockCameraTestJPEG(t, color.RGBA{R: 20, G: 220, B: 20, A: 255}),
+		encodeMockCameraTestJPEG(t, color.RGBA{R: 20, G: 20, B: 220, A: 255}),
+	}
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
+	mc.SetTimedFrameSequence(frames)
+	if err := mc.Start(8, 6, 2, 90); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	t.Cleanup(func() { _ = mc.Stop() })
+
+	first, err := mc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("first CaptureFrame failed: %v", err)
+	}
+	if !bytes.Equal(first, frames[0]) {
+		t.Fatal("first timed capture does not match the first frame")
+	}
+
+	// Skip two seconds of playback without capture calls. The next frame should
+	// follow elapsed playback time (frame 2), not advance one attempt (frame 1).
+	clock.Sleep(2 * time.Second)
+	got, err := mc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("CaptureFrame after playback gap failed: %v", err)
+	}
+	if !bytes.Equal(got, frames[2]) {
+		t.Fatal("timed frame sequence followed capture attempts instead of elapsed time")
+	}
+}
+
+func TestMockCameraReanchorsFrameScheduleAfterIdleGap(t *testing.T) {
+	const fps = 20
+	frameInterval := time.Second / fps
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
+	if err := mc.Start(8, 6, fps, 90); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	t.Cleanup(func() { _ = mc.Stop() })
+	if _, err := mc.CaptureFrame(); err != nil {
+		t.Fatalf("initial CaptureFrame failed: %v", err)
+	}
+
+	// Simulate the FrameManager's idle period, when it stops requesting frames.
+	clock.Sleep(5 * time.Second)
+	if _, err := mc.CaptureFrame(); err != nil {
+		t.Fatalf("CaptureFrame after idle failed: %v", err)
+	}
+	if got, want := mc.GetLastFrameTime(), clock.Now(); !got.Equal(want) {
+		t.Fatalf("schedule after idle = %v, want re-anchored time %v", got, want)
+	}
+
+	sleepsBeforeNextFrame := len(clock.Sleeps())
+	if _, err := mc.CaptureFrame(); err != nil {
+		t.Fatalf("CaptureFrame after re-anchor failed: %v", err)
+	}
+	sleeps := clock.Sleeps()
+	if len(sleeps) != sleepsBeforeNextFrame+1 || sleeps[len(sleeps)-1] != frameInterval {
+		t.Fatalf("next frame pacing sleeps = %v, want one %v sleep after idle", sleeps, frameInterval)
+	}
+}
+
 func TestMockCameraConfiguredCaptureFailuresAreIndexedPerCapture(t *testing.T) {
 	failure := errors.New("simulated sensor read failure")
 	firstFrame := encodeMockCameraTestJPEG(t, color.RGBA{R: 220, G: 20, B: 20, A: 255})

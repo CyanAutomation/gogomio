@@ -198,11 +198,7 @@ func initializeCameraWithLogger(
 ) (camera.Camera, string, error) {
 	if cfg.MockCamera {
 		logger.Println("🎬 Initializing camera backend: mock (development mode)")
-		cam := newMockCamera()
-		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-			return nil, "", err
-		}
-		return cam, "mock", nil
+		return startMockCamera(cfg, newMockCamera, "mock")
 	}
 
 	// Try real camera first if device is available.
@@ -245,14 +241,29 @@ func initializeCameraWithLogger(
 		logger.Println("   Note: RealCamera may internally try FFmpeg/V4L2 as an alternative backend.")
 		logger.Println("   Switching runtime camera backend to mock-fallback mode.")
 		logger.Println("🎬 Initializing camera backend: mock-fallback (development mode)")
-		cam := newMockCamera()
-		if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
-			return nil, "", err
-		}
-		return cam, "mock-fallback", nil
+		return startMockCamera(cfg, newMockCamera, "mock-fallback")
 	}
 
 	return realCam, "real", nil
+}
+
+func startMockCamera(cfg *config.Config, newMockCamera func() camera.Camera, backend string) (camera.Camera, string, error) {
+	cam := newMockCamera()
+	if cfg.MockFrameDir != "" {
+		frames, err := camera.LoadJPEGFrameSequence(cfg.MockFrameDir, cfg.Resolution[0], cfg.Resolution[1], cfg.JPEGQuality)
+		if err != nil {
+			return nil, "", fmt.Errorf("load mock camera frame sequence: %w", err)
+		}
+		configurable, ok := cam.(interface{ SetTimedFrameSequence([][]byte) })
+		if !ok {
+			return nil, "", fmt.Errorf("mock camera %T does not support timed frame fixtures", cam)
+		}
+		configurable.SetTimedFrameSequence(frames)
+	}
+	if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+		return nil, "", err
+	}
+	return cam, backend, nil
 }
 
 // logGoroutineStats logs goroutine count periodically to track potential leaks
