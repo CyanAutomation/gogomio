@@ -289,8 +289,8 @@ func TestRegisteredEndpointResponses(t *testing.T) {
 			wantStatus: http.StatusOK,
 			assertBody: func(t *testing.T, body map[string]interface{}) {
 				t.Helper()
-				if body["status"] != "ok" || body["camera_ready"] != true {
-					t.Fatalf("expected healthy, ready response, got %v", body)
+				if body["status"] != "idle" || body["camera_ready"] != true {
+					t.Fatalf("expected idle, ready response, got %v", body)
 				}
 			},
 		},
@@ -368,8 +368,8 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Errorf("failed to parse JSON response: %v", err)
 	}
 
-	if status, ok := result["status"]; !ok || status != "ok" {
-		t.Errorf("expected status 'ok', got %v", status)
+	if status, ok := result["status"]; !ok || status != "idle" {
+		t.Errorf("expected status 'idle', got %v", status)
 	}
 }
 

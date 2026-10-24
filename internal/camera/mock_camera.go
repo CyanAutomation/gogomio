@@ -161,7 +161,8 @@ func (mc *MockCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, erro
 		if elapsed < 0 {
 			elapsed = 0
 		}
-		frameIndex := int((elapsed / frameInterval) % time.Duration(len(mc.timedSequence)))
+		frameCount := int64(elapsed / frameInterval)
+		frameIndex := int(frameCount % int64(len(mc.timedSequence)))
 		configuredFrame = mc.timedSequence[frameIndex]
 		hasConfiguredFrame = true
 	} else if len(mc.frameSequence) > 0 {

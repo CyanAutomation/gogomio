@@ -213,6 +213,42 @@ func TestLiveMetricsZeroCurrentFPSWhenFramesAreStale(t *testing.T) {
 	}
 }
 
+func TestSimpleHealthReportsIdleAndDegradedCaptureStates(t *testing.T) {
+	tests := []struct {
+		name          string
+		activeClients int64
+		wantStatus    string
+	}{
+		{name: "idle without consumers", wantStatus: "idle"},
+		{name: "degraded with stale active consumer", activeClients: 1, wantStatus: "degraded"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cam := &readinessCamera{ready: true}
+			cfg := &config.Config{FPS: 24, TargetFPS: 24, Resolution: [2]int{640, 480}, JPEGQuality: 90, MaxStreamConnections: 2}
+			fm := NewFrameManager(cam, cfg)
+			t.Cleanup(fm.Stop)
+			if tt.activeClients > 0 {
+				fm.streamStats.RecordFrame(time.Now().Add(-10 * time.Second).UnixNano())
+				atomic.StoreInt64(&fm.clientCount, tt.activeClients)
+			}
+
+			router := RegisterHandlers(http.NewServeMux(), fm, cfg)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+			var health HealthResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &health); err != nil {
+				t.Fatalf("decode health response: %v", err)
+			}
+			if health.Status != tt.wantStatus {
+				t.Fatalf("health status = %q, want %q", health.Status, tt.wantStatus)
+			}
+		})
+	}
+}
+
 // TestDiagnosticsResponseStructure verifies JSON includes client-critical fields
 // with expected semantic values rather than only tag-mapping mechanics.
 func TestDiagnosticsResponseStructure(t *testing.T) {

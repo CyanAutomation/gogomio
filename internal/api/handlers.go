@@ -1319,6 +1319,8 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 		status = "error"
 	} else if degraded {
 		status = "degraded"
+	} else if frameStale && atomic.LoadInt64(&fm.clientCount) == 0 {
+		status = "idle"
 	}
 
 	response := HealthResponse{
