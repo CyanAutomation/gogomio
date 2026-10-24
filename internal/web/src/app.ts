@@ -6,6 +6,7 @@ import {
     formatResolution,
     formatStreamConnections,
     getFrameRateTone,
+    getHealthTone,
     getStreamStatusPresentation,
     type StreamState,
 } from "./dashboard-presentation";
@@ -477,11 +478,7 @@ function fetchDiagnostics(): void {
             const content = getElement<HTMLDivElement>("diagnostics-content");
             const errorRate = Number(data.error_rate_percent || 0);
             const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
-            const healthTone = !data.camera_ready || errorRate > 20
-                ? "error"
-                : errorRate > 5 || consecutiveFailures > 0
-                    ? "warning"
-                    : "success";
+            const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
             const cameraTone = data.camera_ready ? "success" : "error";
             const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
             const cameraCard = `<div class="metric-card metric-card--status metric-card--${cameraTone}">
@@ -493,7 +490,7 @@ function fetchDiagnostics(): void {
                 <div class="metric-card__value">${escapeHTML(data.health_status || "Unknown")}</div>
             </div>`;
             const totalFailures = Number(data.capture_failures_total || 0);
-            const noticeTone = healthTone;
+            const noticeTone = healthTone === "neutral" ? "info" : healthTone;
 
             content.innerHTML = `
                 <div class="diagnostic-summary-grid">

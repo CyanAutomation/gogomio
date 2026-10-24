@@ -26,6 +26,7 @@ type Config struct {
 	Port                 int      `json:"port"`
 	BindHost             string   `json:"bind_host"`
 	MockCamera           bool     `json:"mock_camera"`
+	MockFrameDir         string   `json:"-"`
 	TrustedProxyCIDRs    []string `json:"trusted_proxy_cidrs"`
 }
 
@@ -139,6 +140,7 @@ func LoadFromEnv() *Config {
 	if mock := os.Getenv("MOCK_CAMERA"); mock != "" {
 		cfg.MockCamera = strings.ToLower(mock) == "true" || mock == "1"
 	}
+	cfg.MockFrameDir = strings.TrimSpace(os.Getenv("MIO_MOCK_FRAME_DIR"))
 
 	// Trusted proxy CIDRs
 	if cidrs := os.Getenv("MIO_TRUSTED_PROXY_CIDRS"); cidrs != "" {

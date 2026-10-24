@@ -42,6 +42,12 @@
     const ratio = frameRate / targetFrameRate;
     return ratio >= 0.9 ? "success" : ratio >= 0.5 ? "warning" : "error";
   }
+  function getHealthTone(healthStatus, cameraReady, errorRate, consecutiveFailures) {
+    if (!cameraReady || healthStatus === "Poor" || errorRate > 20) return "error";
+    if (healthStatus === "Degraded" || errorRate > 5 || consecutiveFailures > 0) return "warning";
+    if (healthStatus === "Idle") return "neutral";
+    return "success";
+  }
   function formatResolution(resolution) {
     if (Array.isArray(resolution)) {
       const [width, height] = resolution;
@@ -451,7 +457,7 @@
       const content = getElement("diagnostics-content");
       const errorRate = Number(data.error_rate_percent || 0);
       const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
-      const healthTone = !data.camera_ready || errorRate > 20 ? "error" : errorRate > 5 || consecutiveFailures > 0 ? "warning" : "success";
+      const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
       const cameraTone = data.camera_ready ? "success" : "error";
       const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
       const cameraCard = `<div class="metric-card metric-card--status metric-card--${cameraTone}">
@@ -463,7 +469,7 @@
                 <div class="metric-card__value">${escapeHTML(data.health_status || "Unknown")}</div>
             </div>`;
       const totalFailures = Number(data.capture_failures_total || 0);
-      const noticeTone = healthTone;
+      const noticeTone = healthTone === "neutral" ? "info" : healthTone;
       content.innerHTML = `
                 <div class="diagnostic-summary-grid">
                     ${cameraCard}

@@ -550,7 +550,7 @@
                     "example": 216000
                 },
                 "health_status": {
-                    "description": "Health status text: Excellent, Degraded, Poor",
+                    "description": "Health status text: Excellent, Idle, Degraded, Poor",
                     "type": "string",
                     "example": "Excellent"
                 },
@@ -580,7 +580,7 @@
                     "example": "1920x1080"
                 },
                 "status": {
-                    "description": "Overall status: ok, degraded, error",
+                    "description": "Overall status: ok, idle, degraded, error",
                     "type": "string",
                     "example": "ok"
                 },
@@ -647,7 +647,7 @@
                     "example": 29.8
                 },
                 "status": {
-                    "description": "Overall status: ok, degraded, error",
+                    "description": "Overall status: ok, idle, degraded, error",
                     "type": "string",
                     "example": "ok"
                 },

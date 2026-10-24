@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,7 @@ func clearConfigEnv(t *testing.T) {
 		"MIO_PORT",
 		"MIO_BIND_HOST",
 		"MOCK_CAMERA",
+		"MIO_MOCK_FRAME_DIR",
 		"MIO_TRUSTED_PROXY_CIDRS",
 	} {
 		t.Setenv(key, "")
@@ -70,6 +72,9 @@ func TestConfigDefaults(t *testing.T) {
 	}
 	if cfg.BindHost != "0.0.0.0" {
 		t.Errorf("default bind host is %s, want 0.0.0.0", cfg.BindHost)
+	}
+	if cfg.MockFrameDir != "" {
+		t.Errorf("default mock frame directory = %q, want empty", cfg.MockFrameDir)
 	}
 }
 
@@ -472,6 +477,18 @@ func TestConfig_MockCamera_EnabledViaEnv(t *testing.T) {
 		if cfg.MockCamera != tt.expected {
 			t.Errorf("MockCamera env=%q expected %v, got %v", tt.env, tt.expected, cfg.MockCamera)
 		}
+	}
+}
+
+func TestConfigMockFrameDirectoryFromEnvAndStringOmission(t *testing.T) {
+	const fixtureDir = "/tmp/mock camera frames"
+	t.Setenv("MIO_MOCK_FRAME_DIR", fixtureDir)
+	cfg := LoadFromEnv()
+	if cfg.MockFrameDir != fixtureDir {
+		t.Fatalf("MockFrameDir = %q, want %q", cfg.MockFrameDir, fixtureDir)
+	}
+	if strings.Contains(cfg.String(), fixtureDir) || strings.Contains(cfg.String(), "mock_frame_dir") {
+		t.Fatal("config string exposed the local mock frame directory")
 	}
 }
 

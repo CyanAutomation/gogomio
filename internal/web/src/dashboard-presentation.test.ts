@@ -7,6 +7,7 @@ import {
     formatResolution,
     formatStreamConnections,
     getFrameRateTone,
+    getHealthTone,
     getStreamStatusPresentation,
 } from "./dashboard-presentation";
 
@@ -52,4 +53,13 @@ test("frame rate color is neutral while idle and compares live rate to target", 
     assert.equal(getFrameRateTone(5, 24, true), "error");
     assert.equal(getFrameRateTone(10, 0, true), "neutral");
     assert.equal(getFrameRateTone(10, Number.NaN, true), "neutral");
+});
+
+test("health presentation distinguishes idle, stale, failure, and healthy states", () => {
+    assert.equal(getHealthTone("Idle", true, 0, 0), "neutral");
+    assert.equal(getHealthTone("Degraded", true, 0, 0), "warning");
+    assert.equal(getHealthTone("Poor", true, 0, 0), "error");
+    assert.equal(getHealthTone("Excellent", true, 0, 0), "success");
+    assert.equal(getHealthTone("Excellent", true, 0, 1), "warning");
+    assert.equal(getHealthTone("Excellent", false, 0, 0), "error");
 });
