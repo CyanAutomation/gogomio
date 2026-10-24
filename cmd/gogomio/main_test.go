@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -71,6 +75,25 @@ func testConfig() *config.Config {
 		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		JPEGQuality: 90,
+	}
+}
+
+func writeInitializationFixture(t *testing.T, dir, name string, fill color.RGBA) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 16, 12))
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			img.SetRGBA(x, y, fill)
+		}
+	}
+	filename := filepath.Join(dir, name)
+	file, err := os.Create(filename)
+	if err != nil {
+		t.Fatalf("create fixture %s: %v", filename, err)
+	}
+	defer file.Close()
+	if err := jpeg.Encode(file, img, &jpeg.Options{Quality: 100}); err != nil {
+		t.Fatalf("encode fixture %s: %v", filename, err)
 	}
 }
 
@@ -154,6 +177,108 @@ func TestInitializeCamera_MockModeStartsMockOnce(t *testing.T) {
 	if mockCam.startCalls != 1 {
 		t.Fatalf("expected mock camera Start() once, got %d", mockCam.startCalls)
 	}
+}
+
+func TestInitializeCameraLoadsTimedFixturesForMockAndFallback(t *testing.T) {
+	fixtureDir := t.TempDir()
+	writeInitializationFixture(t, fixtureDir, "001-red.jpg", color.RGBA{R: 230, G: 20, B: 10, A: 255})
+	writeInitializationFixture(t, fixtureDir, "002-blue.jpg", color.RGBA{R: 10, G: 20, B: 230, A: 255})
+
+	for _, test := range []struct {
+		name        string
+		mockMode    bool
+		realErr     error
+		wantBackend string
+	}{
+		{name: "explicit mock", mockMode: true, wantBackend: "mock"},
+		{name: "real camera fallback", realErr: errors.New("camera unavailable"), wantBackend: "mock-fallback"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := testConfig()
+			cfg.Resolution = [2]int{16, 12}
+			cfg.MockCamera = test.mockMode
+			cfg.MockFrameDir = fixtureDir
+			mockCam := camera.NewMockCamera()
+			realCam := &fakeCamera{startErr: test.realErr}
+			got, backend, err := initializeCamera(
+				cfg,
+				func() camera.Camera { return realCam },
+				func() camera.Camera { return mockCam },
+			)
+			if err != nil {
+				t.Fatalf("initializeCamera failed: %v", err)
+			}
+			if backend != test.wantBackend {
+				t.Fatalf("backend = %q, want %q", backend, test.wantBackend)
+			}
+			if got != mockCam {
+				t.Fatalf("camera = %T, want configured mock camera", got)
+			}
+			frame, err := got.CaptureFrame()
+			if err != nil {
+				t.Fatalf("CaptureFrame failed: %v", err)
+			}
+			decoded, err := jpeg.Decode(bytes.NewReader(frame))
+			if err != nil {
+				t.Fatalf("fixture output is not a JPEG: %v", err)
+			}
+			center := color.RGBAModel.Convert(decoded.At(8, 6)).(color.RGBA)
+			if center.R <= center.B {
+				t.Fatalf("first fixture pixel = %v, want first (red) fixture", center)
+			}
+			t.Cleanup(func() { _ = got.Stop() })
+		})
+	}
+}
+
+func TestInitializeCameraUsesSyntheticFramesWhenFallbackFixturesAreInvalid(t *testing.T) {
+	missingFixtures := filepath.Join(t.TempDir(), "missing-fixtures")
+
+	t.Run("real camera fallback continues with synthetic frames", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.Resolution = [2]int{16, 12}
+		cfg.MockFrameDir = missingFixtures
+		mockCam := camera.NewMockCamera()
+		var logs bytes.Buffer
+		logger := log.New(&logs, "", 0)
+
+		got, backend, err := initializeCameraWithLogger(
+			logger,
+			cfg,
+			func() camera.Camera { return &fakeCamera{startErr: errors.New("camera unavailable")} },
+			func() camera.Camera { return mockCam },
+		)
+		if err != nil {
+			t.Fatalf("initializeCameraWithLogger failed: %v", err)
+		}
+		if backend != "mock-fallback" || got != mockCam {
+			t.Fatalf("camera/backend = %T/%q, want configured mock-fallback", got, backend)
+		}
+		if !strings.Contains(logs.String(), "using synthetic frames") {
+			t.Fatalf("fallback warning missing from logs: %s", logs.String())
+		}
+		frame, err := got.CaptureFrame()
+		if err != nil {
+			t.Fatalf("synthetic fallback CaptureFrame failed: %v", err)
+		}
+		if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
+			t.Fatalf("synthetic fallback returned an invalid JPEG: %v", err)
+		}
+		t.Cleanup(func() { _ = got.Stop() })
+	})
+
+	t.Run("explicit mock mode rejects invalid fixtures", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.MockCamera = true
+		cfg.MockFrameDir = missingFixtures
+		_, _, err := initializeCamera(cfg,
+			func() camera.Camera { return &fakeCamera{} },
+			func() camera.Camera { return camera.NewMockCamera() },
+		)
+		if err == nil || !strings.Contains(err.Error(), "load mock camera frame sequence") {
+			t.Fatalf("initializeCamera error = %v, want invalid fixture error", err)
+		}
+	})
 }
 
 func TestInitializeCamera_RealFailureLogsMockFallbackRuntimeSwitch(t *testing.T) {

@@ -83,6 +83,7 @@ type cleanupRequest struct {
 
 const defaultIdleStopDelay = 3 * time.Second
 const cleanupEnqueueTimeout = 100 * time.Millisecond
+const minFrameFreshnessWindow = 2 * time.Second
 
 const (
 	initialCaptureRetryDelay              = 100 * time.Millisecond
@@ -627,6 +628,24 @@ func (fm *FrameManager) GetFrame() []byte {
 	return fm.frameBuffer.GetFrame()
 }
 
+// GetFreshFrame starts capture when needed and waits for a frame newer than the
+// buffer state observed at the start of this request. It never falls back to a
+// stale buffered image.
+func (fm *FrameManager) GetFreshFrame(ctx context.Context) []byte {
+	if ctx.Err() != nil || !fm.cam.IsReady() {
+		return nil
+	}
+	lastSeenSequence := fm.frameBuffer.CurrentSequence()
+	fm.IncrementClients()
+	defer fm.DecrementClients()
+
+	frame, _ := fm.frameBuffer.WaitFrameWithContext(ctx, fm.cfg.FrameTimeout(), lastSeenSequence)
+	if frame == nil {
+		return nil
+	}
+	return append([]byte(nil), frame...)
+}
+
 // GetFrameSequence returns the current frame sequence number
 func (fm *FrameManager) GetFrameSequence() uint64 {
 	return fm.frameBuffer.CurrentSequence()
@@ -813,7 +832,7 @@ type LiveMetricsResponse struct {
 
 // HealthResponse is a quick health check response
 type HealthResponse struct {
-	// Overall status: ok, degraded, error
+	// Overall status: ok, idle, degraded, error
 	Status string `json:"status" example:"ok"`
 	// Whether the camera is initialized and ready
 	CameraReady bool `json:"camera_ready" example:"true"`
@@ -833,9 +852,9 @@ type HealthResponse struct {
 
 // DetailedHealthResponse provides comprehensive health and metrics information
 type DetailedHealthResponse struct {
-	// Overall status: ok, degraded, error
+	// Overall status: ok, idle, degraded, error
 	Status string `json:"status" example:"ok"`
-	// Health status text: Excellent, Degraded, Poor
+	// Health status text: Excellent, Idle, Degraded, Poor
 	HealthStatus string `json:"health_status" example:"Excellent"`
 	// Detailed status message
 	Message string `json:"message" example:"Camera is functioning normally"`
@@ -1290,14 +1309,18 @@ func registerLegacyHandlers(router *http.ServeMux, fm *FrameManager, cfg *config
 // Handler functions
 
 func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, startTime time.Time) {
-	_, _, fps := fm.streamStats.Snapshot()
+	_, fps, _, frameStale := currentFrameMetrics(fm, fm.cfg)
 	_, _, degraded := fm.GetCaptureFailures()
+	staleActiveConsumer := frameStale && atomic.LoadInt64(&fm.clientCount) > 0
+	degraded = degraded || staleActiveConsumer
 
 	status := "ok"
 	if !fm.cam.IsReady() {
 		status = "error"
 	} else if degraded {
 		status = "degraded"
+	} else if frameStale && atomic.LoadInt64(&fm.clientCount) == 0 {
+		status = "idle"
 	}
 
 	response := HealthResponse{
@@ -1315,6 +1338,43 @@ func handleHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, star
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		_ = err
 	}
+}
+
+func frameFreshnessWindow(cfg *config.Config) time.Duration {
+	fps := cfg.TargetFPS
+	if fps <= 0 {
+		fps = cfg.FPS
+	}
+	if fps <= 0 {
+		return minFrameFreshnessWindow
+	}
+
+	window := 3 * time.Second / time.Duration(fps)
+	if window < minFrameFreshnessWindow {
+		return minFrameFreshnessWindow
+	}
+	return window
+}
+
+// currentFrameMetrics returns live capture metrics, suppressing the last
+// measured FPS once the most recent frame is stale. A small negative age can
+// occur when timestamps are recorded just ahead of the response clock, so it
+// is reported as zero instead of being treated as stale.
+func currentFrameMetrics(fm *FrameManager, cfg *config.Config) (frames int64, fps float64, lastFrameAge float64, stale bool) {
+	frames, lastFrameTimestamp, fps := fm.streamStats.Snapshot()
+	if lastFrameTimestamp == nil {
+		lastFrameAge = -1
+	} else {
+		lastFrameAge = float64(time.Now().UnixNano()-*lastFrameTimestamp) / float64(time.Second)
+	}
+	if lastFrameAge < 0 && frames > 0 {
+		lastFrameAge = 0
+	}
+	stale = frames == 0 || lastFrameAge < 0 || lastFrameAge > frameFreshnessWindow(cfg).Seconds()
+	if stale {
+		fps = 0
+	}
+	return
 }
 
 func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
@@ -1360,13 +1420,13 @@ func ifNoneMatch(header, etag string) bool {
 }
 
 func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
-	frameCount, _, fps := fm.streamStats.Snapshot()
+	frameCount, fps, lastFrameAge, _ := currentFrameMetrics(fm, cfg)
 
 	response := LiveMetricsResponse{
 		FPSCurrent:          fps,
 		FPSConfigured:       cfg.FPS,
 		FramesCaptured:      frameCount,
-		LastFrameAgeSeconds: fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		LastFrameAgeSeconds: lastFrameAge,
 		UptimeSeconds:       int64(time.Since(startTime).Seconds()),
 		StreamConnections:   fm.connTracker.Count(),
 		FrameSequenceNumber: fm.GetFrameSequence(),
@@ -1381,7 +1441,7 @@ func handleLiveMetrics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 }
 
 func handlePrometheusMetrics(w http.ResponseWriter, fm *FrameManager) {
-	frames, _, fps := fm.streamStats.Snapshot()
+	frames, fps, _, _ := currentFrameMetrics(fm, fm.cfg)
 	consecutive, total, _ := fm.GetCaptureFailures()
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	_, _ = fmt.Fprintf(w, "# HELP gogomio_frames_captured_total Total frames published to the stream buffer.\n# TYPE gogomio_frames_captured_total counter\ngogomio_frames_captured_total %d\n", frames)
@@ -1392,7 +1452,7 @@ func handlePrometheusMetrics(w http.ResponseWriter, fm *FrameManager) {
 }
 
 func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
-	frameCount, _, fps := fm.streamStats.Snapshot()
+	frameCount, fps, lastFrameAge, frameStale := currentFrameMetrics(fm, cfg)
 	consecutiveFailures, totalFailures, degraded := fm.GetCaptureFailures()
 
 	status := "ok"
@@ -1404,9 +1464,14 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		status = "degraded"
 		message = "Camera is functioning but experiencing degradation"
 	}
-	if frameCount == 0 && fm.connTracker.Count() == 0 && status == "ok" {
-		status = "idle"
-		message = "Camera is ready; capture starts when a stream or snapshot is requested"
+	if status == "ok" && frameStale {
+		if atomic.LoadInt64(&fm.clientCount) == 0 {
+			status = "idle"
+			message = "Camera is ready; capture is idle until a stream or snapshot is requested"
+		} else {
+			status = "degraded"
+			message = "Camera has not produced a fresh frame for an active consumer"
+		}
 	}
 
 	// Calculate error rate from all capture attempts. A failure before the first
@@ -1421,16 +1486,20 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 	healthStatus := "Excellent"
 	if status == "idle" {
 		healthStatus = "Idle"
+	} else if status == "degraded" {
+		healthStatus = "Degraded"
 	}
 	if errorRate > 5 {
 		healthStatus = "Degraded"
-		if status == "ok" {
+		if status != "error" {
 			status = "degraded"
+			message = "Camera is functioning but experiencing degradation"
 		}
 	}
 	if errorRate > 20 || consecutiveFailures > 5 {
 		healthStatus = "Poor"
 		status = "error"
+		message = "Camera is experiencing a high capture failure rate"
 	}
 	if degraded && status != "error" {
 		healthStatus = "Degraded"
@@ -1444,13 +1513,13 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		HealthStatus:               healthStatus,
 		Message:                    message,
 		CameraReady:                fm.cam.IsReady(),
-		Degraded:                   degraded,
+		Degraded:                   degraded || status == "degraded",
 		UptimeSeconds:              int64(time.Since(startTime).Seconds()),
 		FPSCurrent:                 fps,
 		FPSConfigured:              cfg.FPS,
 		FramesCaptured:             frameCount,
 		StreamConnections:          fm.connTracker.Count(),
-		LastFrameAgeSeconds:        fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		LastFrameAgeSeconds:        lastFrameAge,
 		Resolution:                 resolution,
 		JPEGQuality:                cfg.JPEGQuality,
 		MaxConnections:             cfg.MaxStreamConnections,
@@ -1489,7 +1558,7 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	// Retain the stronger snapshot-specific directive for both images and
 	// camera-unavailable responses.
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-	frame := fm.GetFrame()
+	frame := fm.GetFreshFrame(r.Context())
 	if frame == nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("Camera not ready"))
@@ -1503,7 +1572,7 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	// Deprecated: combines static config with live metrics
 	// Return a merged response for backward compatibility
-	frameCount, _, fps := fm.streamStats.Snapshot()
+	frameCount, fps, lastFrameAge, _ := currentFrameMetrics(fm, cfg)
 	_, mockCamera := fm.cam.(*camera.MockCamera)
 
 	response := map[string]interface{}{
@@ -1516,7 +1585,7 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 		"current_stream_connections": fm.connTracker.Count(),
 		"frames_captured":            frameCount,
 		"current_fps":                fps,
-		"last_frame_age_seconds":     fm.streamStats.LastFrameAgeSeconds(time.Now().UnixNano()),
+		"last_frame_age_seconds":     lastFrameAge,
 		"timestamp_iso8601":          time.Now().UTC().Format(time.RFC3339),
 		"api_version":                "1",
 		"_deprecated":                "use /v1/config/camera and /v1/metrics/live instead",

@@ -32,6 +32,18 @@ export function getFrameRateTone(frameRate: number, targetFrameRate: number, isL
     return ratio >= 0.9 ? "success" : ratio >= 0.5 ? "warning" : "error";
 }
 
+export function getHealthTone(
+    healthStatus: string,
+    cameraReady: boolean,
+    errorRate: number,
+    consecutiveFailures: number,
+): MetricTone {
+    if (!cameraReady || healthStatus === "Poor" || errorRate > 20) return "error";
+    if (healthStatus === "Degraded" || errorRate > 5 || consecutiveFailures > 0) return "warning";
+    if (healthStatus === "Idle") return "neutral";
+    return "success";
+}
+
 export function formatResolution(resolution: [number, number] | string | null | undefined): string {
     if (Array.isArray(resolution)) {
         const [width, height] = resolution;

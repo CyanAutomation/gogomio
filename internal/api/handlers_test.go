@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -288,8 +289,8 @@ func TestRegisteredEndpointResponses(t *testing.T) {
 			wantStatus: http.StatusOK,
 			assertBody: func(t *testing.T, body map[string]interface{}) {
 				t.Helper()
-				if body["status"] != "ok" || body["camera_ready"] != true {
-					t.Fatalf("expected healthy, ready response, got %v", body)
+				if body["status"] != "idle" || body["camera_ready"] != true {
+					t.Fatalf("expected idle, ready response, got %v", body)
 				}
 			},
 		},
@@ -367,8 +368,8 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Errorf("failed to parse JSON response: %v", err)
 	}
 
-	if status, ok := result["status"]; !ok || status != "ok" {
-		t.Errorf("expected status 'ok', got %v", status)
+	if status, ok := result["status"]; !ok || status != "idle" {
+		t.Errorf("expected status 'idle', got %v", status)
 	}
 }
 
@@ -1488,6 +1489,47 @@ func TestFrameManagerGetFrameReturnsOwnedCopyForSnapshotAndStream(t *testing.T) 
 	err := fm.StreamFrame(writer, req, cfg.MaxStreamConnections)
 	if !errors.Is(err, errStopStream) {
 		t.Fatalf("expected stream to stop after probing frame, got %v", err)
+	}
+}
+
+func TestSnapshotWaitsForFrameNewerThanExistingBuffer(t *testing.T) {
+	oldFrame := []byte("stale frame")
+	freshFrame := []byte("fresh frame")
+	cfg := &config.Config{FPS: 24, TargetFPS: 24, MaxStreamConnections: 2}
+	fm := newFrameManager(newStableFrameCamera(freshFrame), cfg, 20*time.Millisecond)
+	t.Cleanup(fm.Stop)
+	if _, err := fm.frameBuffer.Write(oldFrame); err != nil {
+		t.Fatalf("seed stale frame: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	handleSnapshot(response, httptest.NewRequest(http.MethodGet, "/snapshot.jpg", nil), fm)
+	if response.Code != http.StatusOK {
+		t.Fatalf("snapshot status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if !bytes.Equal(response.Body.Bytes(), freshFrame) {
+		t.Fatalf("snapshot body = %q, want fresh frame %q", response.Body.Bytes(), freshFrame)
+	}
+}
+
+func TestSnapshotDoesNotServeStaleFrameWhenFreshCaptureFails(t *testing.T) {
+	oldFrame := []byte("stale frame")
+	cameraWithFailures := newStableFrameCamera([]byte("failed fresh frame"))
+	cameraWithFailures.captureErr = errors.New("capture unavailable")
+	cfg := &config.Config{FPS: 24, TargetFPS: 24, MaxStreamConnections: 2}
+	fm := newFrameManager(cameraWithFailures, cfg, 20*time.Millisecond)
+	t.Cleanup(fm.Stop)
+	if _, err := fm.frameBuffer.Write(oldFrame); err != nil {
+		t.Fatalf("seed stale frame: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	handleSnapshot(response, httptest.NewRequest(http.MethodGet, "/snapshot.jpg", nil), fm)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("snapshot status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if bytes.Equal(response.Body.Bytes(), oldFrame) {
+		t.Fatal("snapshot returned an old frame after fresh capture failed")
 	}
 }
 
