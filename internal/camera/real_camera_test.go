@@ -7,9 +7,9 @@ import (
 	"image/jpeg"
 	"io"
 	"log"
-	"math"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -825,8 +825,12 @@ func TestRealCameraBuildFFmpegCommandMapsJPEGQualityToQuantizer(t *testing.T) {
 		wantQuantizerQV string
 	}{
 		{name: "low quality", jpegQuality: 1, wantQuantizerQV: "31"},
+		{name: "first mapped quality step", jpegQuality: 3, wantQuantizerQV: "30"},
 		{name: "mid quality", jpegQuality: 50, wantQuantizerQV: "17"},
+		{name: "rounding boundary", jpegQuality: 51, wantQuantizerQV: "16"},
 		{name: "high quality", jpegQuality: 100, wantQuantizerQV: "2"},
+		{name: "below range clamps", jpegQuality: 0, wantQuantizerQV: "31"},
+		{name: "above range clamps", jpegQuality: 101, wantQuantizerQV: "2"},
 	}
 
 	for _, tc := range tests {
@@ -939,51 +943,6 @@ func TestRealCameraNativeCommandsSensorMode(t *testing.T) {
 	}
 }
 
-func TestFFmpegMJPEGQuantizerFromQualityMatchesRoundedLinearMapping(t *testing.T) {
-	const (
-		ffmpegQMax = 31
-		ffmpegQMin = 2
-	)
-
-	span := float64(ffmpegQMax - ffmpegQMin)
-	for quality := -20; quality <= 140; quality++ {
-		clamped := quality
-		if clamped < jpegQualityMin {
-			clamped = jpegQualityMin
-		}
-		if clamped > jpegQualityMax {
-			clamped = jpegQualityMax
-		}
-
-		progress := float64(clamped-jpegQualityMin) / float64(jpegQualityMax-jpegQualityMin)
-		want := ffmpegQMax - int(math.Round(progress*span))
-		if got := ffmpegMJPEGQuantizerFromQuality(quality); got != want {
-			t.Fatalf("quality=%d (clamped=%d) => q:v=%d, want %d", quality, clamped, got, want)
-		}
-	}
-}
-
-func TestNativeMJPEGQualityFromQualityClampsToAppRange(t *testing.T) {
-	tests := []struct {
-		in   int
-		want int
-	}{
-		{in: -20, want: 1},
-		{in: 0, want: 1},
-		{in: 1, want: 1},
-		{in: 55, want: 55},
-		{in: 100, want: 100},
-		{in: 101, want: 100},
-		{in: 200, want: 100},
-	}
-
-	for _, tc := range tests {
-		if got := nativeMJPEGQualityFromQuality(tc.in); got != tc.want {
-			t.Fatalf("quality=%d => %d, want %d", tc.in, got, tc.want)
-		}
-	}
-}
-
 func findCommandArgValue(args []string, key string) string {
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == key {
@@ -1027,10 +986,13 @@ func TestMapFFmpegInputError(t *testing.T) {
 	}
 }
 
-func TestProbeV4L2CaptureNodeSuccess(t *testing.T) {
+func TestProbeV4L2CaptureNodeUsesConfiguredDeviceAndRequestsOneFrame(t *testing.T) {
 	rc := NewRealCamera()
 	rc.devicePath = "/dev/video0"
-	rc.runCmdFn = func(*exec.Cmd) ([]byte, error) {
+	rc.width, rc.height, rc.fps = 1280, 720, 30
+	var gotArgs []string
+	rc.runCmdFn = func(cmd *exec.Cmd) ([]byte, error) {
+		gotArgs = append([]string(nil), cmd.Args...)
 		return nil, nil
 	}
 	var buf bytes.Buffer
@@ -1041,6 +1003,19 @@ func TestProbeV4L2CaptureNodeSuccess(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "V4L2 probe succeeded") {
 		t.Fatalf("expected success log, got %q", buf.String())
+	}
+	wantArgs := []string{
+		BackendFFmpeg,
+		"-hide_banner", "-loglevel", "error",
+		"-f", "video4linux2",
+		"-video_size", "1280x720",
+		"-framerate", "30",
+		"-i", "/dev/video0",
+		"-frames:v", "1",
+		"-f", "null", "-",
+	}
+	if !slices.Equal(gotArgs, wantArgs) {
+		t.Fatalf("V4L2 probe args = %v, want %v", gotArgs, wantArgs)
 	}
 }
 

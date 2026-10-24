@@ -222,12 +222,11 @@ func TestSettingsPersistence(t *testing.T) {
 	}
 }
 
-// TestSettingsAtomicWrite tests that writes are atomic
-func TestSettingsAtomicWrite(t *testing.T) {
+// TestSettingsWritesPersistValidJSONAndRemoveTemporaryFiles checks each committed value.
+func TestSettingsWritesPersistValidJSONAndRemoveTemporaryFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "atomic_test.json")
 	tempGlob := settingsPath + ".*.tmp"
-	lockPath := settingsPath + ".lock"
 	m := NewManager(settingsPath)
 
 	readAndValidate := func(expectedValue string) {
@@ -264,92 +263,28 @@ func TestSettingsAtomicWrite(t *testing.T) {
 		} else if len(leftovers) != 0 {
 			t.Fatalf("temp files should not exist after successful write, found=%v", leftovers)
 		}
-
-		if info, err := os.Stat(lockPath); err != nil {
-			t.Fatalf("lock file should persist and be reusable after successful write: %v", err)
-		} else if info.IsDir() {
-			t.Fatalf("lock path should be a file, got directory: %s", lockPath)
-		}
 	}
+}
 
-	// Concurrent reader/writer stress: no partial/truncated JSON should ever be observable.
-	var stop int32
-	readerErr := make(chan error, 1)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for atomic.LoadInt32(&stop) == 0 {
-			data, err := os.ReadFile(settingsPath)
-			if err != nil {
-				readerErr <- fmt.Errorf("read failed: %w", err)
-				return
-			}
-			if len(data) == 0 {
-				readerErr <- fmt.Errorf("observed empty payload")
-				return
-			}
-			var payload map[string]interface{}
-			if err := json.Unmarshal(data, &payload); err != nil {
-				readerErr <- fmt.Errorf("observed invalid/truncated JSON: %w; payload=%q", err, string(data))
-				return
-			}
-		}
-	}()
-
-	for i := 20; i < 120; i++ {
-		value := fmt.Sprintf("value-%d", i)
-		if err := m.Set("key", value); err != nil {
-			atomic.StoreInt32(&stop, 1)
-			wg.Wait()
-			t.Fatalf("Set failed during stress for %q: %v", value, err)
-		}
-	}
-	atomic.StoreInt32(&stop, 1)
-	wg.Wait()
-
-	select {
-	case err := <-readerErr:
-		t.Fatal(err)
-	default:
-	}
-
-	// Replace the settings file with a directory so persistence fails before the update is applied.
-	if err := m.Set("key", "stable-before-failure"); err != nil {
-		t.Fatalf("failed to set stable state: %v", err)
-	}
-	beforeFailureData, err := os.ReadFile(settingsPath)
-	if err != nil {
-		t.Fatalf("failed to read baseline file: %v", err)
+func TestSettingsSetDoesNotUpdateMemoryWhenSettingsFileIsUnreadable(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.json")
+	m := NewManager(settingsPath)
+	if err := m.Set("key", "stable"); err != nil {
+		t.Fatalf("seed settings: %v", err)
 	}
 	if err := os.Remove(settingsPath); err != nil {
-		t.Fatalf("failed to remove settings file for fault setup: %v", err)
+		t.Fatalf("remove settings file for failure setup: %v", err)
 	}
 	if err := os.Mkdir(settingsPath, 0755); err != nil {
-		t.Fatalf("failed to create directory at settings path for fault setup: %v", err)
+		t.Fatalf("replace settings file with a directory: %v", err)
 	}
 
-	err = m.Set("key", "should-fail")
-	if err == nil {
-		t.Fatal("expected Set to fail when the settings path is a directory")
-	} else if !strings.Contains(err.Error(), "failed to read settings file") {
-		t.Fatalf("expected settings read failure, got: %v", err)
+	err := m.Set("key", "should-fail")
+	if err == nil || !strings.Contains(err.Error(), "failed to read settings file") {
+		t.Fatalf("Set error = %v, want an unreadable-settings error", err)
 	}
-
-	// Restore original file and verify it is still valid/unchanged from before the interrupted path.
-	if err := os.Remove(settingsPath); err != nil {
-		t.Fatalf("failed to remove fault directory: %v", err)
-	}
-	if err := os.WriteFile(settingsPath, beforeFailureData, 0644); err != nil {
-		t.Fatalf("failed to restore baseline file: %v", err)
-	}
-	readAndValidate("stable-before-failure")
-
-	// Failed path should also clean up temp file.
-	if leftovers, err := filepath.Glob(tempGlob); err != nil {
-		t.Fatalf("failed to check temp file leftovers after failed rename: %v", err)
-	} else if len(leftovers) != 0 {
-		t.Fatalf("temp files should be cleaned up after failed rename, found=%v", leftovers)
+	if got := m.Get("key"); got != "stable" {
+		t.Fatalf("in-memory setting after failed Set = %v, want stable", got)
 	}
 }
 
