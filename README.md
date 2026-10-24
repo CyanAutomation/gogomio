@@ -68,6 +68,19 @@ HTTP 200. While it initializes, it returns `{"status":"initializing"}` and
 HTTP 503; retry after a moment before requesting a snapshot. A successful
 snapshot is saved as `frame.jpg`.
 
+To preview recorded scene frames instead of the synthetic gradient, set
+`MIO_MOCK_FRAME_DIR` to a directory containing `.jpg` or `.jpeg` files. Files
+play in filename order at `MIO_FPS` and loop according to elapsed time. Each
+frame must match `MIO_RESOLUTION`; GoGoMio validates and re-encodes fixtures at
+`MIO_JPEG_QUALITY` during startup. For example:
+
+```bash
+MOCK_CAMERA=true MIO_MOCK_FRAME_DIR=./camera-frames go run ./cmd/gogomio
+```
+
+When running in Docker, mount the fixture directory read-only and set
+`MIO_MOCK_FRAME_DIR` to its container path.
+
 The web interface is available at <http://localhost:8000/>. Stop the Go process
 with Ctrl+C.
 
@@ -403,9 +416,10 @@ Application environment variables and defaults:
 | `MIO_TARGET_FPS` | Same as `MIO_FPS` | Frame-buffer target rate, valid range 1–120 |
 | `MIO_JPEG_QUALITY` | `90` | Quality from 1–100; meaning differs by camera backend below |
 | `MIO_MAX_STREAM_CONNECTIONS` | `2` | Valid range 1–100. `docker-compose.mock.yml` overrides this to 10. |
+| `MIO_MOCK_FRAME_DIR` | Unset | Optional directory of ordered JPEG fixtures for mock mode; files must match `MIO_RESOLUTION` |
 | `MIO_PORT` | `8000` | HTTP server port |
 | `MIO_BIND_HOST` | `0.0.0.0` | Binds all interfaces by default; restrict network access as described in Security. |
-| `MOCK_CAMERA` | `false` | Set to `true` or `1` to use the synthetic camera. |
+| `MOCK_CAMERA` | `false` | Set to `true` or `1` to use the mock camera; it uses fixtures when `MIO_MOCK_FRAME_DIR` is set. |
 | `MIO_TRUSTED_PROXY_CIDRS` | Unset | Optional comma-separated CIDRs for trusted reverse proxies; only trust forwarded client IP headers from these peers. |
 | `MIO_ENABLE_PPROF` | Disabled | Set to `true` to start Go profiling on `:6060`; do not expose this port outside a trusted network. |
 
