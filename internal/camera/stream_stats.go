@@ -111,33 +111,6 @@ func (s *StreamStats) calculateFPS() float64 {
 	return numFrames / timeSpanSeconds
 }
 
-// FrameCountSince returns the number of frames captured since timestamp.
-// Useful for health checks.
-func (s *StreamStats) FrameCountSince(sinceNS int64) int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.lastFrameTimestamp == nil || *s.lastFrameTimestamp < sinceNS {
-		return 0
-	}
-
-	var count int64
-	s.frameTimestamps.Do(func(v interface{}) {
-		if v == nil {
-			return
-		}
-		ts, ok := v.(int64)
-		if !ok {
-			return
-		}
-		if ts >= sinceNS {
-			count++
-		}
-	})
-
-	return count
-}
-
 // LastFrameAgeSeconds returns the age of the last frame in seconds.
 // Returns -1 if no frames yet.
 func (s *StreamStats) LastFrameAgeSeconds(nowNS int64) float64 {

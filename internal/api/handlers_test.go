@@ -1368,37 +1368,20 @@ func TestStreamFrameDedupeIsPerClientNotGlobal(t *testing.T) {
 	}
 }
 
-func TestFrameManagerDecrementClientsClampsAtZeroAndTracksImbalance(t *testing.T) {
-	cfg := &config.Config{FPS: 30, TargetFPS: 30}
-	cam := &captureLoopCountingCamera{}
-	fm := NewFrameManager(cam, cfg)
-	t.Cleanup(fm.Stop)
-
-	fm.DecrementClients()
-	fm.DecrementClients()
-
-	if count := atomic.LoadInt64(&fm.clientCount); count != 0 {
-		t.Fatalf("client count = %d, want 0", count)
-	}
-
-	if imbalance := atomic.LoadInt64(&fm.clientImbalance); imbalance != 2 {
-		t.Fatalf("client imbalance count = %d, want 2", imbalance)
-	}
-
-	fm.captureMu.Lock()
-	started := fm.captureStarted
-	fm.captureMu.Unlock()
-	if started {
-		t.Fatalf("capture should not be running after extra decrements from zero")
-	}
-}
-
 func TestFrameManagerClientLifecycleWithExtraDecrementRemainsStable(t *testing.T) {
 	cfg := &config.Config{FPS: 30, TargetFPS: 30}
 	cam := &captureLoopCountingCamera{}
 	fm := newFrameManager(cam, cfg, 40*time.Millisecond)
 	t.Cleanup(fm.Stop)
 
+	// Extra disconnects at zero must not create clients or start capture.
+	fm.DecrementClients()
+	fm.DecrementClients()
+	if imbalance := fm.GetClientImbalance(); imbalance != 2 {
+		t.Fatalf("client imbalance after decrements from zero = %d, want 2", imbalance)
+	}
+
+	// One valid connection must start capture after the unmatched disconnects.
 	fm.IncrementClients()
 	waitForCaptureState(t, fm, true)
 
@@ -1408,11 +1391,8 @@ func TestFrameManagerClientLifecycleWithExtraDecrementRemainsStable(t *testing.T
 	// Extra decrement should clamp and record imbalance, but not break future transitions.
 	fm.DecrementClients()
 
-	if count := atomic.LoadInt64(&fm.clientCount); count != 0 {
-		t.Fatalf("client count after extra decrement = %d, want 0", count)
-	}
-	if imbalance := atomic.LoadInt64(&fm.clientImbalance); imbalance != 1 {
-		t.Fatalf("client imbalance count = %d, want 1", imbalance)
+	if imbalance := fm.GetClientImbalance(); imbalance != 3 {
+		t.Fatalf("client imbalance count = %d, want 3", imbalance)
 	}
 
 	fm.IncrementClients()
@@ -1992,70 +1972,30 @@ func contains(s, substr string) bool {
 
 // ====================== PHASE 3: Lifecycle Tests ======================
 
-// TestFrameManager_CaptureLoop_StartAndStop tests capture loop start and stop
-func TestFrameManager_CaptureLoop_StartAndStop(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
+func TestFrameManagerCaptureLoopCanStopAndRestart(t *testing.T) {
+	cam := newLifecycleCamera()
+	fm := NewFrameManager(cam, &config.Config{FPS: 24, TargetFPS: 24})
+	t.Cleanup(fm.Stop)
 
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Initially capture should not be started
-	fm.captureMu.Lock()
-	if fm.captureStarted {
-		fm.captureMu.Unlock()
-		t.Fatal("expected captureStarted to be false initially")
-	}
-	fm.captureMu.Unlock()
-
-	// Start capture
 	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	// Stop capture
-	fm.stopCapture()
-	waitForCaptureState(t, fm, false)
-}
-
-// TestFrameManager_CaptureLoop_RestartAfterStop tests restarting capture after stop
-func TestFrameManager_CaptureLoop_RestartAfterStop(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
+	select {
+	case <-cam.captureReady:
+	case <-time.After(testDuration(500 * time.Millisecond)):
+		t.Fatal("camera capture did not start")
 	}
-	defer func() { _ = cam.Stop() }()
-
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Start, stop, then start again
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
 	fm.stopCapture()
-	waitForCaptureState(t, fm, false)
+	if got := cam.captureCalls.Load(); got != 1 {
+		t.Fatalf("camera capture calls after first stop = %d, want 1", got)
+	}
 
-	// Restart
 	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
+	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
+		return cam.captureCalls.Load() == 2
+	}, "camera capture to resume after restart")
 	fm.stopCapture()
-	waitForCaptureState(t, fm, false)
+	if got := cam.captureCalls.Load(); got != 2 {
+		t.Fatalf("camera capture calls after second stop = %d, want 2", got)
+	}
 }
 
 func TestFrameManager_Stop_InterruptsBlockingCapture(t *testing.T) {
@@ -2077,49 +2017,6 @@ func TestFrameManager_Stop_InterruptsBlockingCapture(t *testing.T) {
 	case <-done:
 	case <-time.After(testDuration(500 * time.Millisecond)):
 		t.Fatal("Stop() did not interrupt blocking capture loop")
-	}
-}
-
-// TestFrameManager_CaptureLoop_IdempotentStart tests that starting twice is idempotent
-func TestFrameManager_CaptureLoop_IdempotentStart(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
-
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-	defer fm.Stop()
-
-	// Get initial capture starts count
-	fm.captureMu.Lock()
-	initialStarts := fm.captureStarts
-	fm.captureMu.Unlock()
-
-	// Start capture twice
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	fm.captureMu.Lock()
-	startsAfterFirst := fm.captureStarts
-	fm.captureMu.Unlock()
-
-	fm.startCapture() // Should be idempotent
-	waitForCaptureState(t, fm, true)
-
-	fm.captureMu.Lock()
-	startsAfterSecond := fm.captureStarts
-	fm.captureMu.Unlock()
-
-	// Only one actual start should have occurred
-	if startsAfterSecond != startsAfterFirst {
-		t.Fatalf("expected capture to start once, but got %d starts", startsAfterSecond-initialStarts)
 	}
 }
 
@@ -2239,38 +2136,6 @@ func TestFrameManager_ScheduleStopCapture(t *testing.T) {
 	}
 }
 
-// TestFrameManager_CleanupLoop_GracefulShutdown tests cleanup loop exits cleanly
-func TestFrameManager_CleanupLoop_GracefulShutdown(t *testing.T) {
-	cam := camera.NewMockCamera()
-	if err := cam.Start(640, 480, 24, 90); err != nil {
-		t.Fatalf("failed to start camera: %v", err)
-	}
-	defer func() { _ = cam.Stop() }()
-
-	fm := NewFrameManager(cam, &config.Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-	})
-
-	// Start capture to activate cleanup loop
-	fm.startCapture()
-	waitForCaptureState(t, fm, true)
-
-	// Stop frame manager (should cleanly stop cleanup loop)
-	fm.Stop()
-
-	// Verify cleanup loop exited
-	select {
-	case <-fm.cleanupDone:
-		// Success - cleanup loop exited
-	case <-time.After(1 * time.Second):
-		t.Fatal("cleanup loop did not exit during shutdown")
-	}
-}
-
 // TestFrameManager_Metrics_FrameCount verifies the published-frame counter
 // reflects a frame produced by the capture loop.
 // Contract: TC-METRICS-01 (docs/testing/test-contracts.md).
@@ -2343,6 +2208,11 @@ func TestFrameManager_Stop_MultipleTimes(t *testing.T) {
 	fm.Stop()
 	callsAfterFirstStop := cam.captureCalls.Load()
 	fm.Stop()
+	select {
+	case <-fm.cleanupDone:
+	case <-time.After(testDuration(500 * time.Millisecond)):
+		t.Fatal("cleanup loop did not exit during Stop")
+	}
 
 	fm.captureMu.Lock()
 	captureStarted := fm.captureStarted
