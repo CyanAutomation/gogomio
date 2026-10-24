@@ -93,15 +93,20 @@ func TestMockCameraConfiguredCaptureFailuresAreIndexedPerCapture(t *testing.T) {
 	clock := newFakeClock(time.Unix(1700000000, 0))
 	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
 	mc.SetFrameSequence([][]byte{firstFrame, secondFrame, thirdFrame})
-	mc.SetCaptureFailures(map[int64]error{0: failure, 2: failure})
+	mc.SetCaptureFailures(map[int64]error{1: failure, 3: failure})
 	if err := mc.Start(32, 24, 20, 80); err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 	t.Cleanup(func() { _ = mc.Stop() })
 
-	for captureIndex := int64(0); captureIndex < 4; captureIndex++ {
+	wantFrames := map[int64][]byte{
+		0: firstFrame,
+		2: thirdFrame,
+		4: secondFrame,
+	}
+	for captureIndex := int64(0); captureIndex < 5; captureIndex++ {
 		frame, err := mc.CaptureFrame()
-		if captureIndex == 0 || captureIndex == 2 {
+		if captureIndex == 1 || captureIndex == 3 {
 			if !errors.Is(err, failure) {
 				t.Errorf("CaptureFrame %d error = %v, want wrapped simulated failure", captureIndex, err)
 			}
@@ -114,28 +119,28 @@ func TestMockCameraConfiguredCaptureFailuresAreIndexedPerCapture(t *testing.T) {
 			t.Errorf("CaptureFrame %d failed unexpectedly: %v", captureIndex, err)
 			continue
 		}
-		want := secondFrame
-		if captureIndex == 3 {
-			want = firstFrame
-		}
+		want := wantFrames[captureIndex]
 		if !bytes.Equal(frame, want) {
-			t.Errorf("CaptureFrame %d returned the wrong fixture after failure sequencing", captureIndex)
+			t.Errorf("CaptureFrame %d did not match its configured fixture", captureIndex)
 		}
 		if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
 			t.Errorf("CaptureFrame %d returned invalid JPEG: %v", captureIndex, err)
 		}
 	}
 
-	if got := mc.GetFrameCounter(); got != 4 {
-		t.Errorf("frame counter = %d, want 4 capture attempts", got)
+	if got := mc.GetFrameCounter(); got != 5 {
+		t.Errorf("frame counter = %d, want 5 capture attempts", got)
 	}
-	if got := clock.Sleeps(); len(got) != 4 {
+	if got := clock.Sleeps(); len(got) != 5 {
 		t.Errorf("pacing sleeps = %d, want one per capture attempt", len(got))
 	}
 
 	mc.SetCaptureFailures(nil)
-	if _, err := mc.CaptureFrame(); err != nil {
+	frame, err := mc.CaptureFrame()
+	if err != nil {
 		t.Errorf("CaptureFrame failed after clearing configured failures: %v", err)
+	} else if !bytes.Equal(frame, thirdFrame) {
+		t.Errorf("CaptureFrame after clearing failures did not continue the frame sequence")
 	}
 }
 
