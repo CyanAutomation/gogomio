@@ -22,6 +22,8 @@ type MockCamera struct {
 	frameCounter  int64
 	now           func() time.Time
 	sleep         func(time.Duration)
+	frameSequence [][]byte
+	captureErrors map[int64]error
 }
 
 // NewMockCamera creates a new mock camera.
@@ -43,6 +45,37 @@ func NewMockCameraWithClock(now func() time.Time, sleep func(time.Duration)) *Mo
 		now:   now,
 		sleep: sleep,
 	}
+}
+
+// SetFrameSequence configures JPEG frames to return in order, looping after the
+// last frame. The camera copies the supplied bytes. Passing an empty sequence
+// restores generated synthetic frames. The sequence index follows capture
+// attempts since the most recent Start, including attempts that fail.
+func (mc *MockCamera) SetFrameSequence(frames [][]byte) {
+	sequence := make([][]byte, len(frames))
+	for i, frame := range frames {
+		sequence[i] = append([]byte(nil), frame...)
+	}
+
+	mc.mu.Lock()
+	mc.frameSequence = sequence
+	mc.mu.Unlock()
+}
+
+// SetCaptureFailures configures errors for zero-based capture-attempt indexes
+// since the most recent Start. Attempts without a configured error continue
+// normally. Passing nil or an empty map clears all configured failures.
+func (mc *MockCamera) SetCaptureFailures(failures map[int64]error) {
+	captureErrors := make(map[int64]error, len(failures))
+	for captureIndex, err := range failures {
+		if err != nil {
+			captureErrors[captureIndex] = err
+		}
+	}
+
+	mc.mu.Lock()
+	mc.captureErrors = captureErrors
+	mc.mu.Unlock()
 }
 
 // Start initializes the mock camera.
@@ -96,6 +129,13 @@ func (mc *MockCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, erro
 	frameNum := mc.frameCounter
 	fps := mc.fps
 	lastFrameTime := mc.lastFrameTime
+	captureErr := mc.captureErrors[frameNum]
+	var configuredFrame []byte
+	hasConfiguredFrame := len(mc.frameSequence) > 0
+	if hasConfiguredFrame {
+		frameIndex := int(frameNum % int64(len(mc.frameSequence)))
+		configuredFrame = mc.frameSequence[frameIndex]
+	}
 
 	// Reserve frame number and update timing under one critical section.
 	mc.frameCounter++
@@ -117,6 +157,12 @@ func (mc *MockCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, erro
 			return nil, ctx.Err()
 		default:
 		}
+	}
+	if captureErr != nil {
+		return nil, fmt.Errorf("mock camera capture %d failed: %w", frameNum, captureErr)
+	}
+	if hasConfiguredFrame {
+		return append([]byte(nil), configuredFrame...), nil
 	}
 
 	// Generate a synthetic frame
