@@ -2,14 +2,147 @@ package camera
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"sync"
 	"testing"
 	"time"
 )
+
+func encodeMockCameraTestJPEG(t *testing.T, fill color.RGBA) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 6))
+	for y := 0; y < img.Bounds().Dy(); y++ {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			img.SetRGBA(x, y, fill)
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 100}); err != nil {
+		t.Fatalf("encode fixture JPEG: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestMockCameraConfiguredFrameSequenceLoopsAndCopiesFrames(t *testing.T) {
+	original := encodeMockCameraTestJPEG(t, color.RGBA{R: 220, G: 20, B: 20, A: 255})
+	second := encodeMockCameraTestJPEG(t, color.RGBA{R: 20, G: 20, B: 220, A: 255})
+	frames := [][]byte{append([]byte(nil), original...), append([]byte(nil), second...)}
+
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
+	mc.SetFrameSequence(frames)
+	frames[0][0] ^= 0xff
+	if err := mc.Start(8, 6, 24, 90); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	t.Cleanup(func() { _ = mc.Stop() })
+
+	first, err := mc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("CaptureFrame 0 failed: %v", err)
+	}
+	if !bytes.Equal(first, original) {
+		t.Fatal("first capture does not match first configured frame")
+	}
+	first[0] ^= 0xff
+
+	gotSecond, err := mc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("CaptureFrame 1 failed: %v", err)
+	}
+	if !bytes.Equal(gotSecond, second) {
+		t.Fatal("second capture does not match second configured frame")
+	}
+
+	gotLooped, err := mc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("CaptureFrame 2 failed: %v", err)
+	}
+	if !bytes.Equal(gotLooped, original) {
+		t.Fatal("frame sequence did not loop to its first frame")
+	}
+	if _, err := jpeg.Decode(bytes.NewReader(gotLooped)); err != nil {
+		t.Fatalf("looped frame is not a valid JPEG: %v", err)
+	}
+
+	mc.SetFrameSequence(nil)
+	generated, err := mc.CaptureFrame()
+	if err != nil {
+		t.Fatalf("CaptureFrame after clearing sequence failed: %v", err)
+	}
+	config, err := jpeg.DecodeConfig(bytes.NewReader(generated))
+	if err != nil {
+		t.Fatalf("generated frame after clearing sequence is not a valid JPEG: %v", err)
+	}
+	if config.Width != 8 || config.Height != 6 {
+		t.Fatalf("generated frame dimensions = %dx%d, want 8x6", config.Width, config.Height)
+	}
+}
+
+func TestMockCameraConfiguredCaptureFailuresAreIndexedPerCapture(t *testing.T) {
+	failure := errors.New("simulated sensor read failure")
+	firstFrame := encodeMockCameraTestJPEG(t, color.RGBA{R: 220, G: 20, B: 20, A: 255})
+	secondFrame := encodeMockCameraTestJPEG(t, color.RGBA{R: 20, G: 220, B: 20, A: 255})
+	thirdFrame := encodeMockCameraTestJPEG(t, color.RGBA{R: 20, G: 20, B: 220, A: 255})
+	clock := newFakeClock(time.Unix(1700000000, 0))
+	mc := NewMockCameraWithClock(clock.Now, clock.Sleep)
+	mc.SetFrameSequence([][]byte{firstFrame, secondFrame, thirdFrame})
+	mc.SetCaptureFailures(map[int64]error{1: failure, 3: failure})
+	if err := mc.Start(32, 24, 20, 80); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	t.Cleanup(func() { _ = mc.Stop() })
+
+	wantFrames := map[int64][]byte{
+		0: firstFrame,
+		2: thirdFrame,
+		4: secondFrame,
+	}
+	for captureIndex := int64(0); captureIndex < 5; captureIndex++ {
+		frame, err := mc.CaptureFrame()
+		if captureIndex == 1 || captureIndex == 3 {
+			if !errors.Is(err, failure) {
+				t.Errorf("CaptureFrame %d error = %v, want wrapped simulated failure", captureIndex, err)
+			}
+			if frame != nil {
+				t.Errorf("CaptureFrame %d returned a frame with an injected failure", captureIndex)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("CaptureFrame %d failed unexpectedly: %v", captureIndex, err)
+			continue
+		}
+		want := wantFrames[captureIndex]
+		if !bytes.Equal(frame, want) {
+			t.Errorf("CaptureFrame %d did not match its configured fixture", captureIndex)
+		}
+		if _, err := jpeg.Decode(bytes.NewReader(frame)); err != nil {
+			t.Errorf("CaptureFrame %d returned invalid JPEG: %v", captureIndex, err)
+		}
+	}
+
+	if got := mc.GetFrameCounter(); got != 5 {
+		t.Errorf("frame counter = %d, want 5 capture attempts", got)
+	}
+	if got := clock.Sleeps(); len(got) != 5 {
+		t.Errorf("pacing sleeps = %d, want one per capture attempt", len(got))
+	}
+
+	mc.SetCaptureFailures(nil)
+	frame, err := mc.CaptureFrame()
+	if err != nil {
+		t.Errorf("CaptureFrame failed after clearing configured failures: %v", err)
+	} else if !bytes.Equal(frame, thirdFrame) {
+		t.Errorf("CaptureFrame after clearing failures did not continue the frame sequence")
+	}
+}
 
 // TestMockCameraCaptureFrame verifies that captures are correctly sized JPEGs
 // and that advancing the frame sequence changes the generated image.
