@@ -9,7 +9,8 @@ Use this skill for visual design work. For a small functional change, preserve t
 
 ## Start with the brief and existing UI
 
-- Inspect the relevant page, its styles, assets, and responsive behavior before proposing a new pattern. [`internal/web/index.html`](../../../internal/web/index.html) contains the current GoGoMio UI and design tokens.
+- Inspect the relevant page, its styles, assets, and responsive behavior before proposing a new pattern. [`internal/web/index.html`](../../../internal/web/index.html) contains the page structure, styles, and design tokens. UI behavior lives in [`internal/web/src/app.ts`](../../../internal/web/src/app.ts) and its focused modules and tests under `internal/web/src/`.
+- Treat `internal/web/src/` as the source for browser behavior. When changing `app.ts`, rebuild the embedded bundle and its content hash with `npm run build:web`; do not edit `internal/web/generated/app.js` directly.
 - Follow the user's requested style, content, and interaction. Treat the guidance below as defaults that yield to the brief and existing product conventions.
 - Establish a clear hierarchy: the page's primary purpose, the most important information, and the next useful action should be easy to scan.
 
@@ -34,3 +35,12 @@ Use this skill for visual design work. For a small functional change, preserve t
 - Check that existing product patterns remain consistent unless the brief calls for a change.
 - Check keyboard focus, contrast, reduced-motion behavior, and narrow-screen layout when the change affects them.
 - Describe any notable visual changes and the viewports or interactions inspected.
+
+## Verification
+
+Run the web source, behavior, and generated-asset checks, plus the Go tests for the embedded UI:
+
+```bash
+npm run check:web
+go test ./internal/web
+```
