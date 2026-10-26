@@ -6,7 +6,7 @@ ARG VERSION=0.1.0-dev
 ARG PORT=8000
 ARG INSTALL_FFMPEG=false
 # Stage 1: Build
-FROM golang:1.27.2-alpine3.23 AS builder
+FROM golang:1.27.3-alpine3.23 AS builder
 
 # Build arguments are available in this stage
 ARG VERSION
