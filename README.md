@@ -1,6 +1,7 @@
 # Motion In Ocean - Go Edition 🌊
 
 [![Test](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/code-coverage-test.yml)
+[![Documentation](https://github.com/CyanAutomation/gogomio/actions/workflows/documentation.yml/badge.svg)](https://github.com/CyanAutomation/gogomio/actions/workflows/documentation.yml)
 [![Build Multi-Architecture Docker Image](https://github.com/CyanAutomation/gogomio/actions/workflows/build-docker.yml/badge.svg?branch=main)](https://github.com/CyanAutomation/gogomio/actions/workflows/build-docker.yml)
 
 GoGoMio is a Go service that streams Raspberry Pi CSI camera video over MJPEG/HTTP. It includes a mock camera for development, an embedded web interface, and a CLI for managing a running server. It is intended for Raspberry Pi camera operators and developers integrating camera streams.
