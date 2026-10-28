@@ -1,1 +1,4 @@
 node_modules/
+
+# Local Basic Auth secret used by docker-compose.auth.yml.
+/mio_password

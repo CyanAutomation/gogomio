@@ -21,8 +21,37 @@ func clearConfigEnv(t *testing.T) {
 		"MOCK_CAMERA",
 		"MIO_MOCK_FRAME_DIR",
 		"MIO_TRUSTED_PROXY_CIDRS",
+		"MIO_CORS_ALLOWED_ORIGINS",
 	} {
 		t.Setenv(key, "")
+	}
+}
+
+func TestConfigCORSAllowedOrigins(t *testing.T) {
+	t.Setenv("MIO_CORS_ALLOWED_ORIGINS", "https://dashboard.example,http://localhost:3000")
+	cfg := LoadFromEnv()
+	if len(cfg.CORSAllowedOrigins) != 2 {
+		t.Fatalf("CORSAllowedOrigins = %v, want two configured origins", cfg.CORSAllowedOrigins)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() rejected exact CORS origins: %v", err)
+	}
+
+	for _, origin := range []string{"*", "https://dashboard.example/path", "javascript://example.test", "https://user@example.test", "https://dashboard.example:99999", "https://dash board.example"} {
+		t.Run(origin, func(t *testing.T) {
+			cfg := &Config{
+				Resolution:           [2]int{640, 480},
+				FPS:                  24,
+				TargetFPS:            24,
+				JPEGQuality:          90,
+				MaxStreamConnections: 2,
+				BindHost:             "127.0.0.1",
+				CORSAllowedOrigins:   []string{origin},
+			}
+			if err := cfg.Validate(); err == nil {
+				t.Fatalf("Validate() accepted invalid CORS origin %q", origin)
+			}
+		})
 	}
 }
 
