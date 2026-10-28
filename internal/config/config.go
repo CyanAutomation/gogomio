@@ -5,6 +5,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ type Config struct {
 	MockCamera           bool     `json:"mock_camera"`
 	MockFrameDir         string   `json:"-"`
 	TrustedProxyCIDRs    []string `json:"trusted_proxy_cidrs"`
+	CORSAllowedOrigins   []string `json:"cors_allowed_origins"`
 }
 
 const (
@@ -62,6 +64,11 @@ func (c *Config) Validate() error {
 	if strings.TrimSpace(c.BindHost) == "" {
 		return fmt.Errorf("bind host must not be empty")
 	}
+	for _, origin := range c.CORSAllowedOrigins {
+		if !validOrigin(origin) {
+			return fmt.Errorf("CORS origins must be exact http or https origins without paths or wildcards")
+		}
+	}
 	return nil
 }
 
@@ -77,6 +84,7 @@ func LoadFromEnv() *Config {
 		BindHost:             DefaultBindHost,
 		MockCamera:           false,
 		TrustedProxyCIDRs:    []string{},
+		CORSAllowedOrigins:   []string{},
 	}
 
 	// Resolution
@@ -146,8 +154,31 @@ func LoadFromEnv() *Config {
 	if cidrs := os.Getenv("MIO_TRUSTED_PROXY_CIDRS"); cidrs != "" {
 		cfg.TrustedProxyCIDRs = parseCSV(cidrs)
 	}
+	if origins := os.Getenv("MIO_CORS_ALLOWED_ORIGINS"); origins != "" {
+		cfg.CORSAllowedOrigins = parseCSV(origins)
+	}
 
 	return cfg
+}
+
+func validOrigin(value string) bool {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.User != nil || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	if parsed.Host != strings.TrimSpace(parsed.Host) || strings.ContainsAny(parsed.Host, "\r\n\t ") || strings.Contains(parsed.Host, "*") || parsed.Hostname() == "" {
+		return false
+	}
+	if port := parsed.Port(); port != "" {
+		portNumber, err := strconv.Atoi(port)
+		if err != nil || portNumber < 1 || portNumber > 65535 {
+			return false
+		}
+	}
+	return true
 }
 
 // parseResolution parses "WIDTHxHEIGHT" format into [2]int.

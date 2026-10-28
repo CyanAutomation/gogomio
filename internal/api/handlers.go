@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,6 +20,7 @@ import (
 	"time"
 
 	"github.com/CyanAutomation/gogomio/docs/reference"
+	"github.com/CyanAutomation/gogomio/internal/auth"
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
 	"github.com/CyanAutomation/gogomio/internal/settings"
@@ -84,6 +88,7 @@ type cleanupRequest struct {
 const defaultIdleStopDelay = 3 * time.Second
 const cleanupEnqueueTimeout = 100 * time.Millisecond
 const minFrameFreshnessWindow = 2 * time.Second
+const maxSettingsRequestBytes = 64 << 10
 
 const (
 	initialCaptureRetryDelay              = 100 * time.Millisecond
@@ -1075,11 +1080,7 @@ func parseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
 }
 
 func requestIPForRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) string {
-	host, _, err := net.SplitHostPort(sanitizeRemoteAddr(r.RemoteAddr))
-	if err != nil || host == "" {
-		host = sanitizeRemoteAddr(r.RemoteAddr)
-	}
-
+	host := requestPeerHost(r)
 	remoteIP := net.ParseIP(host)
 	if remoteIP == nil {
 		return host
@@ -1089,16 +1090,32 @@ func requestIPForRateLimit(r *http.Request, trustedProxyNets []*net.IPNet) strin
 		return remoteIP.String()
 	}
 
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		for _, token := range strings.Split(forwarded, ",") {
-			candidate := strings.TrimSpace(token)
-			if candidate != "" {
-				return candidate
-			}
-		}
+	forwarded := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
+	if forwarded == "" {
+		return remoteIP.String()
 	}
 
-	return remoteIP.String()
+	// Walk from the application toward the client. Each trusted proxy appends
+	// the address of its peer to X-Forwarded-For; values farther left can be
+	// supplied by the original caller and must not select the rate-limit key.
+	candidate := remoteIP
+	forwardedIPs := strings.Split(forwarded, ",")
+	for i := len(forwardedIPs) - 1; i >= 0 && isTrustedProxy(candidate, trustedProxyNets); i-- {
+		parsed := net.ParseIP(strings.TrimSpace(forwardedIPs[i]))
+		if parsed == nil {
+			return remoteIP.String()
+		}
+		candidate = parsed
+	}
+	return candidate.String()
+}
+
+func requestPeerHost(r *http.Request) string {
+	host, _, err := net.SplitHostPort(sanitizeRemoteAddr(r.RemoteAddr))
+	if err == nil && host != "" {
+		return host
+	}
+	return sanitizeRemoteAddr(r.RemoteAddr)
 }
 
 func isTrustedProxy(ip net.IP, trustedProxyNets []*net.IPNet) bool {
@@ -1112,6 +1129,11 @@ func isTrustedProxy(ip net.IP, trustedProxyNets []*net.IPNet) bool {
 
 // RegisterHandlers registers the API routes and returns the middleware-wrapped handler.
 func RegisterHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Config) http.Handler {
+	return RegisterHandlersWithAuth(router, fm, cfg, nil)
+}
+
+// RegisterHandlersWithAuth registers the API routes and protects them with Basic Auth when configured.
+func RegisterHandlersWithAuth(router *http.ServeMux, fm *FrameManager, cfg *config.Config, basicAuth *auth.BasicAuthenticator) http.Handler {
 	startTime := time.Now()
 
 	// Create rate limiter: 100 requests per 10 seconds per IP
@@ -1132,11 +1154,15 @@ func RegisterHandlers(router *http.ServeMux, fm *FrameManager, cfg *config.Confi
 	// Register unversioned legacy endpoints for backward compatibility
 	registerLegacyHandlers(router, fm, cfg, startTime)
 
-	// Apply limits consistently to all routes. This prevents unbounded
-	// snapshot-triggered capture work on deprecated paths.
-	handler := rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs)(router)
+	// Rate limit before authentication so failed credential attempts are also
+	// bounded. Both middleware layers wrap the one mux, covering legacy routes.
+	handler := http.Handler(router)
+	if basicAuth != nil {
+		handler = basicAuthMiddleware(basicAuth, cfg, handler)
+	}
+	handler = rateLimitMiddleware(rateLimiter, cfg.TrustedProxyCIDRs)(handler)
 	handler = loggingMiddleware(handler)
-	return corsMiddleware(handler)
+	return corsMiddleware(handler, cfg.CORSAllowedOrigins, basicAuth != nil)
 }
 
 func registerOpenAPIRoutes(router *http.ServeMux) {
@@ -1640,8 +1666,23 @@ func handleDiagnostics(w http.ResponseWriter, r *http.Request, fm *FrameManager,
 
 func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	var req SettingsUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON", err.Error())
+	r.Body = http.MaxBytesReader(w, r.Body, maxSettingsRequestBytes)
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&req); err != nil {
+		writeSettingsDecodeError(w, err)
+		return
+	}
+	if req.Settings == nil {
+		writeErrorResponse(w, http.StatusBadRequest, "Invalid request", "Settings map is required")
+		return
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON", "Request must contain exactly one JSON value")
+			return
+		}
+		writeSettingsDecodeError(w, err)
 		return
 	}
 
@@ -1655,6 +1696,15 @@ func handleSettingsUpdate(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		"status":  "ok",
 		"message": fmt.Sprintf("saved %d settings", len(req.Settings)),
 	})
+}
+
+func writeSettingsDecodeError(w http.ResponseWriter, err error) {
+	var maxBytesError *http.MaxBytesError
+	if errors.As(err, &maxBytesError) {
+		writeErrorResponse(w, http.StatusRequestEntityTooLarge, "Request body too large", "Settings request body must be at most 64 KiB")
+		return
+	}
+	writeErrorResponse(w, http.StatusBadRequest, "Invalid JSON", err.Error())
 }
 
 func handleStopStream(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
@@ -1695,6 +1745,173 @@ func writeErrorResponse(w http.ResponseWriter, statusCode int, message string, d
 	}
 }
 
+const authFailureLimit = 20
+
+func basicAuthMiddleware(basicAuth *auth.BasicAuthenticator, cfg *config.Config, next http.Handler) http.Handler {
+	trustedProxyNets := parseTrustedProxyCIDRs(cfg.TrustedProxyCIDRs)
+	failureLimiter := NewRateLimiter(authFailureLimit, time.Minute)
+	allowedOrigins := make(map[string]struct{}, len(cfg.CORSAllowedOrigins))
+	for _, origin := range cfg.CORSAllowedOrigins {
+		if key := originKey(origin); key != "" {
+			allowedOrigins[key] = struct{}{}
+		}
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isReadinessProbe(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		username, password, supplied := r.BasicAuth()
+		if !supplied || !basicAuth.Matches(username, password) {
+			if supplied {
+				clientIP := requestIPForRateLimit(r, trustedProxyNets)
+				if !failureLimiter.Allow(clientIP) {
+					w.Header().Set("Cache-Control", "no-store")
+					w.Header().Set("Retry-After", "60")
+					writeErrorResponse(w, http.StatusTooManyRequests, "Too many authentication attempts", "")
+					return
+				}
+			}
+			auth.Challenge(w)
+			return
+		}
+
+		if isMutationMethod(r.Method) && !sameOriginMutationRequest(r, trustedProxyNets, allowedOrigins) {
+			w.Header().Set("Cache-Control", "no-store")
+			writeErrorResponse(w, http.StatusForbidden, "Cross-origin request rejected", "")
+			return
+		}
+
+		next.ServeHTTP(&noStoreResponseWriter{ResponseWriter: w}, r)
+	})
+}
+
+type noStoreResponseWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *noStoreResponseWriter) WriteHeader(statusCode int) {
+	if w.wroteHeader {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *noStoreResponseWriter) Write(data []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *noStoreResponseWriter) Flush() {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *noStoreResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+func isReadinessProbe(r *http.Request) bool {
+	return r.Method == http.MethodGet && (r.URL.Path == "/ready" || r.URL.Path == "/v1/ready")
+}
+
+func isMutationMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func sameOriginMutationRequest(r *http.Request, trustedProxyNets []*net.IPNet, allowedOrigins map[string]struct{}) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin != "" {
+		if isSameOrigin(origin, requestOrigin(r, trustedProxyNets)) {
+			return true
+		}
+		_, allowed := allowedOrigins[originKey(origin)]
+		return allowed
+	}
+
+	// Browser mutations must identify themselves as same-origin when Origin is
+	// absent. Non-browser clients should send Origin; the bundled CLI does so.
+	switch strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))) {
+	case "same-origin":
+		return true
+	default:
+		return false
+	}
+}
+
+func requestOrigin(r *http.Request, trustedProxyNets []*net.IPNet) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	} else if peerIP := net.ParseIP(requestPeerHost(r)); isTrustedProxy(peerIP, trustedProxyNets) {
+		forwardedProto := r.Header.Values("X-Forwarded-Proto")
+		if len(forwardedProto) == 1 {
+			switch strings.ToLower(strings.TrimSpace(forwardedProto[0])) {
+			case "http", "https":
+				scheme = strings.ToLower(strings.TrimSpace(forwardedProto[0]))
+			}
+		}
+	}
+	return scheme + "://" + r.Host
+}
+
+func isSameOrigin(origin, expected string) bool {
+	originScheme, originHost, ok := normalizedOrigin(origin)
+	if !ok {
+		return false
+	}
+	expectedScheme, expectedHost, ok := normalizedOrigin(expected)
+	return ok && originScheme == expectedScheme && originHost == expectedHost
+}
+
+func originKey(value string) string {
+	scheme, authority, ok := normalizedOrigin(value)
+	if !ok {
+		return ""
+	}
+	return scheme + "://" + authority
+}
+
+func normalizedOrigin(value string) (scheme, authority string, ok bool) {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.User != nil || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", "", false
+	}
+	scheme = strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", "", false
+	}
+	hostname := strings.ToLower(parsed.Hostname())
+	if hostname == "" || strings.Contains(hostname, "*") {
+		return "", "", false
+	}
+	port := parsed.Port()
+	if port == "" {
+		if scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	return scheme, net.JoinHostPort(hostname, port), true
+}
+
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
@@ -1703,27 +1920,57 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func corsMiddleware(next http.Handler, configuredOrigins []string, authenticated bool) http.Handler {
+	allowedOrigins := make(map[string]struct{}, len(configuredOrigins))
+	for _, origin := range configuredOrigins {
+		if key := originKey(origin); key != "" {
+			allowedOrigins[key] = struct{}{}
+		}
+	}
+	allowedMethods := map[string]bool{
+		http.MethodGet: true, http.MethodHead: true, http.MethodPost: true,
+		http.MethodPut: true, http.MethodOptions: true,
+	}
+	allowedHeaders := map[string]bool{"authorization": true, "content-type": true}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
 		if origin == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if _, allowed := allowedOrigins[originKey(origin)]; !allowed {
+			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		if authenticated {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
 		if r.Method == http.MethodOptions {
-			reqMethod := r.Header.Get("Access-Control-Request-Method")
-			switch reqMethod {
-			case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodOptions:
-				w.WriteHeader(http.StatusNoContent)
-			default:
+			reqMethod := strings.ToUpper(strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")))
+			if !allowedMethods[reqMethod] {
 				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
 			}
+			for _, header := range strings.Split(r.Header.Get("Access-Control-Request-Headers"), ",") {
+				header = strings.ToLower(strings.TrimSpace(header))
+				if header != "" && !allowedHeaders[header] {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+			}
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 

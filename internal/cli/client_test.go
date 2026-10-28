@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,6 +61,82 @@ func TestClientFromEnv(t *testing.T) {
 				t.Errorf("expected baseURL %q, got %q", tc.expectedURL, client.baseURL)
 			}
 		})
+	}
+}
+
+func TestClientFromEnvReadsBasicAuthPasswordFile(t *testing.T) {
+	passwordFile := filepath.Join(t.TempDir(), "mio_password")
+	if err := os.WriteFile(passwordFile, []byte("cli-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOGOMIO_URL", "")
+	t.Setenv("GOGOMIO_USERNAME", "operator")
+	t.Setenv("GOGOMIO_PASSWORD_FILE", passwordFile)
+	t.Setenv("MIO_AUTH_MODE", "")
+	t.Setenv("MIO_AUTH_USERNAME", "")
+	t.Setenv("MIO_AUTH_PASSWORD_FILE", "")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "operator" || password != "cli-secret" {
+			t.Errorf("request Basic Auth = (%q, %q, %t), want configured CLI credentials", username, password, ok)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"status":"ok"}`)
+	}))
+	defer server.Close()
+	t.Setenv("GOGOMIO_URL", server.URL)
+
+	if _, err := ClientFromEnv().GetHealth(); err != nil {
+		t.Fatalf("authenticated CLI request failed: %v", err)
+	}
+}
+
+func TestClientFromEnvFailsClosedWhenServerAuthConfigIsIncomplete(t *testing.T) {
+	t.Setenv("GOGOMIO_USERNAME", "")
+	t.Setenv("GOGOMIO_PASSWORD_FILE", "")
+	t.Setenv("MIO_AUTH_MODE", "basic")
+	t.Setenv("MIO_AUTH_USERNAME", "")
+	t.Setenv("MIO_AUTH_PASSWORD_FILE", "")
+
+	if _, err := ClientFromEnv().GetHealth(); err == nil || !strings.Contains(err.Error(), "required when MIO_AUTH_MODE=basic") {
+		t.Fatalf("GetHealth() error = %v, want incomplete server auth configuration error", err)
+	}
+}
+
+func TestClientBasicAuthCoversGetRawAndPost(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if !ok || username != "operator" || password != "secret" {
+			t.Errorf("request Basic Auth = (%q, %q, %t), want configured credentials", username, password, ok)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		requests++
+		if r.Method == http.MethodPost {
+			if got, want := r.Header.Get("Origin"), "http://"+r.Host; got != want {
+				t.Errorf("POST Origin = %q, want %q", got, want)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"status":"ok"}`)
+			return
+		}
+		_, _ = w.Write([]byte("jpeg"))
+	}))
+	defer server.Close()
+
+	client := NewClientWithBasicAuth(server.URL, "operator", "secret")
+	if _, err := client.GetSnapshot(); err != nil {
+		t.Fatalf("authenticated raw GET failed: %v", err)
+	}
+	if err := client.postJSON("/v1/api/stream/stop", map[string]string{"stop": "now"}, nil); err != nil {
+		t.Fatalf("authenticated POST failed: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("authenticated requests = %d, want 2", requests)
 	}
 }
 
@@ -317,6 +396,18 @@ func TestSetSetting(t *testing.T) {
 		}
 		if r.Method != "POST" {
 			t.Errorf("expected POST method, got %s", r.Method)
+		}
+		var request struct {
+			Settings map[string]interface{} `json:"settings"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if got := request.Settings["key"]; got != "value" {
+			t.Errorf("settings payload value = %v, want %q", got, "value")
+			http.Error(w, "invalid settings payload", http.StatusBadRequest)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{"success": true}`)

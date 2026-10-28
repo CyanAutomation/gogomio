@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-This guide covers mock-camera smoke tests and Raspberry Pi deployment. GoGoMio has no built-in authentication; keep it on a trusted network or place it behind an authenticated reverse proxy before remote access. Check the root README for current image and security information.
+This guide covers mock-camera smoke tests and Raspberry Pi deployment. Authentication is disabled by default. Enable the GoGoMio Basic Auth Compose override or use an authenticated reverse proxy, and keep network access behind a TLS proxy or encrypted VPN. Basic Auth does not encrypt credentials or camera traffic. See the root README Security section for setup steps and the host password-file location (`~/containers/gogomio/mio_password`).
 
 ### Docker Hub
 
