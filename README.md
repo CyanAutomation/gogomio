@@ -302,6 +302,8 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
 
 The per-IP rate limiter allows **100 requests per 10 seconds**. Middleware wraps every HTTP route, including the web UI, API reference, metrics, versioned API, and legacy API. A long-lived stream is counted when its HTTP request starts, not per video frame.
 
+When Basic Auth is enabled, failed credential attempts are additionally limited to **20 per minute per client IP**.
+
 - **Exceeded**: HTTP 429 Too Many Requests with `Retry-After: 1`
 - **Client address**: Forwarded client IP headers are used only when the immediate peer belongs to a configured trusted proxy CIDR; see `MIO_TRUSTED_PROXY_CIDRS` below.
 
@@ -421,10 +423,16 @@ Application environment variables and defaults:
 | `MIO_PORT` | `8000` | HTTP server port |
 | `MIO_BIND_HOST` | `0.0.0.0` | Binds all interfaces by default; restrict network access as described in Security. |
 | `MOCK_CAMERA` | `false` | Set to `true` or `1` to use the mock camera; it uses fixtures when `MIO_MOCK_FRAME_DIR` is set. |
-| `MIO_TRUSTED_PROXY_CIDRS` | Unset | Optional comma-separated CIDRs for trusted reverse proxies; only trust forwarded client IP headers from these peers. |
-| `MIO_ENABLE_PPROF` | Disabled | Set to `true` to start Go profiling on `:6060`; do not expose this port outside a trusted network. |
+| `MIO_AUTH_MODE` | Unset (off) | Set to `basic` to require the configured single Basic Auth account on the main HTTP service. |
+| `MIO_AUTH_USERNAME` | Required when Basic Auth is enabled | Username for the shared Basic Auth account. |
+| `MIO_AUTH_PASSWORD_FILE` | Required when Basic Auth is enabled | Path to a one-line password file readable by the GoGoMio process. |
+| `MIO_TRUSTED_PROXY_CIDRS` | Unset | Optional comma-separated CIDRs for trusted reverse proxies; only trust forwarded client IP and HTTPS scheme headers from these peers. |
+| `MIO_CORS_ALLOWED_ORIGINS` | Unset | Optional comma-separated exact origins allowed for browser cross-origin API requests; wildcards and paths are rejected. |
+| `MIO_ENABLE_PPROF` | Disabled | Set to `true` to start Go profiling on `127.0.0.1:6060`; it is available only from container loopback. |
 
 The Pi Compose file also reads deployment variables such as `GOGOMIO_PORT` and `TZ` from `.env`; see [.env.example](.env.example). `./scripts/bootstrap.sh` checks for the legacy `docker-compose` command; Docker Compose plugin users can run `docker compose` directly.
+
+For a TLS-terminating proxy, set `MIO_TRUSTED_PROXY_CIDRS` to the proxy's source CIDR, preserve the public `Host`, and configure the proxy to overwrite `X-Forwarded-Proto` and safely set or append `X-Forwarded-For`. This lets same-origin browser mutations work over HTTPS and keeps client IP rate limiting tied to the actual client. Do not trust these headers from arbitrary peers.
 
 `MIO_RESOLUTION` controls only the encoded output dimensions; it does **not**
 guarantee a particular sensor field of view. `MIO_SENSOR_MODE` is passed to the
@@ -598,7 +606,9 @@ See [CHANGELOG.md](CHANGELOG.md) for released capabilities and changes on `main`
 
 ### ⚠️ Important Security Notice
 
-**This service has NO built-in authentication and is designed for private/trusted networks only.**
+**Authentication is disabled by default. The service is designed for private/trusted networks.** Optional HTTP Basic Auth can be enabled in the Go app with the `docker-compose.auth.yml` override or the `MIO_AUTH_*` settings.
+
+Basic Auth does not encrypt credentials or camera traffic. Keep using an encrypted VPN or a TLS-terminating proxy for network access; never expose the HTTP service directly to the internet.
 
 **DO NOT expose this service directly to the internet.** Deploy it behind:
 
@@ -611,13 +621,14 @@ See [CHANGELOG.md](CHANGELOG.md) for released capabilities and changes on `main`
 
 - [ ] Network is private/behind firewall
 - [ ] Firewall restricts access to trusted IPs only
+- [ ] Enable Basic Auth or use an authenticated access gateway
 - [ ] For remote access: Use VPN tunnel (e.g., WireGuard, OpenVPN)
 - [ ] For public access: Use reverse proxy with authentication
 - [ ] HTTPS enabled via reverse proxy (never HTTP publicly)
 - [ ] Rate limiting understood (100 req/10sec per IP)
 - [ ] Camera is on trusted device/network
 
-The supplied Raspberry Pi `docker-compose.yml` runs the container with `privileged: true` and maps camera device nodes. Review those permissions for your host and keep the service on a trusted network. Enabling `MIO_ENABLE_PPROF=true` also opens an unauthenticated profiling listener on port 6060; restrict it to trusted local access.
+The supplied Raspberry Pi `docker-compose.yml` runs the container with `privileged: true` and maps camera device nodes. Review those permissions for your host and keep the service on a trusted network. Enabling `MIO_ENABLE_PPROF=true` starts an unauthenticated profiling listener on container loopback port 6060.
 
 ### Recommended Deployment Patterns
 
@@ -628,6 +639,29 @@ The supplied Raspberry Pi `docker-compose.yml` runs the container with `privileg
 docker-compose up -d
 # Access only from trusted devices on same network
 ```
+
+**Enable GoGoMio Basic Auth in Docker Compose**:
+
+The auth override maps the host password file at `~/containers/gogomio/mio_password` to a read-only path in the container. GoGoMio runs as UID 1001, so make the file readable only by that service UID:
+
+```bash
+install -d -m 700 "$HOME/containers/gogomio"
+umask 077
+read -r -s -p "Basic Auth password: " MIO_PASSWORD
+printf '\n'
+printf '%s\n' "$MIO_PASSWORD" > "$HOME/containers/gogomio/mio_password"
+unset MIO_PASSWORD
+sudo chown 1001:1001 "$HOME/containers/gogomio/mio_password"
+sudo chmod 0400 "$HOME/containers/gogomio/mio_password"
+
+MIO_AUTH_USERNAME=operator docker compose -f docker-compose.yml -f docker-compose.auth.yml up -d
+```
+
+Use a long, unique password. The password stays out of the image and `.env`; `mio_password` is ignored by Git and Docker build contexts, and the host file is mounted read-only. You can set a different non-secret username through `MIO_AUTH_USERNAME`. Failed credentials are limited to 20 attempts per minute per client IP. When using a TLS proxy, configure `MIO_TRUSTED_PROXY_CIDRS` as described above. The bundled CLI sets the same-origin header on authenticated mutations; other non-browser clients must also send a matching `Origin` header or `Sec-Fetch-Site: same-origin`.
+
+Only `GET /ready` and `GET /v1/ready` remain unauthenticated for health checks; other routes, including `/health`, metrics, docs, streams, and legacy aliases, require credentials when Basic Auth is enabled.
+
+For a GoGoMio CLI running outside the container, set `GOGOMIO_USERNAME` and `GOGOMIO_PASSWORD_FILE` to the account and local password-file path. CLI commands run with `docker compose exec` inherit the container’s `MIO_AUTH_*` settings.
 
 **Remote Access with VPN**:
 

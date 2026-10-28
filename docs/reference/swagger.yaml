@@ -231,10 +231,10 @@ info:
     All API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding this limit will receive HTTP 429 (Too Many Requests) responses.
 
     ## Authentication & Security
-    ⚠️ **IMPORTANT**: This API has no built-in authentication. It is designed for private/internal networks only.
+    ⚠️ **IMPORTANT**: Authentication is disabled by default. Optional HTTP Basic Auth can be enabled in the GoGoMio app.
     - Do NOT expose this service directly to the internet
-    - Deploy behind a firewall, VPN, or reverse proxy with authentication
-    - Use HTTPS-terminating reverse proxy (nginx, Caddy, etc.) for HTTPS support
+    - Use an encrypted VPN or TLS-terminating reverse proxy for network access; Basic Auth does not encrypt credentials or camera traffic
+    - Keep the default private-network firewall guidance in the README
     - See Security section in README.md for deployment guidelines
 
     ## API Versioning
@@ -571,4 +571,7 @@ paths:
 schemes:
 - http
 - https
+securityDefinitions:
+  basicAuth:
+    type: basic
 swagger: "2.0"

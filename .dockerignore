@@ -24,6 +24,7 @@
 .env
 .env.local
 docker-compose*.yml
+/mio_password
 
 # Documentation (already in image if needed)
 *.md
