@@ -1765,12 +1765,14 @@ func basicAuthMiddleware(basicAuth *auth.BasicAuthenticator, cfg *config.Config,
 
 		username, password, supplied := r.BasicAuth()
 		if !supplied || !basicAuth.Matches(username, password) {
-			clientIP := requestIPForRateLimit(r, trustedProxyNets)
-			if !failureLimiter.Allow(clientIP) {
-				w.Header().Set("Cache-Control", "no-store")
-				w.Header().Set("Retry-After", "60")
-				writeErrorResponse(w, http.StatusTooManyRequests, "Too many authentication attempts", "")
-				return
+			if supplied {
+				clientIP := requestIPForRateLimit(r, trustedProxyNets)
+				if !failureLimiter.Allow(clientIP) {
+					w.Header().Set("Cache-Control", "no-store")
+					w.Header().Set("Retry-After", "60")
+					writeErrorResponse(w, http.StatusTooManyRequests, "Too many authentication attempts", "")
+					return
+				}
 			}
 			auth.Challenge(w)
 			return

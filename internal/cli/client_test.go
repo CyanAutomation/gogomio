@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -395,6 +396,18 @@ func TestSetSetting(t *testing.T) {
 		}
 		if r.Method != "POST" {
 			t.Errorf("expected POST method, got %s", r.Method)
+		}
+		var request struct {
+			Settings map[string]interface{} `json:"settings"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if got := request.Settings["key"]; got != "value" {
+			t.Errorf("settings payload value = %v, want %q", got, "value")
+			http.Error(w, "invalid settings payload", http.StatusBadRequest)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{"success": true}`)

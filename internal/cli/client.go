@@ -350,7 +350,9 @@ func (c *Client) GetSettings(key string) (interface{}, error) {
 // SetSetting updates a setting value
 func (c *Client) SetSetting(key string, value interface{}) error {
 	body := map[string]interface{}{
-		key: value,
+		"settings": map[string]interface{}{
+			key: value,
+		},
 	}
 	return c.postJSON("/v1/api/settings", body, nil)
 }

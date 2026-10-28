@@ -1101,6 +1101,39 @@ func TestBasicAuthLimitsFailuresWithoutBlockingValidCredentials(t *testing.T) {
 	}
 }
 
+func TestBasicAuthDoesNotCountMissingCredentialsAsFailures(t *testing.T) {
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := basicAuthMiddleware(basic, &config.Config{}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	request := func(credentials bool, password string) int {
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req.RemoteAddr = "198.51.100.21:1234"
+		if credentials {
+			req.SetBasicAuth("operator", password)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	for i := 0; i < authFailureLimit+1; i++ {
+		if got := request(false, ""); got != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated challenge %d status = %d, want %d", i+1, got, http.StatusUnauthorized)
+		}
+	}
+	if got := request(true, "wrong"); got != http.StatusUnauthorized {
+		t.Fatalf("first supplied invalid credential status = %d, want %d", got, http.StatusUnauthorized)
+	}
+	if got := request(true, "correct horse battery staple"); got != http.StatusNoContent {
+		t.Fatalf("valid credentials after unauthenticated challenges status = %d, want %d", got, http.StatusNoContent)
+	}
+}
+
 func TestSettingsUpdateRejectsOversizedAndTrailingJSON(t *testing.T) {
 	fm := NewFrameManager(&readinessCamera{ready: true}, &config.Config{})
 	t.Cleanup(fm.Stop)
