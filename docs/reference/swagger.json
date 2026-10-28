@@ -3,9 +3,14 @@
         "http",
         "https"
     ],
+    "securityDefinitions": {
+        "basicAuth": {
+            "type": "basic"
+        }
+    },
     "swagger": "2.0",
     "info": {
-        "description": "IP camera streaming and management API with MJPEG video streaming, real-time health monitoring, and camera configuration management. Designed for Raspberry Pi CSI cameras and compatible devices.\n\n## Rate Limiting\nAll API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding this limit will receive HTTP 429 (Too Many Requests) responses.\n\n## Authentication \u0026 Security\n\u26a0\ufe0f **IMPORTANT**: This API has no built-in authentication. It is designed for private/internal networks only.\n- Do NOT expose this service directly to the internet\n- Deploy behind a firewall, VPN, or reverse proxy with authentication\n- Use HTTPS-terminating reverse proxy (nginx, Caddy, etc.) for HTTPS support\n- See Security section in README.md for deployment guidelines\n\n## API Versioning\n- Current version: v0.1.0 (Preview/MVP)\n- Endpoints follow semantic versioning at /v1/ path\n- Legacy endpoints at / are maintained for backward compatibility but marked as deprecated",
+        "description": "IP camera streaming and management API with MJPEG video streaming, real-time health monitoring, and camera configuration management. Designed for Raspberry Pi CSI cameras and compatible devices.\n\n## Rate Limiting\nAll API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding this limit will receive HTTP 429 (Too Many Requests) responses.\n\n## Authentication \u0026 Security\n⚠️ **IMPORTANT**: Authentication is disabled by default. Optional HTTP Basic Auth can be enabled in the GoGoMio app.\n- Do NOT expose this service directly to the internet\n- Use an encrypted VPN or TLS-terminating reverse proxy for network access; Basic Auth does not encrypt credentials or camera traffic\n- Keep the default private-network firewall guidance in the README\n- See Security section in README.md for deployment guidelines\n## API Versioning\n- Current version: v0.1.0 (Preview/MVP)\n- Endpoints follow semantic versioning at /v1/ path\n- Legacy endpoints at / are maintained for backward compatibility but marked as deprecated",
         "title": "GoGoMio API",
         "contact": {
             "name": "GoGoMio Support",

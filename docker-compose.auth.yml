@@ -1,0 +1,13 @@
+services:
+  gogomio:
+    environment:
+      MIO_AUTH_MODE: basic
+      MIO_AUTH_USERNAME: ${MIO_AUTH_USERNAME:-operator}
+      MIO_AUTH_PASSWORD_FILE: /run/secrets/mio_password
+    volumes:
+      - type: bind
+        source: ${HOME:?Set HOME to the deployment user's home directory}/containers/gogomio/mio_password
+        target: /run/secrets/mio_password
+        read_only: true
+        bind:
+          create_host_path: false

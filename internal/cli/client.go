@@ -7,8 +7,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/CyanAutomation/gogomio/internal/auth"
 	"github.com/CyanAutomation/gogomio/internal/config"
 )
 
@@ -16,6 +18,9 @@ import (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+	username   string
+	password   string
+	authErr    error
 }
 
 // NewClient creates a new API client with the given base URL
@@ -39,13 +44,77 @@ func ClientFromEnv() *Client {
 	if url == "" {
 		url = config.DefaultServerURL
 	}
-	return NewClient(url)
+	client := NewClient(url)
+	username := os.Getenv("GOGOMIO_USERNAME")
+	passwordFile := os.Getenv("GOGOMIO_PASSWORD_FILE")
+	useServerCredentials := username == "" && passwordFile == "" && strings.EqualFold(strings.TrimSpace(os.Getenv("MIO_AUTH_MODE")), "basic")
+	if useServerCredentials {
+		username = os.Getenv("MIO_AUTH_USERNAME")
+		passwordFile = os.Getenv("MIO_AUTH_PASSWORD_FILE")
+	}
+	if username == "" && passwordFile == "" {
+		if useServerCredentials {
+			client.authErr = fmt.Errorf("MIO_AUTH_USERNAME and MIO_AUTH_PASSWORD_FILE are required when MIO_AUTH_MODE=basic")
+			return client
+		}
+		return client
+	}
+	if username == "" || passwordFile == "" {
+		client.authErr = fmt.Errorf("CLI Basic Auth requires GOGOMIO_USERNAME and GOGOMIO_PASSWORD_FILE")
+		return client
+	}
+	password, err := auth.ReadPasswordFile(passwordFile)
+	if err != nil {
+		client.authErr = err
+		return client
+	}
+	client.username = username
+	client.password = password
+	return client
+}
+
+// NewClientWithBasicAuth creates a client that sends HTTP Basic Auth on every request.
+func NewClientWithBasicAuth(baseURL, username, password string) *Client {
+	client := NewClient(baseURL)
+	if username == "" || password == "" {
+		client.authErr = fmt.Errorf("CLI Basic Auth username and password are required")
+		return client
+	}
+	client.username = username
+	client.password = password
+	return client
+}
+
+func (c *Client) do(request *http.Request) (*http.Response, error) {
+	if c.authErr != nil {
+		return nil, c.authErr
+	}
+	if c.username != "" {
+		request.SetBasicAuth(c.username, c.password)
+		if isMutationMethod(request.Method) && request.URL.Host != "" {
+			request.Header.Set("Origin", request.URL.Scheme+"://"+request.URL.Host)
+		}
+	}
+	return c.httpClient.Do(request)
+}
+
+func isMutationMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 // getJSON performs a GET request and decodes JSON response
 func (c *Client) getJSON(path string, v interface{}) error {
 	url := c.baseURL + path
-	resp, err := c.httpClient.Get(url)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create server request: %w", err)
+	}
+	resp, err := c.do(request)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server at %s: %w", c.baseURL, err)
 	}
@@ -68,7 +137,11 @@ func (c *Client) getJSON(path string, v interface{}) error {
 // getRaw performs a GET request and returns raw bytes
 func (c *Client) getRaw(path string) ([]byte, error) {
 	url := c.baseURL + path
-	resp, err := c.httpClient.Get(url)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create server request: %w", err)
+	}
+	resp, err := c.do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to server at %s: %w", c.baseURL, err)
 	}
@@ -92,7 +165,12 @@ func (c *Client) postJSON(path string, body interface{}, result interface{}) err
 	}
 
 	url := c.baseURL + path
-	resp, err := c.httpClient.Post(url, "application/json", bytes.NewReader(jsonBody))
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("failed to create server request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(request)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server at %s: %w", c.baseURL, err)
 	}

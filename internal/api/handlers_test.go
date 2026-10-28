@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CyanAutomation/gogomio/internal/auth"
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/config"
 )
@@ -812,8 +813,24 @@ func TestIndexEndpoint(t *testing.T) {
 
 // TestCORSHeaders tests CORS headers are present
 func TestCORSHeaders(t *testing.T) {
-	router, cam, _ := setupTestServer(t)
-	defer func() { _ = cam.Stop() }()
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+		CORSAllowedOrigins:   []string{"https://example.com"},
+	}
+	cam := camera.NewMockCamera()
+	if err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+		t.Fatal(err)
+	}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(func() {
+		fm.Stop()
+		_ = cam.Stop()
+	})
+	router := RegisterHandlers(http.NewServeMux(), fm, cfg)
 
 	t.Run("preflight request includes expected CORS headers", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodOptions, "/api/config", nil)
@@ -826,14 +843,14 @@ func TestCORSHeaders(t *testing.T) {
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("expected status %d, got %d", http.StatusNoContent, w.Code)
 		}
-		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-			t.Errorf("expected Access-Control-Allow-Origin %q, got %q", "*", got)
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+			t.Errorf("expected exact configured Access-Control-Allow-Origin, got %q", got)
 		}
-		if got := w.Header().Get("Access-Control-Allow-Methods"); got != "GET, POST, PUT, OPTIONS" {
-			t.Errorf("expected Access-Control-Allow-Methods %q, got %q", "GET, POST, PUT, OPTIONS", got)
+		if got := w.Header().Get("Access-Control-Allow-Methods"); got != "GET, HEAD, POST, PUT, OPTIONS" {
+			t.Errorf("unexpected Access-Control-Allow-Methods %q", got)
 		}
-		if got := w.Header().Get("Access-Control-Allow-Headers"); got != "Content-Type" {
-			t.Errorf("expected Access-Control-Allow-Headers %q, got %q", "Content-Type", got)
+		if got := w.Header().Get("Access-Control-Allow-Headers"); got != "Authorization, Content-Type" {
+			t.Errorf("unexpected Access-Control-Allow-Headers %q", got)
 		}
 	})
 
@@ -847,8 +864,18 @@ func TestCORSHeaders(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected status %d, got %d", http.StatusOK, w.Code)
 		}
-		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-			t.Errorf("expected Access-Control-Allow-Origin %q, got %q", "*", got)
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://example.com" {
+			t.Errorf("expected exact configured Access-Control-Allow-Origin, got %q", got)
+		}
+	})
+
+	t.Run("unconfigured origin receives no CORS permission", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+		req.Header.Set("Origin", "https://attacker.example")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Errorf("unconfigured origin received Access-Control-Allow-Origin %q", got)
 		}
 	})
 
@@ -864,6 +891,234 @@ func TestCORSHeaders(t *testing.T) {
 			t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
 		}
 	})
+}
+
+func TestBasicAuthProtectsMainRoutesAndLeavesReadinessAvailable(t *testing.T) {
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := RegisterHandlersWithAuth(http.NewServeMux(), fm, cfg, basic)
+
+	for _, path := range []string{
+		"/",
+		"/docs/",
+		"/swagger.json",
+		"/metrics",
+		"/stream.mjpg",
+		"/snapshot.jpg",
+		"/api/config",
+		"/api/stream/stop",
+		"/v1/stream.mjpg",
+		"/v1/snapshot.jpg",
+		"/v1/api/settings",
+	} {
+		t.Run("challenge_"+strings.ReplaceAll(path, "/", "_"), func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("GET %s status = %d, want %d", path, w.Code, http.StatusUnauthorized)
+			}
+		})
+	}
+
+	for _, path := range []string{"/ready", "/v1/ready"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("GET %s status = %d, want %d", path, w.Code, http.StatusOK)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.SetBasicAuth("operator", "correct horse battery staple")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("authenticated GET / status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	configReq := httptest.NewRequest(http.MethodGet, "/v1/config/camera", nil)
+	configReq.SetBasicAuth("operator", "correct horse battery staple")
+	configResponse := httptest.NewRecorder()
+	handler.ServeHTTP(configResponse, configReq)
+	if configResponse.Code != http.StatusOK {
+		t.Fatalf("authenticated GET /v1/config/camera status = %d, want %d", configResponse.Code, http.StatusOK)
+	}
+	if got := configResponse.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("authenticated response Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestBasicAuthRejectsCrossOriginMutationsAndDisablesWildcardCORS(t *testing.T) {
+	cfg := &config.Config{MaxStreamConnections: 2}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := RegisterHandlersWithAuth(http.NewServeMux(), fm, cfg, basic)
+
+	req := httptest.NewRequest(http.MethodPost, "http://camera.example.test/api/stream/stop", nil)
+	req.Host = "camera.example.test"
+	req.Header.Set("Origin", "https://attacker.example")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.SetBasicAuth("operator", "correct horse battery staple")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("cross-origin authenticated mutation status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("authenticated response allowed wildcard CORS origin %q", got)
+	}
+
+	missingOriginReq := httptest.NewRequest(http.MethodPost, "http://camera.example.test/api/stream/stop", nil)
+	missingOriginReq.Host = "camera.example.test"
+	missingOriginReq.Header.Set("Sec-Fetch-Site", "cross-site")
+	missingOriginReq.SetBasicAuth("operator", "correct horse battery staple")
+	missingOrigin := httptest.NewRecorder()
+	handler.ServeHTTP(missingOrigin, missingOriginReq)
+	if missingOrigin.Code != http.StatusForbidden {
+		t.Fatalf("cross-site mutation without Origin status = %d, want %d", missingOrigin.Code, http.StatusForbidden)
+	}
+
+	noBrowserMetadataReq := httptest.NewRequest(http.MethodPost, "http://camera.example.test/api/stream/stop", nil)
+	noBrowserMetadataReq.Host = "camera.example.test"
+	noBrowserMetadataReq.SetBasicAuth("operator", "correct horse battery staple")
+	noBrowserMetadata := httptest.NewRecorder()
+	handler.ServeHTTP(noBrowserMetadata, noBrowserMetadataReq)
+	if noBrowserMetadata.Code != http.StatusForbidden {
+		t.Fatalf("mutation without Origin or Fetch Metadata status = %d, want %d", noBrowserMetadata.Code, http.StatusForbidden)
+	}
+
+	allowedReq := httptest.NewRequest(http.MethodPost, "http://camera.example.test/api/stream/stop", nil)
+	allowedReq.Host = "camera.example.test"
+	allowedReq.Header.Set("Origin", "http://camera.example.test")
+	allowedReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	allowedReq.SetBasicAuth("operator", "correct horse battery staple")
+	allowed := httptest.NewRecorder()
+	handler.ServeHTTP(allowed, allowedReq)
+	if allowed.Code != http.StatusOK {
+		t.Fatalf("same-origin authenticated mutation status = %d, want %d", allowed.Code, http.StatusOK)
+	}
+}
+
+func TestBasicAuthSameOriginUsesForwardedTLSOnlyFromTrustedProxy(t *testing.T) {
+	cfg := &config.Config{MaxStreamConnections: 2, TrustedProxyCIDRs: []string{"10.10.0.0/16"}}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := RegisterHandlersWithAuth(http.NewServeMux(), fm, cfg, basic)
+
+	req := httptest.NewRequest(http.MethodPost, "http://camera.example.test/api/stream/stop", nil)
+	req.Host = "camera.example.test"
+	req.RemoteAddr = "10.10.0.4:443"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Origin", "https://camera.example.test")
+	req.SetBasicAuth("operator", "correct horse battery staple")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("trusted-proxy same-origin request status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestBasicAuthAllowsConfiguredCrossOriginWithCredentials(t *testing.T) {
+	cfg := &config.Config{MaxStreamConnections: 2, CORSAllowedOrigins: []string{"https://Dashboard.Example:443"}}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := RegisterHandlersWithAuth(http.NewServeMux(), fm, cfg, basic)
+	req := httptest.NewRequest(http.MethodGet, "http://camera.example.test/api/config", nil)
+	req.Host = "camera.example.test"
+	req.Header.Set("Origin", "https://dashboard.example")
+	req.SetBasicAuth("operator", "correct horse battery staple")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("configured cross-origin request status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://dashboard.example" {
+		t.Errorf("Access-Control-Allow-Origin = %q, want exact configured origin", got)
+	}
+	if got := w.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("Access-Control-Allow-Credentials = %q, want true", got)
+	}
+}
+
+func TestBasicAuthLimitsFailuresWithoutBlockingValidCredentials(t *testing.T) {
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := basicAuthMiddleware(basic, &config.Config{}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	request := func(valid bool) int {
+		req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+		req.RemoteAddr = "198.51.100.20:1234"
+		if valid {
+			req.SetBasicAuth("operator", "correct horse battery staple")
+		} else {
+			req.SetBasicAuth("operator", "wrong")
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	for i := 0; i < authFailureLimit; i++ {
+		if got := request(false); got != http.StatusUnauthorized {
+			t.Fatalf("failed attempt %d status = %d, want %d", i+1, got, http.StatusUnauthorized)
+		}
+	}
+	if got := request(false); got != http.StatusTooManyRequests {
+		t.Fatalf("attempt beyond failure limit status = %d, want %d", got, http.StatusTooManyRequests)
+	}
+	if got := request(true); got != http.StatusNoContent {
+		t.Fatalf("valid credentials after failed attempts status = %d, want %d", got, http.StatusNoContent)
+	}
+}
+
+func TestSettingsUpdateRejectsOversizedAndTrailingJSON(t *testing.T) {
+	fm := NewFrameManager(&readinessCamera{ready: true}, &config.Config{})
+	t.Cleanup(fm.Stop)
+
+	oversized := `{"settings":{"value":"` + strings.Repeat("x", maxSettingsRequestBytes) + `"}}`
+	tooLargeReq := httptest.NewRequest(http.MethodPost, "/v1/api/settings", strings.NewReader(oversized))
+	tooLarge := httptest.NewRecorder()
+	handleSettingsUpdate(tooLarge, tooLargeReq, fm)
+	if tooLarge.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized settings body status = %d, want %d", tooLarge.Code, http.StatusRequestEntityTooLarge)
+	}
+
+	extraReq := httptest.NewRequest(http.MethodPost, "/v1/api/settings", strings.NewReader(`{"settings":{"value":1}} {"settings":{"other":2}}`))
+	extra := httptest.NewRecorder()
+	handleSettingsUpdate(extra, extraReq, fm)
+	if extra.Code != http.StatusBadRequest {
+		t.Fatalf("settings body with trailing JSON status = %d, want %d", extra.Code, http.StatusBadRequest)
+	}
 }
 
 // TestStreamingConnectionLimit tests that max stream connections are enforced
@@ -971,9 +1226,9 @@ func TestRateLimitMiddlewareRejectsSpoofedForwardedIPFromUntrustedPeer(t *testin
 	}
 }
 
-func TestRateLimitMiddlewareAcceptsForwardedIPFromTrustedProxy(t *testing.T) {
+func TestRateLimitMiddlewareUsesNearestUntrustedForwardedIP(t *testing.T) {
 	limiter := NewRateLimiter(1, 10*time.Second)
-	middleware := rateLimitMiddleware(limiter, []string{"10.10.0.0/16"})
+	middleware := rateLimitMiddleware(limiter, []string{"10.10.0.0/16", "172.16.0.0/16"})
 	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -994,6 +1249,30 @@ func TestRateLimitMiddlewareAcceptsForwardedIPFromTrustedProxy(t *testing.T) {
 	handler.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusTooManyRequests {
 		t.Fatalf("second request status: got %d, want %d", w2.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestRateLimitMiddlewareIgnoresAttackerSuppliedLeftmostForwardedIP(t *testing.T) {
+	limiter := NewRateLimiter(1, 10*time.Second)
+	middleware := rateLimitMiddleware(limiter, []string{"10.10.0.0/16"})
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	request := func(spoofedIP string) int {
+		req := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
+		req.RemoteAddr = "10.10.0.1:1111"
+		req.Header.Set("X-Forwarded-For", spoofedIP+", 203.0.113.42")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	if got := request("198.51.100.1"); got != http.StatusOK {
+		t.Fatalf("first request status = %d, want %d", got, http.StatusOK)
+	}
+	if got := request("198.51.100.2"); got != http.StatusTooManyRequests {
+		t.Fatalf("second request with spoofed forwarded address status = %d, want %d", got, http.StatusTooManyRequests)
 	}
 }
 

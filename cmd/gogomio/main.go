@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/CyanAutomation/gogomio/internal/api"
+	"github.com/CyanAutomation/gogomio/internal/auth"
 	"github.com/CyanAutomation/gogomio/internal/camera"
 	"github.com/CyanAutomation/gogomio/internal/cli"
 	"github.com/CyanAutomation/gogomio/internal/config"
@@ -35,6 +36,7 @@ type applicationDependencies struct {
 	newRealCamera func() camera.Camera
 	newMockCamera func() camera.Camera
 	listen        func(network, address string) (net.Listener, error)
+	basicAuth     *auth.BasicAuthenticator
 }
 
 var (
@@ -60,6 +62,13 @@ func startServer() {
 	if err := cfg.Validate(); err != nil {
 		log.Fatalf("Invalid configuration: %v", err)
 	}
+	basicAuth, err := auth.LoadBasicAuthFromEnv()
+	if err != nil {
+		log.Fatalf("Invalid authentication configuration: %v", err)
+	}
+	if basicAuth == nil {
+		log.Println("⚠️  HTTP authentication is disabled; keep GoGoMio on a trusted network or behind an authenticated TLS proxy/VPN")
+	}
 
 	log.Printf("🌊 Motion In Ocean - Go Edition v%s", Version)
 	log.Printf("Configuration: %s", cfg.String())
@@ -68,6 +77,7 @@ func startServer() {
 		newRealCamera: func() camera.Camera { return camera.NewRealCamera() },
 		newMockCamera: func() camera.Camera { return camera.NewMockCamera() },
 		listen:        net.Listen,
+		basicAuth:     basicAuth,
 	})
 	if err != nil {
 		log.Fatalf("Failed to initialize application: %v", err)
@@ -81,7 +91,7 @@ func startServer() {
 	if os.Getenv("MIO_ENABLE_PPROF") == "true" {
 		go func() {
 			log.Printf("🔍 Profiling server listening on http://localhost:6060/debug/pprof")
-			if err := http.ListenAndServe(":6060", nil); err != nil && err != http.ErrServerClosed {
+			if err := http.ListenAndServe("127.0.0.1:6060", nil); err != nil && err != http.ErrServerClosed {
 				log.Printf("Profiling server error: %v", err)
 			}
 		}()
@@ -132,7 +142,7 @@ func initializeApplication(cfg *config.Config, deps applicationDependencies) (*a
 
 	router := http.NewServeMux()
 	frameManager := api.NewFrameManager(cam, cfg)
-	handler := api.RegisterHandlers(router, frameManager, cfg)
+	handler := api.RegisterHandlersWithAuth(router, frameManager, cfg, deps.basicAuth)
 
 	listener, err := deps.listen("tcp", cfg.AddressString())
 	if err != nil {
