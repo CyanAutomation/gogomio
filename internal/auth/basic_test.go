@@ -59,6 +59,18 @@ func TestReadPasswordFileAcceptsCRLFWithinPasswordLimit(t *testing.T) {
 	}
 }
 
+func TestReadPasswordFileRejectsOversizedFileAfterValidMaxLengthPrefix(t *testing.T) {
+	passwordFile := filepath.Join(t.TempDir(), "mio_password")
+	contents := strings.Repeat("x", maxPasswordBytes) + "\r\nextra"
+	if err := os.WriteFile(passwordFile, []byte(contents), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ReadPasswordFile(passwordFile); err == nil {
+		t.Fatal("ReadPasswordFile() error = nil, want oversized file to be rejected")
+	}
+}
+
 func TestLoadBasicAuthFromEnvFailsClosedForIncompleteConfiguration(t *testing.T) {
 	t.Setenv("MIO_AUTH_MODE", "basic")
 	t.Setenv("MIO_AUTH_USERNAME", "operator")

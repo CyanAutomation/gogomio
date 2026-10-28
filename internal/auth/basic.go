@@ -62,7 +62,7 @@ func ReadPasswordFile(path string) (string, error) {
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(io.LimitReader(file, maxPasswordBytes+2))
+	data, err := io.ReadAll(io.LimitReader(file, maxPasswordBytes+3))
 	if err != nil {
 		return "", fmt.Errorf("unable to read configured password file")
 	}
