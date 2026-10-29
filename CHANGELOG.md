@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Serve a simple HTML API reference at `/docs/` and OpenAPI 3.0.3 specifications at `/openapi.json` and `/openapi.yaml`; remove the former spec routes
+
 ---
 
 ## [1.0] - 2026-10-22

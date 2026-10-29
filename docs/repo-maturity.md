@@ -198,7 +198,7 @@ Final Score = Base Score (0–100) + Modifiers (±10 max) – Penalties (0–20 
 
 **App / Product (Max +4)**
 
-- UI or demo interface exists: ✅ Web UI at `/` + Swagger at `/docs` → **+1**
+- UI or demo interface exists: ✅ Web UI at `/` + simple HTML API reference at `/docs/` → **+1**
 - Persistent storage strategy exists: ✅ [internal/settings/](../../internal/settings/) with file locking → **+1**
 - Config system exists: ✅ [internal/config/](../../internal/config/) with env-based loading → **+1**
 - Mock/demo mode exists: ✅ [internal/camera/mock_camera.go](../../internal/camera/mock_camera.go) with `MIO_MOCK=true` → **+1**
