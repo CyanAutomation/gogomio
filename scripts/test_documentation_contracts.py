@@ -146,6 +146,32 @@ class DocumentationContractTests(unittest.TestCase):
             "type": "http",
             "scheme": "basic",
         })
+        expected_settings_description = (
+            'Settings update request. Example: {"settings":{"brightness":100,"contrast":120}}'
+        )
+        for method in ("put", "post"):
+            self.assertEqual(
+                json_spec["paths"]["/v1/api/settings"][method]["requestBody"]["description"],
+                expected_settings_description,
+            )
+        self.assertEqual(yaml_spec.count(f"description: '{expected_settings_description}'"), 2)
+
+        snapshot_responses = json_spec["paths"]["/v1/snapshot.jpg"]["get"]["responses"]
+        self.assertEqual(snapshot_responses["429"]["content"], {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/api.ErrorResponse"},
+            },
+        })
+        self.assertEqual(snapshot_responses["503"]["content"], {
+            "text/plain": {"schema": {"type": "string"}},
+        })
+        snapshot_yaml = yaml_spec.split("  /v1/snapshot.jpg:\n", 1)[1].split("\ncomponents:\n", 1)[0]
+        after_429 = snapshot_yaml.split("        '429':\n", 1)[1]
+        yaml_429, yaml_503 = after_429.split("        '503':\n", 1)
+        self.assertIn("            application/json:\n", yaml_429)
+        self.assertNotIn("image/jpeg:", yaml_429)
+        self.assertIn("            text/plain:\n", yaml_503)
+        self.assertIn("                type: string", yaml_503)
 
     def test_yaml_operations_ignore_method_like_keys_outside_paths(self):
         yaml_spec = '''openapi: 3.0.3

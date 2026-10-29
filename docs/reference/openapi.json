@@ -168,7 +168,7 @@
               }
             }
           },
-          "description": "Settings to update (example: {\\"
+          "description": "Settings update request. Example: {\"settings\":{\"brightness\":100,\"contrast\":120}}"
         }
       },
       "post": {
@@ -231,7 +231,7 @@
               }
             }
           },
-          "description": "Settings to update (example: {\\"
+          "description": "Settings update request. Example: {\"settings\":{\"brightness\":100,\"contrast\":120}}"
         }
       }
     },
@@ -467,7 +467,7 @@
           "429": {
             "description": "Rate limit exceeded (100 req/10sec per IP)",
             "content": {
-              "image/jpeg": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/api.ErrorResponse"
                 }
@@ -477,9 +477,9 @@
           "503": {
             "description": "Camera not ready or not initialized yet",
             "content": {
-              "image/jpeg": {
+              "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/api.ErrorResponse"
+                  "type": "string"
                 }
               }
             }

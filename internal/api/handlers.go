@@ -1579,6 +1579,7 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	frame := fm.GetFreshFrame(r.Context())
 	if frame == nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("Camera not ready"))
 		return
@@ -1793,8 +1794,8 @@ func isCacheableStaticRequest(r *http.Request) bool {
 	return path == "/" ||
 		strings.HasPrefix(path, "/static/") ||
 		strings.HasPrefix(path, "/docs/") ||
-		path == "/swagger.json" ||
-		path == "/swagger.yaml" ||
+		path == "/openapi.json" ||
+		path == "/openapi.yaml" ||
 		path == "/v1/config/camera"
 }
 
