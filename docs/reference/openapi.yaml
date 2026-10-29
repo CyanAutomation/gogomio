@@ -143,7 +143,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/api.SettingsUpdateRequest'
-        description: 'Settings to update (example: {\'
+        description: 'Settings update request. Example: {"settings":{"brightness":100,"contrast":120}}'
     post:
       description: Updates one or more application settings (brightness, contrast, saturation, etc). Accepts POST and PUT
         requests. Only specified settings are updated; omitted settings are preserved. Returns updated settings. Settings
@@ -184,7 +184,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/api.SettingsUpdateRequest'
-        description: 'Settings to update (example: {\'
+        description: 'Settings update request. Example: {"settings":{"brightness":100,"contrast":120}}'
   /v1/api/status:
     get:
       description: '**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). The endpoint
@@ -346,15 +346,15 @@ paths:
         '429':
           description: Rate limit exceeded (100 req/10sec per IP)
           content:
-            image/jpeg:
+            application/json:
               schema:
                 $ref: '#/components/schemas/api.ErrorResponse'
         '503':
           description: Camera not ready or not initialized yet
           content:
-            image/jpeg:
+            text/plain:
               schema:
-                $ref: '#/components/schemas/api.ErrorResponse'
+                type: string
 components:
   schemas:
     api.CameraConfigResponse:

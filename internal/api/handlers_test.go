@@ -1013,7 +1013,8 @@ func TestBasicAuthPreservesStaticAssetCachePolicies(t *testing.T) {
 		{path: "/static/app.js?v=content-hash", wantCache: "public, max-age=31536000, immutable"},
 		{path: "/static/mio/mio_pose_idle.png?v=content-hash", wantCache: "public, max-age=31536000, immutable"},
 		{path: "/docs/", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
-		{path: "/swagger.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
+		{path: "/openapi.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
+		{path: "/openapi.yaml", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
 		{path: "/docs/missing.css", wantCache: "no-store", wantStatus: http.StatusNotFound},
 		{path: "/v1/config/camera", wantCache: "private, max-age=60, must-revalidate", wantETag: true},
 	}
@@ -1898,6 +1899,9 @@ func TestSnapshotDoesNotServeStaleFrameWhenFreshCaptureFails(t *testing.T) {
 	handleSnapshot(response, httptest.NewRequest(http.MethodGet, "/snapshot.jpg", nil), fm)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("snapshot status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("snapshot content type = %q, want text/plain", got)
 	}
 	if bytes.Equal(response.Body.Bytes(), oldFrame) {
 		t.Fatal("snapshot returned an old frame after fresh capture failed")
