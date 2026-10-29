@@ -45,7 +45,7 @@ The current `main` branch provides:
 - ✅ Thread-safe frame buffering with condition variables
 - ✅ Real-time FPS calculation and health monitoring
 - ✅ Docker support (multi-arch: arm64/amd64)
-- ✅ OpenAPI reference page at `/docs/` and checked-in JSON/YAML specifications
+- ✅ Simple HTML API reference at `/docs/` with checked-in OpenAPI 3.0.3 JSON/YAML specifications
 
 For release history and unreleased changes, see [CHANGELOG.md](CHANGELOG.md).
 
@@ -293,10 +293,10 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
 
 ### API Documentation
 
-- **GET `/docs/`** - API reference with links to the OpenAPI specifications
-- **GET `/docs/index.html`** - API reference page
-- **GET `/swagger.json`** - Raw OpenAPI 2.0 specification (JSON)
-- **GET `/swagger.yaml`** - Raw OpenAPI 2.0 specification (YAML)
+- **GET `/docs/`** - Simple HTML API reference page
+- **GET `/docs/index.html`** - Same HTML API reference page
+- **GET `/openapi.json`** - OpenAPI 3.0.3 specification (JSON)
+- **GET `/openapi.yaml`** - OpenAPI 3.0.3 specification (YAML)
 
 ### API Rate Limiting
 
@@ -326,7 +326,7 @@ When Basic Auth is enabled, failed credential attempts are additionally limited 
 
 ### API Migration Guide
 
-Legacy endpoints remain available for backward compatibility. Prefer the versioned endpoints for new clients; see the [OpenAPI reference](docs/reference/swagger.yaml) for the current API contract. The code continues to register the legacy paths; this README does not promise a removal version.
+Legacy endpoints remain available for backward compatibility. Prefer the versioned endpoints for new clients; see the [OpenAPI reference](docs/reference/openapi.yaml) for the current API contract. The code continues to register the legacy paths; this README does not promise a removal version.
 
 **Deprecated Endpoints → Migration Path**:
 

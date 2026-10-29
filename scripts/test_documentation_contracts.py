@@ -73,8 +73,8 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn(license_heading, LICENSE_IDENTIFIERS, "add the canonical SPDX identifier mapping")
         expected = LICENSE_IDENTIFIERS[license_heading]
 
-        json_spec = json.loads((ROOT / "docs/reference/swagger.json").read_text(encoding="utf-8"))
-        yaml_spec = (ROOT / "docs/reference/swagger.yaml").read_text(encoding="utf-8")
+        json_spec = json.loads((ROOT / "docs/reference/openapi.json").read_text(encoding="utf-8"))
+        yaml_spec = (ROOT / "docs/reference/openapi.yaml").read_text(encoding="utf-8")
         yaml_license = re.search(r"(?m)^  license:\n    name: ([^\n]+)$", yaml_spec)
 
         self.assertEqual(json_spec["info"]["license"]["name"], expected)
@@ -84,8 +84,8 @@ class DocumentationContractTests(unittest.TestCase):
     def test_openapi_removal_dates_match_readme_policy(self):
         documents = {
             "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
-            "OpenAPI YAML": (ROOT / "docs/reference/swagger.yaml").read_text(encoding="utf-8"),
-            "OpenAPI JSON": (ROOT / "docs/reference/swagger.json").read_text(encoding="utf-8"),
+            "OpenAPI YAML": (ROOT / "docs/reference/openapi.yaml").read_text(encoding="utf-8"),
+            "OpenAPI JSON": (ROOT / "docs/reference/openapi.json").read_text(encoding="utf-8"),
         }
         dates = {name: set(REMOVAL_DATE.findall(contents)) for name, contents in documents.items()}
 
@@ -99,21 +99,82 @@ class DocumentationContractTests(unittest.TestCase):
         )
 
     def test_openapi_paths_and_methods_match_between_formats(self):
-        yaml_operations = _yaml_operations(ROOT / "docs/reference/swagger.yaml")
-        json_operations = _json_operations(ROOT / "docs/reference/swagger.json")
+        yaml_operations = _yaml_operations(ROOT / "docs/reference/openapi.yaml")
+        json_operations = _json_operations(ROOT / "docs/reference/openapi.json")
 
         self.assertEqual(yaml_operations, json_operations)
 
     def test_camera_config_schema_documents_mock_camera_mode(self):
-        json_spec = json.loads((ROOT / "docs/reference/swagger.json").read_text(encoding="utf-8"))
-        yaml_spec = (ROOT / "docs/reference/swagger.yaml").read_text(encoding="utf-8")
+        json_spec = json.loads((ROOT / "docs/reference/openapi.json").read_text(encoding="utf-8"))
+        yaml_spec = (ROOT / "docs/reference/openapi.yaml").read_text(encoding="utf-8")
 
-        properties = json_spec["definitions"]["api.CameraConfigResponse"]["properties"]
+        properties = json_spec["components"]["schemas"]["api.CameraConfigResponse"]["properties"]
         self.assertIn("mock_camera", properties)
         self.assertIn("mock_camera:", yaml_spec)
 
+    def test_openapi_documents_use_openapi_3_without_swagger_2_markers(self):
+        json_spec = json.loads((ROOT / "docs/reference/openapi.json").read_text(encoding="utf-8"))
+        yaml_spec = (ROOT / "docs/reference/openapi.yaml").read_text(encoding="utf-8")
+
+        self.assertEqual(json_spec["openapi"], "3.0.3")
+        self.assertNotIn("swagger", json_spec)
+        self.assertFalse({"host", "basePath", "schemes", "definitions", "securityDefinitions"} & json_spec.keys())
+        self.assertRegex(yaml_spec, r"(?m)^openapi: 3\.0\.3$")
+        self.assertNotRegex(yaml_spec, r"(?m)^swagger:")
+        self.assertIn("#/components/schemas/", json.dumps(json_spec))
+        refs = re.findall(r'"\$ref": "([^"]+)"', json.dumps(json_spec))
+        for ref in refs:
+            self.assertTrue(ref.startswith("#/components/schemas/"), ref)
+            self.assertIn(ref.removeprefix("#/components/schemas/"), json_spec["components"]["schemas"])
+        for path_item in json_spec["paths"].values():
+            for operation in path_item.values():
+                if not isinstance(operation, dict):
+                    continue
+                self.assertNotIn("consumes", operation)
+                self.assertNotIn("produces", operation)
+        self.assertEqual(
+            json_spec["paths"]["/v1/api/settings"]["post"]["requestBody"]["content"]
+            ["application/json"]["schema"]["$ref"],
+            "#/components/schemas/api.SettingsUpdateRequest",
+        )
+        snapshot_schema = json_spec["paths"]["/v1/snapshot.jpg"]["get"]["responses"]["200"]
+        self.assertEqual(snapshot_schema["content"]["image/jpeg"]["schema"], {
+            "type": "string",
+            "format": "binary",
+        })
+        self.assertEqual(json_spec["components"]["securitySchemes"]["basicAuth"], {
+            "type": "http",
+            "scheme": "basic",
+        })
+        expected_settings_description = (
+            'Settings update request. Example: {"settings":{"brightness":100,"contrast":120}}'
+        )
+        for method in ("put", "post"):
+            self.assertEqual(
+                json_spec["paths"]["/v1/api/settings"][method]["requestBody"]["description"],
+                expected_settings_description,
+            )
+        self.assertEqual(yaml_spec.count(f"description: '{expected_settings_description}'"), 2)
+
+        snapshot_responses = json_spec["paths"]["/v1/snapshot.jpg"]["get"]["responses"]
+        self.assertEqual(snapshot_responses["429"]["content"], {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/api.ErrorResponse"},
+            },
+        })
+        self.assertEqual(snapshot_responses["503"]["content"], {
+            "text/plain": {"schema": {"type": "string"}},
+        })
+        snapshot_yaml = yaml_spec.split("  /v1/snapshot.jpg:\n", 1)[1].split("\ncomponents:\n", 1)[0]
+        after_429 = snapshot_yaml.split("        '429':\n", 1)[1]
+        yaml_429, yaml_503 = after_429.split("        '503':\n", 1)
+        self.assertIn("            application/json:\n", yaml_429)
+        self.assertNotIn("image/jpeg:", yaml_429)
+        self.assertIn("            text/plain:\n", yaml_503)
+        self.assertIn("                type: string", yaml_503)
+
     def test_yaml_operations_ignore_method_like_keys_outside_paths(self):
-        yaml_spec = '''swagger: "2.0"
+        yaml_spec = '''openapi: 3.0.3
 paths:
   /widgets:
     get:
@@ -124,14 +185,14 @@ x-example:
       summary: arbitrary extension data
 '''
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "swagger.yaml"
+            spec_path = Path(temp_dir) / "openapi.yaml"
             spec_path.write_text(yaml_spec, encoding="utf-8")
 
             self.assertEqual(_yaml_operations(spec_path), {("get", "/widgets")})
 
     def test_json_operations_ignore_path_level_parameters(self):
         json_spec = {
-            "swagger": "2.0",
+            "openapi": "3.0.3",
             "paths": {
                 "/widgets": {
                     "parameters": [{"name": "id", "in": "path"}],
@@ -140,7 +201,7 @@ x-example:
             },
         }
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "swagger.json"
+            spec_path = Path(temp_dir) / "openapi.json"
             spec_path.write_text(json.dumps(json_spec), encoding="utf-8")
 
             self.assertEqual(_json_operations(spec_path), {("get", "/widgets")})
@@ -151,7 +212,7 @@ x-example:
             (method.lower(), route)
             for method, route in GO_ROUTE.findall(handlers)
         }
-        documented = _json_operations(ROOT / "docs/reference/swagger.json")
+        documented = _json_operations(ROOT / "docs/reference/openapi.json")
         missing = sorted(documented - registered)
 
         self.assertEqual(missing, [], f"OpenAPI operations missing from Go handlers: {missing}")

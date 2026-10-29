@@ -71,6 +71,6 @@ cmd/gogomio/main.go
 
 `FrameBuffer` uses a condition variable (`sync.Cond`) for fan-out to multiple concurrent MJPEG clients. Frames are published atomically as immutable values. `ConnectionTracker` enforces max concurrent streams. Race condition tests live in `*_race_test.go` files and should always be run with `-race`.
 
-### Swagger / OpenAPI
+### OpenAPI
 
-The checked-in OpenAPI 2.0 JSON and YAML files in `docs/reference/` are the API specification source. The server embeds and serves these files at `/swagger.json` and `/swagger.yaml`; update them when API routes or response shapes change. `/docs/` links to both specifications.
+The checked-in OpenAPI 3.0.3 JSON and YAML files in `docs/reference/` are the API specification source. The server embeds and serves these files at `/openapi.json` and `/openapi.yaml`; update them when API routes or response shapes change. `/docs/` serves a simple HTML page linking to both specifications.

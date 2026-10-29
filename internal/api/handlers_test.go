@@ -475,9 +475,10 @@ func TestAPIReferenceRoutes(t *testing.T) {
 		contentType string
 		want        string
 	}{
-		{path: "/docs/index.html", contentType: "text/html", want: "/swagger.json"},
-		{path: "/swagger.json", contentType: "application/json", want: `"swagger": "2.0"`},
-		{path: "/swagger.yaml", contentType: "application/yaml", want: "swagger: \"2.0\""},
+		{path: "/docs/", contentType: "text/html", want: "/openapi.json"},
+		{path: "/docs/index.html", contentType: "text/html", want: "/openapi.json"},
+		{path: "/openapi.json", contentType: "application/json", want: `"openapi": "3.0.3"`},
+		{path: "/openapi.yaml", contentType: "application/yaml", want: "openapi: 3.0.3"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {
@@ -492,6 +493,9 @@ func TestAPIReferenceRoutes(t *testing.T) {
 			}
 			if !strings.Contains(response.Body.String(), tc.want) {
 				t.Fatalf("response does not contain %q", tc.want)
+			}
+			if strings.HasPrefix(tc.path, "/docs/") && strings.Contains(strings.ToLower(response.Body.String()), "<script") {
+				t.Error("API reference page should not load scripts")
 			}
 			if got := response.Header().Get("Cache-Control"); got != "public, max-age=300, must-revalidate" {
 				t.Errorf("Cache-Control = %q, want revalidation policy", got)
@@ -514,20 +518,22 @@ func TestAPIReferenceRoutes(t *testing.T) {
 		})
 	}
 
-	t.Run("missing docs asset is not positively cached", func(t *testing.T) {
-		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/docs/missing.css", nil))
+	for _, path := range []string{"/docs/missing.css", "/swagger.json", "/swagger.yaml"} {
+		t.Run("removed route "+path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 
-		if response.Code != http.StatusNotFound {
-			t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
-		}
-		if got := response.Header().Get("Cache-Control"); got != "" {
-			t.Errorf("Cache-Control = %q, want empty", got)
-		}
-		if got := response.Header().Get("ETag"); got != "" {
-			t.Errorf("ETag = %q, want empty", got)
-		}
-	})
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
+			}
+			if got := response.Header().Get("Cache-Control"); got != "" {
+				t.Errorf("Cache-Control = %q, want empty", got)
+			}
+			if got := response.Header().Get("ETag"); got != "" {
+				t.Errorf("ETag = %q, want empty", got)
+			}
+		})
+	}
 }
 
 func TestRouterRejectsUnsupportedMethod(t *testing.T) {
@@ -920,7 +926,8 @@ func TestBasicAuthProtectsMainRoutesAndLeavesReadinessAvailable(t *testing.T) {
 	for _, path := range []string{
 		"/",
 		"/docs/",
-		"/swagger.json",
+		"/openapi.json",
+		"/openapi.yaml",
 		"/metrics",
 		"/stream.mjpg",
 		"/snapshot.jpg",
@@ -1006,7 +1013,8 @@ func TestBasicAuthPreservesStaticAssetCachePolicies(t *testing.T) {
 		{path: "/static/app.js?v=content-hash", wantCache: "public, max-age=31536000, immutable"},
 		{path: "/static/mio/mio_pose_idle.png?v=content-hash", wantCache: "public, max-age=31536000, immutable"},
 		{path: "/docs/", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
-		{path: "/swagger.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
+		{path: "/openapi.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
+		{path: "/openapi.yaml", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
 		{path: "/docs/missing.css", wantCache: "no-store", wantStatus: http.StatusNotFound},
 		{path: "/v1/config/camera", wantCache: "private, max-age=60, must-revalidate", wantETag: true},
 	}
@@ -1891,6 +1899,9 @@ func TestSnapshotDoesNotServeStaleFrameWhenFreshCaptureFails(t *testing.T) {
 	handleSnapshot(response, httptest.NewRequest(http.MethodGet, "/snapshot.jpg", nil), fm)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("snapshot status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("snapshot content type = %q, want text/plain", got)
 	}
 	if bytes.Equal(response.Body.Bytes(), oldFrame) {
 		t.Fatal("snapshot returned an old frame after fresh capture failed")
