@@ -11,7 +11,7 @@ Use the current handlers, settings manager, and tests as the source of truth. Pr
 
 - Routes are registered in [`internal/api/handlers.go`](../../../internal/api/handlers.go) using method-aware `http.ServeMux` patterns. `RegisterHandlers` applies CORS, logging, and rate limiting around the registered routes.
 - The rate limiter applies to all routes. Only trust forwarded client addresses from CIDRs configured in `MIO_TRUSTED_PROXY_CIDRS`; do not parse forwarding headers directly in a handler.
-- Keep versioned API routes and legacy aliases aligned when a change is intended to support both. Update the request and response contract in both [`docs/reference/swagger.json`](../../../docs/reference/swagger.json) and [`docs/reference/swagger.yaml`](../../../docs/reference/swagger.yaml); the server embeds these reference files.
+- Keep versioned API routes and legacy aliases aligned when a change is intended to support both. Update the request and response contract in both [`docs/reference/openapi.json`](../../../docs/reference/openapi.json) and [`docs/reference/openapi.yaml`](../../../docs/reference/openapi.yaml); the server embeds these reference files.
 - Preserve existing cache behavior for dynamic and error responses. Reuse the current `noStore` helper where appropriate instead of setting caching headers inconsistently.
 
 ## Persistent settings
@@ -37,5 +37,5 @@ For changes to rate limiting or trusted proxy handling, include the focused midd
 - [`internal/api/handlers.go`](../../../internal/api/handlers.go) — route registration, middleware, and response behavior
 - [`internal/settings/settings.go`](../../../internal/settings/settings.go) — settings persistence and value ownership
 - [`internal/config/config.go`](../../../internal/config/config.go) — environment loading and validation
-- [`docs/reference/swagger.json`](../../../docs/reference/swagger.json) and [`docs/reference/swagger.yaml`](../../../docs/reference/swagger.yaml) — published API contract
+- [`docs/reference/openapi.json`](../../../docs/reference/openapi.json) and [`docs/reference/openapi.yaml`](../../../docs/reference/openapi.yaml) — published API contract
 - [`scripts/test_documentation_contracts.py`](../../../scripts/test_documentation_contracts.py) — source-backed documentation checks

@@ -8,11 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"mime"
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -1169,17 +1167,17 @@ func RegisterHandlersWithAuth(router *http.ServeMux, fm *FrameManager, cfg *conf
 
 func registerOpenAPIRoutes(router *http.ServeMux) {
 	router.HandleFunc("GET /docs/", func(w http.ResponseWriter, r *http.Request) {
-		name := strings.TrimPrefix(r.URL.Path, "/docs/")
-		if name == "" {
-			name = "index.html"
+		if r.URL.Path != "/docs/" && r.URL.Path != "/docs/index.html" {
+			http.NotFound(w, r)
+			return
 		}
-		serveReferenceFile(w, r, name, referenceContentType(name))
+		serveReferenceFile(w, r, "index.html", "text/html; charset=utf-8")
 	})
-	router.HandleFunc("GET /swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		serveReferenceFile(w, r, "swagger.json", "application/json; charset=utf-8")
+	router.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		serveReferenceFile(w, r, "openapi.json", "application/json; charset=utf-8")
 	})
-	router.HandleFunc("GET /swagger.yaml", func(w http.ResponseWriter, r *http.Request) {
-		serveReferenceFile(w, r, "swagger.yaml", "application/yaml; charset=utf-8")
+	router.HandleFunc("GET /openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		serveReferenceFile(w, r, "openapi.yaml", "application/yaml; charset=utf-8")
 	})
 }
 
@@ -1202,13 +1200,6 @@ func serveReferenceFile(w http.ResponseWriter, r *http.Request, name, contentTyp
 		return
 	}
 	_, _ = w.Write(data)
-}
-
-func referenceContentType(name string) string {
-	if contentType := mime.TypeByExtension(filepath.Ext(name)); contentType != "" {
-		return contentType
-	}
-	return "application/octet-stream"
 }
 
 // registerV1Handlers registers all v1 API endpoints
@@ -1588,6 +1579,7 @@ func handleSnapshot(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	frame := fm.GetFreshFrame(r.Context())
 	if frame == nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("Camera not ready"))
 		return
@@ -1802,8 +1794,8 @@ func isCacheableStaticRequest(r *http.Request) bool {
 	return path == "/" ||
 		strings.HasPrefix(path, "/static/") ||
 		strings.HasPrefix(path, "/docs/") ||
-		path == "/swagger.json" ||
-		path == "/swagger.yaml" ||
+		path == "/openapi.json" ||
+		path == "/openapi.yaml" ||
 		path == "/v1/config/camera"
 }
 

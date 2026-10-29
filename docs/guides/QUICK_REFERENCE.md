@@ -63,7 +63,9 @@ docker-compose ps
 | `/api/config` | GET | Configuration & stats |
 | `/api/status` | GET | Server status |
 | `/v1/api/settings` | GET/POST/PUT | Manage settings |
-| `/docs/index.html` | GET | **Swagger API documentation** |
+| `/docs/` | GET | **Simple HTML API reference** |
+| `/openapi.json` | GET | OpenAPI 3.0.3 specification (JSON) |
+| `/openapi.yaml` | GET | OpenAPI 3.0.3 specification (YAML) |
 
 ## Example API Calls
 
