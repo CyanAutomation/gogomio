@@ -50,6 +50,8 @@ __pycache__/
 # Project-specific
 scripts/*
 !scripts/run-docker-go-tests.sh
+!scripts/check_web_assets.ts
+!scripts/version_web_assets.ts
 mock/
 testdata/
 .githooks

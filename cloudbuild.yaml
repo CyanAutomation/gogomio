@@ -4,7 +4,7 @@
 #          This is NOT the production image — real users pull from docker.io/DockerHub.
 #
 # Trigger: Manual only via Cloud Build UI or `gcloud builds submit`; do not configure tag triggers.
-# Platform: linux/amd64 (Cloud Run is amd64-only; no QEMU/Buildx needed)
+# Platform: linux/amd64 (Cloud Run is amd64-only; no emulation needed)
 # Registry: Google Artifact Registry (GAR)
 #
 # Pre-requisite: GAR repository must exist before running this build (one-time setup):
@@ -44,60 +44,32 @@ substitutions:
   _SERVICE_PORT: "8000"
 
 steps:
-  # ---- Step 1: Build the embedded TypeScript web UI ----
-  - name: node:22
-    id: build-web-ui
-    entrypoint: bash
-    args:
-      - -e
-      - -u
-      - -o
-      - pipefail
-      - -c
-      - |
-        npm ci
-        npm run build:web
-        npm run check:web
-
-  # ---- Step 2: Build image ----
-  # Plain docker build with BuildKit enabled — no Buildx or QEMU needed.
+  # ---- Step 1: Build and push with a registry-backed BuildKit cache ----
+  # The demo Dockerfile builds and verifies the UI in a cached Node stage.
   # Cloud Run only runs linux/amd64, so cross-compilation is unnecessary here.
   # For production Pi deployments, use the existing docker.io build workflow.
   - name: gcr.io/cloud-builders/docker
     id: build-and-push
     env:
       - DOCKER_BUILDKIT=1
-    waitFor:
-      - build-web-ui
+    entrypoint: bash
     args:
-      - build
-      - --file
-      - Dockerfile.demo
-      - --progress
-      - auto
-      - --platform
-      - linux/amd64
-      - --tag
-      - ${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:${_IMAGE_TAG}
-      - --tag
-      - ${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:$SHORT_SHA
-      - --build-arg
-      - VERSION=${_IMAGE_TAG}
-      - --build-arg
-      - PORT=${_SERVICE_PORT}
-      - .
+      - -ceu
+      - |
+        docker buildx create --name gogomio-cloudbuild --driver docker-container --use
+        docker buildx build \
+          --file Dockerfile.demo \
+          --progress plain \
+          --platform linux/amd64 \
+          --cache-from type=registry,ref=${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:buildcache \
+          --cache-to type=registry,ref=${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:buildcache,mode=max \
+          --tag ${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:${_IMAGE_TAG} \
+          --tag ${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}:$SHORT_SHA \
+          --build-arg VERSION=${_IMAGE_TAG} \
+          --build-arg PORT=${_SERVICE_PORT} \
+          --push .
 
-  # ---- Step 3: Push image to GAR ----
-  - name: gcr.io/cloud-builders/docker
-    id: push-image
-    args:
-      - push
-      - --all-tags
-      - ${_GAR_REGION}-docker.pkg.dev/$PROJECT_ID/${_GAR_REPO}/${_IMAGE_NAME}
-    waitFor:
-      - build-and-push
-
-  # ---- Step 4: Deploy to Cloud Run (demo) ----
+  # ---- Step 2: Deploy to Cloud Run (demo) ----
   # Uses MOCK_CAMERA=true since Cloud Run has no CSI camera hardware.
   # For production Pi deployments, pull from docker.io and run locally.
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -119,7 +91,7 @@ steps:
       - --set-env-vars
       - MOCK_CAMERA=true
     waitFor:
-      - push-image
+      - build-and-push
 
 options:
   machineType: E2_HIGHCPU_8

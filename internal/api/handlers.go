@@ -809,6 +809,8 @@ type CameraConfigResponse struct {
 	JPEGQuality int `json:"jpeg_quality" example:"85"`
 	// Maximum concurrent stream connections allowed
 	MaxStreamConnections int `json:"max_stream_connections" example:"5"`
+	// Whether the server is using the mock camera backend
+	MockCamera bool `json:"mock_camera" example:"false"`
 	// API version
 	APIVersion string `json:"api_version" example:"1"`
 }
@@ -1192,10 +1194,9 @@ func serveReferenceFile(w http.ResponseWriter, r *http.Request, name, contentTyp
 	etag := fmt.Sprintf(`"%x"`, digest)
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("ETag", etag)
-	// These URLs are not content-versioned, so clients must revalidate before
-	// reusing a stored response. Content-versioned URLs can instead use a long,
-	// immutable lifetime.
-	w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
+	// These URLs are not content-versioned, so keep their freshness window short
+	// and use the ETag to validate the representation after it expires.
+	w.Header().Set("Cache-Control", "public, max-age=300, must-revalidate")
 	if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -1412,6 +1413,7 @@ func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Conf
 		TargetFPS:            cfg.TargetFPS,
 		JPEGQuality:          cfg.JPEGQuality,
 		MaxStreamConnections: cfg.MaxStreamConnections,
+		MockCamera:           cfg.MockCamera,
 		APIVersion:           "1",
 	}
 
@@ -1425,7 +1427,7 @@ func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Conf
 	etag := fmt.Sprintf("\"%x\"", digest)
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
-	w.Header().Set("Cache-Control", "public, max-age=60, must-revalidate")
+	w.Header().Set("Cache-Control", "private, max-age=60, must-revalidate")
 	w.Header().Set("ETag", etag)
 	if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
@@ -1784,20 +1786,40 @@ func basicAuthMiddleware(basicAuth *auth.BasicAuthenticator, cfg *config.Config,
 			return
 		}
 
-		next.ServeHTTP(&noStoreResponseWriter{ResponseWriter: w}, r)
+		next.ServeHTTP(&noStoreResponseWriter{
+			ResponseWriter:       w,
+			preserveCacheControl: isCacheableStaticRequest(r),
+		}, r)
 	})
+}
+
+func isCacheableStaticRequest(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+
+	path := r.URL.Path
+	return path == "/" ||
+		strings.HasPrefix(path, "/static/") ||
+		strings.HasPrefix(path, "/docs/") ||
+		path == "/swagger.json" ||
+		path == "/swagger.yaml" ||
+		path == "/v1/config/camera"
 }
 
 type noStoreResponseWriter struct {
 	http.ResponseWriter
-	wroteHeader bool
+	wroteHeader          bool
+	preserveCacheControl bool
 }
 
 func (w *noStoreResponseWriter) WriteHeader(statusCode int) {
 	if w.wroteHeader {
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
+	if !w.preserveCacheControl || w.Header().Get("Cache-Control") == "" {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.wroteHeader = true
 	w.ResponseWriter.WriteHeader(statusCode)
 }
