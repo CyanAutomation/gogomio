@@ -110,6 +110,28 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn(f"go {module_go_version}", go_mod)
         self.assertIn("apt-get upgrade -y --quiet --no-install-recommends", dockerfile)
 
+    def test_docker_builds_cache_go_dependencies_and_build_outputs(self):
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
+
+        for name, text in (("production", dockerfile), ("demo", demo_dockerfile)):
+            with self.subTest(image=name):
+                self.assertIn("COPY go.mod ./", text)
+                self.assertIn("RUN go mod download", text)
+                self.assertIn("target=/root/.cache/go-build", text)
+
+        self.assertIn("FROM node:22-alpine AS web", demo_dockerfile)
+        self.assertIn("COPY package.json package-lock.json", demo_dockerfile)
+        self.assertIn("RUN npm ci", demo_dockerfile)
+        self.assertIn("npm run build:web && npm run check:web", demo_dockerfile)
+        self.assertIn("COPY --from=web /src/internal/web/index.html", demo_dockerfile)
+
+        cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
+        self.assertIn("buildx build", cloudbuild)
+        self.assertIn("type=registry,ref=", cloudbuild)
+        self.assertIn("mode=max", cloudbuild)
+        self.assertIn("--push", cloudbuild)
+
     def test_docker_images_are_pulled_and_scanned_per_architecture(self):
         text = workflow(DOCKER_WORKFLOW)
         build = workflow_step(text, "Build candidate and generate attestations")
@@ -212,10 +234,9 @@ class WorkflowContractTests(unittest.TestCase):
         go_releaser = (ROOT / ".goreleaser.yml").read_text()
         self.assertIn("- cmd: npm run build:web", go_releaser)
 
-        cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
-        self.assertIn("id: build-web-ui", cloudbuild)
-        self.assertIn("npm run build:web", cloudbuild)
-        self.assertIn("waitFor:\n      - build-web-ui", cloudbuild)
+        demo_dockerfile = (ROOT / "Dockerfile.demo").read_text()
+        self.assertIn("npm run build:web", demo_dockerfile)
+        self.assertIn("npm run check:web", demo_dockerfile)
 
         lint = workflow_step(
             workflow("code-coverage-test.yml"), "Lint GitHub Actions workflows"

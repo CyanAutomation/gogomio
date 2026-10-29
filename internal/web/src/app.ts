@@ -1,5 +1,5 @@
 import { resolutionToAspectRatio } from "./aspect-ratio";
-import { requestCameraConfig, requestDiagnostics, requestStopStream } from "./api";
+import { requestCameraConfig, requestDiagnostics, requestLiveMetrics, requestStopStream } from "./api";
 import {
     formatFrameAge,
     formatFrameRate,
@@ -17,6 +17,7 @@ import {
     type ReturnFocusTarget,
 } from "./diagnostics-dialog";
 import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
+import { shouldRunDashboardPoller } from "./polling";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
 type MessageTone = "info" | "success" | "warning" | "error";
@@ -32,11 +33,14 @@ interface CameraConfigResponse {
     resolution: [number, number];
     fps: number;
     target_fps?: number | null;
-    current_fps: number;
     jpeg_quality: number;
     mock_camera: boolean;
-    current_stream_connections: number;
     max_stream_connections: number;
+}
+
+interface LiveMetricsResponse {
+    fps_current: number;
+    stream_connections: number;
 }
 
 interface DiagnosticsResponse {
@@ -98,6 +102,9 @@ class StreamController {
     isStreaming = false;
     private streamState: StreamState = "ready";
     private statsInterval: number | null = null;
+    private cameraConfig: CameraConfigResponse | null = null;
+    private cameraConfigExpiresAt = 0;
+    private cameraConfigPromise: Promise<CameraConfigResponse> | null = null;
     private streamRetryCount = 0;
     private readonly maxStreamRetries = 3;
     private poseResetTimer: number | null = null;
@@ -214,8 +221,10 @@ class StreamController {
             this.schedulePoseResetToIdle();
             this.updateStreamControls();
             this.updateStatus("live");
-            this.loadStats();
-            this.startStatsPolling();
+            if (!document.hidden) {
+                this.loadStats();
+                this.startStatsPolling();
+            }
         };
 
         this.imageElement.onerror = () => {
@@ -314,7 +323,7 @@ class StreamController {
     }
 
     startStatsPolling(): void {
-        if (this.statsInterval !== null) return;
+        if (this.statsInterval !== null || !shouldRunDashboardPoller(!document.hidden, this.isStreaming)) return;
         this.statsInterval = window.setInterval(() => {
             this.loadStats();
         }, 2000);
@@ -328,17 +337,20 @@ class StreamController {
 
     async loadStats(): Promise<void> {
         try {
-            const response = await requestCameraConfig();
-            if (!response.ok) throw new Error("Failed to load camera metrics");
+            const [config, metricsResponse] = await Promise.all([
+                this.loadCameraConfig(),
+                requestLiveMetrics(),
+            ]);
+            if (!metricsResponse.ok) throw new Error("Failed to load live camera metrics");
 
-            const config = await response.json() as CameraConfigResponse;
+            const metrics = await metricsResponse.json() as LiveMetricsResponse;
             const aspectRatio = resolutionToAspectRatio(config.resolution);
             if (aspectRatio) {
                 getElement("stream-container").style.aspectRatio = aspectRatio;
             }
             getElement("feed-mode-badge").hidden = config.mock_camera !== true;
             // Show measured FPS and color it against the configured target while live.
-            const fps = Number(config.current_fps);
+            const fps = Number(metrics.fps_current);
             const targetFps = config.target_fps ?? Number.NaN;
             const fpsEl = getElement("stat-fps");
             fpsEl.textContent = formatFrameRate(fps);
@@ -348,13 +360,33 @@ class StreamController {
             getElement("stat-resolution").textContent = formatResolution(config.resolution);
             getElement("stat-quality").textContent = (config.jpeg_quality || "--") + "%";
             getElement("stat-connections").textContent = formatStreamConnections(
-                config.current_stream_connections,
+                metrics.stream_connections,
                 config.max_stream_connections,
             );
         } catch (error) {
             console.error("Error loading stats:", error);
             // Silently fail for stats - don't show error message as this is polling
         }
+    }
+
+    private loadCameraConfig(): Promise<CameraConfigResponse> {
+        if (this.cameraConfig && Date.now() < this.cameraConfigExpiresAt) {
+            return Promise.resolve(this.cameraConfig);
+        }
+        if (this.cameraConfigPromise) return this.cameraConfigPromise;
+
+        this.cameraConfigPromise = requestCameraConfig()
+            .then(async response => {
+                if (!response.ok) throw new Error("Failed to load camera configuration");
+                const config = await response.json() as CameraConfigResponse;
+                this.cameraConfig = config;
+                this.cameraConfigExpiresAt = Date.now() + 60_000;
+                return config;
+            })
+            .finally(() => {
+                this.cameraConfigPromise = null;
+            });
+        return this.cameraConfigPromise;
     }
 
     showMessage(text: string, type: MessageTone = "info"): void {
@@ -443,9 +475,7 @@ function openDiagnosticsModal(): void {
     if (controller && !controller.isStreaming) {
         controller.setLoadingPose("looking");
     }
-    fetchDiagnostics();
-    if (diagnosticsRefreshInterval !== null) window.clearInterval(diagnosticsRefreshInterval);
-    diagnosticsRefreshInterval = window.setInterval(fetchDiagnostics, 3000);
+    startDiagnosticsPolling();
 }
 
 function closeDiagnosticsModal(): void {
@@ -455,16 +485,44 @@ function closeDiagnosticsModal(): void {
     modal.classList.remove("is-open");
     modal.hidden = true;
     document.body.classList.remove("modal-open");
-    if (diagnosticsRefreshInterval !== null) {
-        window.clearInterval(diagnosticsRefreshInterval);
-        diagnosticsRefreshInterval = null;
-    }
+    stopDiagnosticsPolling();
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
         controller.setIdlePose("idle");
     }
     restoreReturnFocus(diagnosticsReturnFocus);
     diagnosticsReturnFocus = null;
+}
+
+function startDiagnosticsPolling(): void {
+    stopDiagnosticsPolling();
+    const modal = getElement<HTMLDivElement>("diagnostics-modal");
+    if (!shouldRunDashboardPoller(!document.hidden, !modal.hidden)) return;
+    fetchDiagnostics();
+    diagnosticsRefreshInterval = window.setInterval(fetchDiagnostics, 3000);
+}
+
+function stopDiagnosticsPolling(): void {
+    if (diagnosticsRefreshInterval === null) return;
+    window.clearInterval(diagnosticsRefreshInterval);
+    diagnosticsRefreshInterval = null;
+}
+
+function handleDashboardVisibilityChange(): void {
+    const controller = getStreamController();
+    if (document.hidden) {
+        controller?.stopStatsPolling();
+        stopDiagnosticsPolling();
+        return;
+    }
+
+    if (controller?.isStreaming) {
+        controller.loadStats();
+        controller.startStatsPolling();
+    }
+    if (!getElement<HTMLDivElement>("diagnostics-modal").hidden) {
+        startDiagnosticsPolling();
+    }
 }
 
 function fetchDiagnostics(): void {
@@ -570,4 +628,5 @@ document.addEventListener("DOMContentLoaded", () => {
     window.streamController = new StreamController();
     getElement<HTMLButtonElement>("diagnostics-btn").addEventListener("click", openDiagnosticsModal);
     getElement<HTMLButtonElement>("diagnostics-close").addEventListener("click", closeDiagnosticsModal);
+    document.addEventListener("visibilitychange", handleDashboardVisibilityChange);
 });
