@@ -1427,7 +1427,7 @@ func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Conf
 	etag := fmt.Sprintf("\"%x\"", digest)
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
-	w.Header().Set("Cache-Control", "public, max-age=60, must-revalidate")
+	w.Header().Set("Cache-Control", "private, max-age=60, must-revalidate")
 	w.Header().Set("ETag", etag)
 	if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
@@ -1803,7 +1803,8 @@ func isCacheableStaticRequest(r *http.Request) bool {
 		strings.HasPrefix(path, "/static/") ||
 		strings.HasPrefix(path, "/docs/") ||
 		path == "/swagger.json" ||
-		path == "/swagger.yaml"
+		path == "/swagger.yaml" ||
+		path == "/v1/config/camera"
 }
 
 type noStoreResponseWriter struct {

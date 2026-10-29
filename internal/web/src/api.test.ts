@@ -34,5 +34,5 @@ test("diagnostics use the documented read endpoint", async () => {
 });
 
 test("stopping a stream uses the documented POST endpoint", async () => {
-    await assertRequest(requestStopStream, { url: "/api/stream/stop", method: "POST" });
+    await assertRequest(requestStopStream, { url: "/v1/api/stream/stop", method: "POST" });
 });

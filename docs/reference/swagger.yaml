@@ -441,8 +441,8 @@ paths:
         view, which is selected independently by MIO_SENSOR_MODE. Does not include
         runtime metrics; use /v1/metrics/live for current performance data. Values are
         immutable until process restart. Responses include an ETag and
-        `Cache-Control: public, max-age=60, must-revalidate`; send If-None-Match to
-        revalidate a cached representation.
+        `Cache-Control: private, max-age=60, must-revalidate`; send If-None-Match to
+        revalidate a browser-cached representation.
       produces:
       - application/json
       responses:
