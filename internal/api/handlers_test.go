@@ -493,7 +493,7 @@ func TestAPIReferenceRoutes(t *testing.T) {
 			if !strings.Contains(response.Body.String(), tc.want) {
 				t.Fatalf("response does not contain %q", tc.want)
 			}
-			if got := response.Header().Get("Cache-Control"); got != "public, max-age=0, must-revalidate" {
+			if got := response.Header().Get("Cache-Control"); got != "public, max-age=300, must-revalidate" {
 				t.Errorf("Cache-Control = %q, want revalidation policy", got)
 			}
 			etag := response.Header().Get("ETag")
@@ -712,6 +712,13 @@ func TestCameraConfigCaching(t *testing.T) {
 	}
 	if strings.Contains(first.Body.String(), "timestamp_iso8601") {
 		t.Error("cacheable camera configuration contains request timestamp")
+	}
+	var cameraConfig CameraConfigResponse
+	if err := json.Unmarshal(first.Body.Bytes(), &cameraConfig); err != nil {
+		t.Fatalf("decode camera config: %v", err)
+	}
+	if !cameraConfig.MockCamera {
+		t.Error("cacheable camera configuration does not identify mock camera mode")
 	}
 
 	second := request("")
@@ -959,6 +966,55 @@ func TestBasicAuthProtectsMainRoutesAndLeavesReadinessAvailable(t *testing.T) {
 	}
 	if got := configResponse.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("authenticated response Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestBasicAuthPreservesStaticAssetCachePolicies(t *testing.T) {
+	cfg := &config.Config{MaxStreamConnections: 2}
+	fm := NewFrameManager(&readinessCamera{ready: true}, cfg)
+	t.Cleanup(fm.Stop)
+
+	basic, err := auth.NewBasicAuthenticator("operator", "correct horse battery staple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := RegisterHandlersWithAuth(http.NewServeMux(), fm, cfg, basic)
+
+	tests := []struct {
+		path       string
+		wantCache  string
+		wantETag   bool
+		wantStatus int
+	}{
+		{path: "/", wantCache: "no-cache", wantETag: true},
+		{path: "/static/app.js?v=content-hash", wantCache: "public, max-age=31536000, immutable"},
+		{path: "/static/mio/mio_pose_idle.png?v=content-hash", wantCache: "public, max-age=31536000, immutable"},
+		{path: "/docs/", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
+		{path: "/swagger.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
+		{path: "/docs/missing.css", wantCache: "no-store", wantStatus: http.StatusNotFound},
+		{path: "/v1/config/camera", wantCache: "no-store", wantETag: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.SetBasicAuth("operator", "correct horse battery staple")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, req)
+
+			wantStatus := tc.wantStatus
+			if wantStatus == 0 {
+				wantStatus = http.StatusOK
+			}
+			if response.Code != wantStatus {
+				t.Fatalf("status = %d, want %d", response.Code, wantStatus)
+			}
+			if got := response.Header().Get("Cache-Control"); got != tc.wantCache {
+				t.Errorf("Cache-Control = %q, want %q", got, tc.wantCache)
+			}
+			if got := response.Header().Get("ETag") != ""; got != tc.wantETag {
+				t.Errorf("ETag present = %t, want %t", got, tc.wantETag)
+			}
+		})
 	}
 }
 
