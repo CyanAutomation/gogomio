@@ -1,7 +1,7 @@
 basePath: /
 definitions:
   api.CameraConfigResponse:
-    description: Static camera configuration including encoded output resolution, quality, and limits; resolution does not describe sensor field of view
+    description: Static camera configuration including encoded output resolution, quality, limits, and mock-camera mode; resolution does not describe sensor field of view
     properties:
       api_version:
         description: API version
@@ -19,6 +19,10 @@ definitions:
         description: Maximum concurrent stream connections allowed
         example: 5
         type: integer
+      mock_camera:
+        description: Whether the server is using the mock camera backend
+        example: false
+        type: boolean
       resolution:
         description: Encoded output resolution in pixels [width, height]; does not describe sensor field of view
         items:
@@ -433,12 +437,12 @@ paths:
       - application/json
       description: >-
         Returns static camera configuration (encoded output resolution, FPS, quality
-        settings, connection limits). Resolution does not describe the sensor field of
+        settings, connection limits, and mock-camera mode). Resolution does not describe the sensor field of
         view, which is selected independently by MIO_SENSOR_MODE. Does not include
         runtime metrics; use /v1/metrics/live for current performance data. Values are
         immutable until process restart. Responses include an ETag and
-        `Cache-Control: public, max-age=60, must-revalidate`; send If-None-Match to
-        revalidate a cached representation.
+        `Cache-Control: private, max-age=60, must-revalidate`; send If-None-Match to
+        revalidate a browser-cached representation.
       produces:
       - application/json
       responses:

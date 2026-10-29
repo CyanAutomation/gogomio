@@ -104,6 +104,14 @@ class DocumentationContractTests(unittest.TestCase):
 
         self.assertEqual(yaml_operations, json_operations)
 
+    def test_camera_config_schema_documents_mock_camera_mode(self):
+        json_spec = json.loads((ROOT / "docs/reference/swagger.json").read_text(encoding="utf-8"))
+        yaml_spec = (ROOT / "docs/reference/swagger.yaml").read_text(encoding="utf-8")
+
+        properties = json_spec["definitions"]["api.CameraConfigResponse"]["properties"]
+        self.assertIn("mock_camera", properties)
+        self.assertIn("mock_camera:", yaml_spec)
+
     def test_yaml_operations_ignore_method_like_keys_outside_paths(self):
         yaml_spec = '''swagger: "2.0"
 paths:

@@ -12,13 +12,16 @@
 
   // internal/web/src/api.ts
   function requestCameraConfig(fetcher = fetch) {
-    return fetcher("/api/config");
+    return fetcher("/v1/config/camera");
+  }
+  function requestLiveMetrics(fetcher = fetch) {
+    return fetcher("/v1/metrics/live", { cache: "no-store" });
   }
   function requestDiagnostics(fetcher = fetch) {
-    return fetcher("/api/diagnostics");
+    return fetcher("/v1/health/detailed", { cache: "no-store" });
   }
   function requestStopStream(fetcher = fetch) {
-    return fetcher("/api/stream/stop", { method: "POST" });
+    return fetcher("/v1/api/stream/stop", { method: "POST" });
   }
 
   // internal/web/src/dashboard-presentation.ts
@@ -116,6 +119,11 @@
     return !isStreaming && scheduledRetryCount === currentRetryCount;
   }
 
+  // internal/web/src/polling.ts
+  function shouldRunDashboardPoller(isVisible, isActive) {
+    return isVisible && isActive;
+  }
+
   // internal/web/src/app.ts
   function getElement(id) {
     const element = document.getElementById(id);
@@ -144,6 +152,9 @@
       this.isStreaming = false;
       this.streamState = "ready";
       this.statsInterval = null;
+      this.cameraConfig = null;
+      this.cameraConfigExpiresAt = 0;
+      this.cameraConfigPromise = null;
       this.streamRetryCount = 0;
       this.maxStreamRetries = 3;
       this.poseResetTimer = null;
@@ -249,8 +260,10 @@
         this.schedulePoseResetToIdle();
         this.updateStreamControls();
         this.updateStatus("live");
-        this.loadStats();
-        this.startStatsPolling();
+        if (!document.hidden) {
+          this.loadStats();
+          this.startStatsPolling();
+        }
       };
       this.imageElement.onerror = () => {
         if (!this.imageElement.getAttribute("src")) return;
@@ -328,7 +341,7 @@
       this.stopButton.disabled = !canStop;
     }
     startStatsPolling() {
-      if (this.statsInterval !== null) return;
+      if (this.statsInterval !== null || !shouldRunDashboardPoller(!document.hidden, this.isStreaming)) return;
       this.statsInterval = window.setInterval(() => {
         this.loadStats();
       }, 2e3);
@@ -340,15 +353,18 @@
     }
     async loadStats() {
       try {
-        const response = await requestCameraConfig();
-        if (!response.ok) throw new Error("Failed to load camera metrics");
-        const config = await response.json();
+        const [config, metricsResponse] = await Promise.all([
+          this.loadCameraConfig(),
+          requestLiveMetrics()
+        ]);
+        if (!metricsResponse.ok) throw new Error("Failed to load live camera metrics");
+        const metrics = await metricsResponse.json();
         const aspectRatio = resolutionToAspectRatio(config.resolution);
         if (aspectRatio) {
           getElement("stream-container").style.aspectRatio = aspectRatio;
         }
         getElement("feed-mode-badge").hidden = config.mock_camera !== true;
-        const fps = Number(config.current_fps);
+        const fps = Number(metrics.fps_current);
         const targetFps = config.target_fps ?? Number.NaN;
         const fpsEl = getElement("stat-fps");
         fpsEl.textContent = formatFrameRate(fps);
@@ -358,12 +374,28 @@
         getElement("stat-resolution").textContent = formatResolution(config.resolution);
         getElement("stat-quality").textContent = (config.jpeg_quality || "--") + "%";
         getElement("stat-connections").textContent = formatStreamConnections(
-          config.current_stream_connections,
+          metrics.stream_connections,
           config.max_stream_connections
         );
       } catch (error) {
         console.error("Error loading stats:", error);
       }
+    }
+    loadCameraConfig() {
+      if (this.cameraConfig && Date.now() < this.cameraConfigExpiresAt) {
+        return Promise.resolve(this.cameraConfig);
+      }
+      if (this.cameraConfigPromise) return this.cameraConfigPromise;
+      this.cameraConfigPromise = requestCameraConfig().then(async (response) => {
+        if (!response.ok) throw new Error("Failed to load camera configuration");
+        const config = await response.json();
+        this.cameraConfig = config;
+        this.cameraConfigExpiresAt = Date.now() + 6e4;
+        return config;
+      }).finally(() => {
+        this.cameraConfigPromise = null;
+      });
+      return this.cameraConfigPromise;
     }
     showMessage(text, type = "info") {
       const msg = getElement("message");
@@ -427,9 +459,7 @@
     if (controller && !controller.isStreaming) {
       controller.setLoadingPose("looking");
     }
-    fetchDiagnostics();
-    if (diagnosticsRefreshInterval !== null) window.clearInterval(diagnosticsRefreshInterval);
-    diagnosticsRefreshInterval = window.setInterval(fetchDiagnostics, 3e3);
+    startDiagnosticsPolling();
   }
   function closeDiagnosticsModal() {
     const modal = getElement("diagnostics-modal");
@@ -437,16 +467,40 @@
     modal.classList.remove("is-open");
     modal.hidden = true;
     document.body.classList.remove("modal-open");
-    if (diagnosticsRefreshInterval !== null) {
-      window.clearInterval(diagnosticsRefreshInterval);
-      diagnosticsRefreshInterval = null;
-    }
+    stopDiagnosticsPolling();
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
       controller.setIdlePose("idle");
     }
     restoreReturnFocus(diagnosticsReturnFocus);
     diagnosticsReturnFocus = null;
+  }
+  function startDiagnosticsPolling() {
+    stopDiagnosticsPolling();
+    const modal = getElement("diagnostics-modal");
+    if (!shouldRunDashboardPoller(!document.hidden, !modal.hidden)) return;
+    fetchDiagnostics();
+    diagnosticsRefreshInterval = window.setInterval(fetchDiagnostics, 3e3);
+  }
+  function stopDiagnosticsPolling() {
+    if (diagnosticsRefreshInterval === null) return;
+    window.clearInterval(diagnosticsRefreshInterval);
+    diagnosticsRefreshInterval = null;
+  }
+  function handleDashboardVisibilityChange() {
+    const controller = getStreamController();
+    if (document.hidden) {
+      controller?.stopStatsPolling();
+      stopDiagnosticsPolling();
+      return;
+    }
+    if (controller?.isStreaming) {
+      controller.loadStats();
+      controller.startStatsPolling();
+    }
+    if (!getElement("diagnostics-modal").hidden) {
+      startDiagnosticsPolling();
+    }
   }
   function fetchDiagnostics() {
     requestDiagnostics().then((response) => {
@@ -539,5 +593,6 @@
     window.streamController = new StreamController();
     getElement("diagnostics-btn").addEventListener("click", openDiagnosticsModal);
     getElement("diagnostics-close").addEventListener("click", closeDiagnosticsModal);
+    document.addEventListener("visibilitychange", handleDashboardVisibilityChange);
   });
 })();

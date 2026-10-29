@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Multi-stage builder for gogomio - Motion In Ocean Go implementation
 # Builds for both arm64 (Raspberry Pi) and amd64 (development/testing)
 
@@ -18,16 +19,23 @@ WORKDIR /build
 # Install C toolchain required for -race (CGO) test builds.
 RUN apk add --no-cache gcc musl-dev
 
+# Keep module downloads in a separately cacheable layer. The remote BuildKit
+# cache can reuse this layer when application source changes.
+COPY go.mod ./
+RUN go mod download
+
 # Copy remaining source code
 COPY . .
 
 # Go's ARM64 race runtime rejects 47-bit VMAs in some emulated build environments.
 # Run regular ARM64 tests here; the amd64 image path and CI still run with -race.
-RUN TARGETARCH="$TARGETARCH" sh scripts/run-docker-go-tests.sh
+RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    TARGETARCH="$TARGETARCH" sh scripts/run-docker-go-tests.sh
 
 # Build the binary with version information
 # Use go build with optimization flags
-RUN CGO_ENABLED=0 /usr/local/go/bin/go build \
+RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
+    CGO_ENABLED=0 /usr/local/go/bin/go build \
     -ldflags="-s -w -X main.Version=${VERSION}" \
     -o /build/gogomio \
     ./cmd/gogomio
