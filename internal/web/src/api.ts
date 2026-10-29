@@ -11,5 +11,5 @@ export function requestDiagnostics(fetcher: typeof fetch = fetch): Promise<Respo
 }
 
 export function requestStopStream(fetcher: typeof fetch = fetch): Promise<Response> {
-    return fetcher("/api/stream/stop", { method: "POST" });
+    return fetcher("/v1/api/stream/stop", { method: "POST" });
 }

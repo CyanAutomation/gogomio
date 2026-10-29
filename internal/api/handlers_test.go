@@ -703,7 +703,7 @@ func TestCameraConfigCaching(t *testing.T) {
 	if first.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", first.Code)
 	}
-	if got, want := first.Header().Get("Cache-Control"), "public, max-age=60, must-revalidate"; got != want {
+	if got, want := first.Header().Get("Cache-Control"), "private, max-age=60, must-revalidate"; got != want {
 		t.Errorf("Cache-Control = %q, want %q", got, want)
 	}
 	etag := first.Header().Get("ETag")
@@ -964,8 +964,24 @@ func TestBasicAuthProtectsMainRoutesAndLeavesReadinessAvailable(t *testing.T) {
 	if configResponse.Code != http.StatusOK {
 		t.Fatalf("authenticated GET /v1/config/camera status = %d, want %d", configResponse.Code, http.StatusOK)
 	}
-	if got := configResponse.Header().Get("Cache-Control"); got != "no-store" {
-		t.Errorf("authenticated response Cache-Control = %q, want no-store", got)
+	if got := configResponse.Header().Get("Cache-Control"); got != "private, max-age=60, must-revalidate" {
+		t.Errorf("authenticated response Cache-Control = %q, want private browser caching", got)
+	}
+	etag := configResponse.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("authenticated camera config response missing ETag")
+	}
+
+	revalidatedReq := httptest.NewRequest(http.MethodGet, "/v1/config/camera", nil)
+	revalidatedReq.SetBasicAuth("operator", "correct horse battery staple")
+	revalidatedReq.Header.Set("If-None-Match", etag)
+	revalidatedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(revalidatedResponse, revalidatedReq)
+	if revalidatedResponse.Code != http.StatusNotModified {
+		t.Fatalf("authenticated conditional GET status = %d, want %d", revalidatedResponse.Code, http.StatusNotModified)
+	}
+	if got := revalidatedResponse.Header().Get("Cache-Control"); got != "private, max-age=60, must-revalidate" {
+		t.Errorf("authenticated 304 Cache-Control = %q, want private browser caching", got)
 	}
 }
 
@@ -992,7 +1008,7 @@ func TestBasicAuthPreservesStaticAssetCachePolicies(t *testing.T) {
 		{path: "/docs/", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
 		{path: "/swagger.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
 		{path: "/docs/missing.css", wantCache: "no-store", wantStatus: http.StatusNotFound},
-		{path: "/v1/config/camera", wantCache: "no-store", wantETag: true},
+		{path: "/v1/config/camera", wantCache: "private, max-age=60, must-revalidate", wantETag: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {

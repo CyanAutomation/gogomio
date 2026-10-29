@@ -274,7 +274,7 @@
         },
         "/v1/config/camera": {
             "get": {
-                "description": "Returns static camera configuration (encoded output resolution, FPS, quality settings, connection limits, and mock-camera mode). Resolution does not describe the sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does not include runtime metrics; use /v1/metrics/live for current performance data. Values are immutable until process restart. Responses include an ETag and Cache-Control: public, max-age=60, must-revalidate; send If-None-Match to revalidate a cached representation.",
+                "description": "Returns static camera configuration (encoded output resolution, FPS, quality settings, connection limits, and mock-camera mode). Resolution does not describe the sensor field of view, which is selected independently by MIO_SENSOR_MODE. Does not include runtime metrics; use /v1/metrics/live for current performance data. Values are immutable until process restart. Responses include an ETag and Cache-Control: private, max-age=60, must-revalidate; send If-None-Match to revalidate a browser-cached representation.",
                 "consumes": [
                     "application/json"
                 ],

@@ -21,7 +21,7 @@
     return fetcher("/v1/health/detailed", { cache: "no-store" });
   }
   function requestStopStream(fetcher = fetch) {
-    return fetcher("/api/stream/stop", { method: "POST" });
+    return fetcher("/v1/api/stream/stop", { method: "POST" });
   }
 
   // internal/web/src/dashboard-presentation.ts
