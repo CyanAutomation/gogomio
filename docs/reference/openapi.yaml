@@ -1,0 +1,586 @@
+openapi: 3.0.3
+info:
+  description: 'IP camera streaming and management API with MJPEG video streaming, real-time health monitoring, and camera
+    configuration management. Designed for Raspberry Pi CSI cameras and compatible devices.
+
+
+    ## Rate Limiting
+
+    All API endpoints are subject to per-IP rate limiting: **100 requests per 10 seconds per IP address**. Requests exceeding
+    this limit will receive HTTP 429 (Too Many Requests) responses.
+
+
+    ## Authentication & Security
+
+    ⚠️ **IMPORTANT**: Authentication is disabled by default. Optional HTTP Basic Auth can be enabled in the GoGoMio app.
+
+    - Do NOT expose this service directly to the internet
+
+    - Use an encrypted VPN or TLS-terminating reverse proxy for network access; Basic Auth does not encrypt credentials or
+    camera traffic
+
+    - Keep the default private-network firewall guidance in the README
+
+    - See Security section in README.md for deployment guidelines
+
+    ## API Versioning
+
+    - Current version: v0.1.0 (Preview/MVP)
+
+    - Endpoints follow semantic versioning at /v1/ path
+
+    - Legacy endpoints at / are maintained for backward compatibility but marked as deprecated'
+  title: GoGoMio API
+  contact:
+    name: GoGoMio Support
+    url: https://github.com/CyanAutomation/gogomio
+  license:
+    name: MIT
+    url: https://github.com/CyanAutomation/gogomio/blob/main/LICENSE
+  version: 0.1.0
+servers:
+- url: http://localhost:8000
+- url: https://localhost:8000
+paths:
+  /v1/api/config:
+    get:
+      description: '**DEPRECATED in v0.1.0** - This endpoint mixes two concerns (static config + live metrics). **Migrate
+        to**: Use /v1/config/camera for static settings, and /v1/metrics/live for performance metrics. The endpoint remains
+        available for backward compatibility; no removal date has been announced. See README for migration guide.'
+      tags:
+      - Configuration
+      summary: Get configuration and metrics (DEPRECATED)
+      deprecated: true
+      responses:
+        '200':
+          description: Contains all config + metrics fields (see examples)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+  /v1/api/diagnostics:
+    get:
+      description: '**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). Provides
+        complete system diagnostics including health status, metrics, error tracking, and failure statistics. The endpoint
+        remains available for backward compatibility; no removal date has been announced. See README for migration guide.'
+      tags:
+      - Diagnostics
+      summary: Get comprehensive diagnostics (DEPRECATED)
+      deprecated: true
+      responses:
+        '200':
+          description: Complete health and diagnostics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.DetailedHealthResponse'
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+  /v1/api/settings:
+    get:
+      description: Retrieves all saved application settings as a JSON object. Settings can include brightness, contrast, saturation,
+        and other camera-specific parameters. Returns empty object if no settings saved yet. Use PUT or POST with /v1/api/settings
+        to update.
+      tags:
+      - Settings
+      summary: Get all settings
+      responses:
+        '200':
+          description: 'Object containing all saved settings (example: {brightness: 100, contrast: 120})'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    put:
+      description: Updates one or more application settings (brightness, contrast, saturation, etc). Accepts POST and PUT
+        requests. Only specified settings are updated; omitted settings are preserved. Returns updated settings. Settings
+        persist across restarts.
+      tags:
+      - Settings
+      summary: Update camera settings
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        '400':
+          description: Invalid JSON or request format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+        '500':
+          description: Failed to save settings to persistent storage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/api.SettingsUpdateRequest'
+        description: 'Settings to update (example: {\'
+    post:
+      description: Updates one or more application settings (brightness, contrast, saturation, etc). Accepts POST and PUT
+        requests. Only specified settings are updated; omitted settings are preserved. Returns updated settings. Settings
+        persist across restarts.
+      tags:
+      - Settings
+      summary: Update camera settings
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        '400':
+          description: Invalid JSON or request format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+        '500':
+          description: Failed to save settings to persistent storage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/api.SettingsUpdateRequest'
+        description: 'Settings to update (example: {\'
+  /v1/api/status:
+    get:
+      description: '**DEPRECATED in v0.1.0** - **Migrate to**: Use /v1/health/detailed instead (identical response). The endpoint
+        remains available for backward compatibility; no removal date has been announced. See README for migration guide.'
+      tags:
+      - Health
+      summary: Get system status (DEPRECATED)
+      deprecated: true
+      responses:
+        '200':
+          description: Complete health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.DetailedHealthResponse'
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+  /v1/api/stream/stop:
+    post:
+      description: Stops the camera stream capture and disconnects all clients
+      tags:
+      - Streaming
+      summary: Stop stream capture
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+  /v1/config/camera:
+    get:
+      description: 'Returns static camera configuration (encoded output resolution, FPS, quality settings, connection limits,
+        and mock-camera mode). Resolution does not describe the sensor field of view, which is selected independently by MIO_SENSOR_MODE.
+        Does not include runtime metrics; use /v1/metrics/live for current performance data. Values are immutable until process
+        restart. Responses include an ETag and Cache-Control: private, max-age=60, must-revalidate; send If-None-Match to
+        revalidate a browser-cached representation.'
+      tags:
+      - Configuration
+      summary: Get camera configuration
+      responses:
+        '200':
+          description: Static configuration settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.CameraConfigResponse'
+        '304':
+          description: Not Modified; empty body when If-None-Match matches
+  /v1/health:
+    get:
+      description: Returns quick camera health status suitable for Kubernetes liveness probes. Returns 200 OK if running (regardless
+        of camera state), and includes status, fps, uptime, and connection count. For detailed health with metrics, use /v1/health/detailed
+        instead.
+      tags:
+      - Health
+      summary: Quick health check (Kubernetes probe)
+      responses:
+        '200':
+          description: Camera status ok/degraded/error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.HealthResponse'
+        '503':
+          description: Service unavailable (should not occur in normal operation)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+  /v1/health/detailed:
+    get:
+      description: 'Returns all available health information, metrics, and diagnostics in a single request: status, uptime,
+        FPS, frames captured, connections, error rates, restart count, frame sequence, and detailed failure tracking. Recommended
+        for dashboards, monitoring systems, and troubleshooting. Note: more data than /v1/health or /v1/metrics/live, use
+        appropriate endpoint for your use case.'
+      tags:
+      - Health
+      summary: Get comprehensive health and diagnostics
+      responses:
+        '200':
+          description: Complete health and metrics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.DetailedHealthResponse'
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+  /v1/metrics/live:
+    get:
+      description: 'Returns current runtime performance metrics: frame rate, captured frames, stream connections, and frame
+        sequence number. Lightweight and suitable for frequent polling (combine with rate limiting awareness). Use /v1/config/camera
+        for static configuration values.'
+      tags:
+      - Metrics
+      summary: Get live performance metrics
+      responses:
+        '200':
+          description: Current performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.LiveMetricsResponse'
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+  /v1/ready:
+    get:
+      description: Returns 200 only when camera is fully initialized and ready to stream. Returns 503 during startup. Suitable
+        for Kubernetes readiness probes to control traffic routing. Use /v1/health for liveness checks instead.
+      tags:
+      - Health
+      summary: Readiness probe (Kubernetes)
+      responses:
+        '200':
+          description: 'Status: ready'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+        '503':
+          description: Camera still initializing
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+  /v1/snapshot.jpg:
+    get:
+      description: Returns the latest captured video frame as a JPEG image. Suitable for web UI embedding, thumbnails, or
+        periodic frame capture. Respects JPEG quality setting from /v1/config/camera. Returns 503 if camera not yet initialized.
+      tags:
+      - Streaming
+      summary: Get current snapshot as JPEG
+      responses:
+        '200':
+          description: 'JPEG image data (raw binary, Content-Type: image/jpeg)'
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '429':
+          description: Rate limit exceeded (100 req/10sec per IP)
+          content:
+            image/jpeg:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+        '503':
+          description: Camera not ready or not initialized yet
+          content:
+            image/jpeg:
+              schema:
+                $ref: '#/components/schemas/api.ErrorResponse'
+components:
+  schemas:
+    api.CameraConfigResponse:
+      description: Static camera configuration including encoded output resolution, quality, limits, and mock-camera mode;
+        resolution does not describe sensor field of view
+      type: object
+      properties:
+        api_version:
+          description: API version
+          type: string
+          example: '1'
+        fps:
+          description: Configured frames per second
+          type: integer
+          example: 30
+        jpeg_quality:
+          description: JPEG compression quality (1-100)
+          type: integer
+          example: 85
+        max_stream_connections:
+          description: Maximum concurrent stream connections allowed
+          type: integer
+          example: 5
+        mock_camera:
+          description: Whether the server is using the mock camera backend
+          type: boolean
+          example: false
+        resolution:
+          description: Encoded output resolution in pixels [width, height]; does not describe sensor field of view
+          type: array
+          items:
+            type: integer
+        target_fps:
+          description: Target FPS for frame buffer
+          type: integer
+          example: 30
+    api.DetailedHealthResponse:
+      description: Comprehensive health status with detailed metrics, error tracking, and diagnostics
+      type: object
+      properties:
+        api_version:
+          description: API version
+          type: string
+          example: '1'
+        camera_ready:
+          description: Whether the camera is initialized and ready
+          type: boolean
+          example: true
+        capture_failures_consecutive:
+          description: Consecutive capture failures (resets on success)
+          type: integer
+          example: 0
+        capture_failures_total:
+          description: Total capture failures since startup
+          type: integer
+          example: 10
+        capture_restart_count:
+          description: Number of times capture has been restarted
+          type: integer
+          example: 2
+        degraded:
+          description: Whether system is operating in degraded mode
+          type: boolean
+          example: false
+        error_rate_percent:
+          description: Percentage of failed capture attempts out of all attempts (failed captures / (captured frames + failed
+            captures) * 100)
+          type: number
+          example: 0.5
+        fps_configured:
+          description: Configured frames per second
+          type: integer
+          example: 30
+        fps_current:
+          description: Current frames per second
+          type: number
+          example: 29.8
+        frame_sequence_number:
+          description: Frame sequence number (increments per frame)
+          type: integer
+          example: 216001
+        frames_captured:
+          description: Total frames captured since startup
+          type: integer
+          example: 216000
+        health_status:
+          description: 'Health status text: Excellent, Idle, Degraded, Poor'
+          type: string
+          example: Excellent
+        jpeg_quality:
+          description: JPEG quality setting (1-100)
+          type: integer
+          example: 85
+        last_frame_age_seconds:
+          description: Age of the most recent frame in seconds
+          type: number
+          example: 0.034
+        max_stream_connections:
+          description: Maximum concurrent connections
+          type: integer
+          example: 5
+        message:
+          description: Detailed status message
+          type: string
+          example: Camera is functioning normally
+        resolution:
+          description: Resolution as string (e.g., '1920x1080')
+          type: string
+          example: 1920x1080
+        status:
+          description: 'Overall status: ok, idle, degraded, error'
+          type: string
+          example: ok
+        stream_connections:
+          description: Current number of active stream connections
+          type: integer
+          example: 1
+        timestamp_iso8601:
+          description: ISO8601 timestamp of this response
+          type: string
+          example: '2026-04-19T15:30:45Z'
+        uptime_seconds:
+          description: System uptime in seconds
+          type: integer
+          example: 7200
+    api.ErrorResponse:
+      description: Standard error response format for API errors
+      type: object
+      properties:
+        code:
+          description: HTTP status code
+          type: integer
+          example: 400
+        details:
+          description: Optional detailed error information
+          type: string
+          example: Settings map is empty
+        message:
+          description: Error message
+          type: string
+          example: Invalid request
+    api.HealthResponse:
+      description: Quick health status (suitable for Kubernetes probes)
+      type: object
+      properties:
+        api_version:
+          description: API version
+          type: string
+          example: '1'
+        camera_ready:
+          description: Whether the camera is initialized and ready
+          type: boolean
+          example: true
+        degraded:
+          description: Whether system is operating in degraded mode
+          type: boolean
+          example: false
+        fps_current:
+          description: Current frames per second
+          type: number
+          example: 29.8
+        status:
+          description: 'Overall status: ok, idle, degraded, error'
+          type: string
+          example: ok
+        stream_connections:
+          description: Current number of active stream connections
+          type: integer
+          example: 2
+        timestamp_iso8601:
+          description: ISO8601 timestamp of this response
+          type: string
+          example: '2026-04-19T15:30:45Z'
+        uptime_seconds:
+          description: System uptime in seconds
+          type: integer
+          example: 3600
+    api.LiveMetricsResponse:
+      description: Current performance and connection metrics
+      type: object
+      properties:
+        api_version:
+          description: API version
+          type: string
+          example: '1'
+        fps_configured:
+          description: Configured target frames per second
+          type: integer
+          example: 30
+        fps_current:
+          description: Current frames per second being delivered
+          type: number
+          example: 29.8
+        frame_sequence_number:
+          description: Frame sequence number (increments per frame, useful for detecting gaps)
+          type: integer
+          example: 216001
+        frames_captured:
+          description: Total frames captured since startup
+          type: integer
+          example: 216000
+        last_frame_age_seconds:
+          description: Age of the most recent frame in seconds
+          type: number
+          example: 0.034
+        stream_connections:
+          description: Current number of active stream connections
+          type: integer
+          example: 2
+        timestamp_iso8601:
+          description: ISO8601 timestamp of this response
+          type: string
+          example: '2026-04-19T15:30:45Z'
+        uptime_seconds:
+          description: System uptime in seconds
+          type: integer
+          example: 7200
+    api.SettingsUpdateRequest:
+      description: Request body for updating multiple settings at once
+      type: object
+      properties:
+        settings:
+          description: Map of setting keys to values
+          type: object
+          additionalProperties: true
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic

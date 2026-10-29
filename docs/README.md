@@ -26,8 +26,8 @@ This directory is organized around **canonical, current documentation** and a se
 
 ### Reference
 
-- [OpenAPI JSON](./reference/swagger.json)
-- [OpenAPI YAML](./reference/swagger.yaml)
+- [OpenAPI JSON](./reference/openapi.json)
+- [OpenAPI YAML](./reference/openapi.yaml)
 
 ### Contributor resources
 
