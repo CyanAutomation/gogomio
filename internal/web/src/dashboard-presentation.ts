@@ -7,6 +7,17 @@ export interface StreamStatusPresentation {
     tone: StatusTone;
 }
 
+export interface CameraOverviewPresentation {
+    title: string;
+    description: string;
+}
+
+export interface StreamControlPresentation {
+    startHidden: boolean;
+    stopHidden: boolean;
+    stopPrimary: boolean;
+}
+
 const streamStatuses: Record<StreamState, StreamStatusPresentation> = {
     ready: { label: "Ready", tone: "neutral" },
     connecting: { label: "Connecting…", tone: "warning" },
@@ -17,6 +28,42 @@ const streamStatuses: Record<StreamState, StreamStatusPresentation> = {
 
 export function getStreamStatusPresentation(state: StreamState): StreamStatusPresentation {
     return streamStatuses[state];
+}
+
+export function getCameraOverviewPresentation(state: StreamState): CameraOverviewPresentation {
+    const presentations: Record<StreamState, CameraOverviewPresentation> = {
+        ready: {
+            title: "Ready to start",
+            description: "Start the stream to see live camera performance.",
+        },
+        connecting: {
+            title: "Connecting to camera",
+            description: "Live camera performance will appear when frames arrive.",
+        },
+        live: {
+            title: "Streaming live",
+            description: "The frame rate is shown here. Open camera details for the rest.",
+        },
+        reconnecting: {
+            title: "Reconnecting",
+            description: "The stream paused. GoGoMio is trying to restore it.",
+        },
+        unavailable: {
+            title: "Stream unavailable",
+            description: "Check the camera connection, then try again.",
+        },
+    };
+
+    return presentations[state];
+}
+
+export function getStreamControlPresentation(state: StreamState): StreamControlPresentation {
+    const active = state === "connecting" || state === "live" || state === "reconnecting";
+    return {
+        startHidden: active,
+        stopHidden: !active,
+        stopPrimary: active,
+    };
 }
 
 export function formatFrameRate(frameRate: number): string {
