@@ -35,6 +35,39 @@
   function getStreamStatusPresentation(state) {
     return streamStatuses[state];
   }
+  function getCameraOverviewPresentation(state) {
+    const presentations = {
+      ready: {
+        title: "Ready to start",
+        description: "Start the stream to see live camera performance."
+      },
+      connecting: {
+        title: "Connecting to camera",
+        description: "Live camera performance will appear when frames arrive."
+      },
+      live: {
+        title: "Streaming live",
+        description: "The frame rate is shown here. Open camera details for the rest."
+      },
+      reconnecting: {
+        title: "Reconnecting",
+        description: "The stream paused. GoGoMio is trying to restore it."
+      },
+      unavailable: {
+        title: "Stream unavailable",
+        description: "Check the camera connection, then try again."
+      }
+    };
+    return presentations[state];
+  }
+  function getStreamControlPresentation(state) {
+    const active = state === "connecting" || state === "live" || state === "reconnecting";
+    return {
+      startHidden: active,
+      stopHidden: !active,
+      stopPrimary: active
+    };
+  }
   function formatFrameRate(frameRate) {
     return Number.isFinite(frameRate) && frameRate >= 0 ? `${frameRate.toFixed(1)} fps` : "--";
   }
@@ -302,6 +335,9 @@
       const presentation = getStreamStatusPresentation(state);
       this.statusText.textContent = presentation.label;
       this.statusIndicator.className = `status-indicator status-indicator--${presentation.tone}`;
+      const overview = getCameraOverviewPresentation(state);
+      getElement("overview-state").textContent = overview.title;
+      getElement("overview-description").textContent = overview.description;
     }
     attachEventListeners() {
       this.startButton.addEventListener("click", () => this.startStream());
@@ -336,9 +372,16 @@
       this.stopStatsPolling();
     }
     updateStreamControls() {
-      const canStop = this.streamState === "connecting" || this.streamState === "live" || this.streamState === "reconnecting";
-      this.startButton.disabled = canStop;
-      this.stopButton.disabled = !canStop;
+      const presentation = getStreamControlPresentation(this.streamState);
+      const activeControl = document.activeElement === this.startButton ? "start" : document.activeElement === this.stopButton ? "stop" : null;
+      this.startButton.hidden = presentation.startHidden;
+      this.startButton.disabled = presentation.startHidden;
+      this.stopButton.hidden = presentation.stopHidden;
+      this.stopButton.disabled = presentation.stopHidden;
+      this.stopButton.classList.toggle("button--primary", presentation.stopPrimary);
+      this.stopButton.classList.toggle("button--secondary", !presentation.stopPrimary);
+      if (activeControl === "start" && presentation.startHidden) this.stopButton.focus();
+      if (activeControl === "stop" && presentation.stopHidden) this.startButton.focus();
     }
     startStatsPolling() {
       if (this.statsInterval !== null || !shouldRunDashboardPoller(!document.hidden, this.isStreaming)) return;
@@ -367,7 +410,7 @@
         const fps = Number(metrics.fps_current);
         const targetFps = config.target_fps ?? Number.NaN;
         const fpsEl = getElement("stat-fps");
-        fpsEl.textContent = formatFrameRate(fps);
+        fpsEl.textContent = this.streamState === "live" ? formatFrameRate(fps) : "--";
         fpsEl.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
         const fpsTone = getFrameRateTone(fps, targetFps, this.streamState === "live");
         if (fpsTone !== "neutral") fpsEl.classList.add(`metric-card__value--${fpsTone}`);
@@ -524,25 +567,33 @@
             </div>`;
       const totalFailures = Number(data.capture_failures_total || 0);
       const noticeTone = healthTone === "neutral" ? "info" : healthTone;
+      const existingDetails = content.querySelector(".diagnostics-details");
+      const detailsWereOpen = existingDetails?.open ?? false;
+      const detailsHadFocus = existingDetails?.contains(document.activeElement) ?? false;
       content.innerHTML = `
                 <div class="diagnostic-summary-grid">
                     ${cameraCard}
                     ${healthCard}
                 </div>
 
-                <div class="diagnostic-summary-grid">
-                    <div class="metric-card">
-                        <div class="metric-card__label">${iconMarkup("clock")} Uptime</div>
-                        <div class="metric-card__value">${formatUptime(Number(data.uptime_seconds || 0))}</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-card__label">${iconMarkup("alert")} Error rate</div>
-                        <div class="metric-card__value metric-card__value--${healthTone}">${errorRate.toFixed(1)}%</div>
-                    </div>
+                <div class="notice notice--${noticeTone} diagnostic-notice">
+                    <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System status</strong>
+                    <p>${escapeHTML(data.message || "No status details right now.")}</p>
                 </div>
 
-                <section class="diagnostics-details" aria-labelledby="diagnostics-metrics-title">
-                    <h3 class="diagnostics-subtitle" id="diagnostics-metrics-title">Detailed metrics</h3>
+                <details class="diagnostics-details">
+                    <summary class="disclosure-summary">Detailed metrics</summary>
+                    <div class="diagnostics-secondary-grid">
+                        <div class="metric-card">
+                            <div class="metric-card__label">${iconMarkup("clock")} Uptime</div>
+                            <div class="metric-card__value">${formatUptime(Number(data.uptime_seconds || 0))}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-card__label">${iconMarkup("alert")} Error rate</div>
+                            <div class="metric-card__value metric-card__value--${healthTone}">${errorRate.toFixed(1)}%</div>
+                        </div>
+                    </div>
+
                     <div class="diagnostic-metric-list">
                         ${diagnosticMetric("Frame rate", formatFrameRate(Number(data.fps_current ?? Number.NaN)), "camera")}
                         ${diagnosticMetric("Resolution", formatResolution(data.resolution), "grid")}
@@ -553,15 +604,15 @@
                         ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}
                     </div>
-                </section>
-
-                <div class="notice notice--${noticeTone} diagnostic-notice">
-                    <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System status</strong>
-                    <p>${escapeHTML(data.message || "No status details right now.")}</p>
-                </div>
+                </details>
 
                 <div class="refresh-indicator">${iconMarkup("refresh")}<span>Refreshes every 3 seconds</span></div>
             `;
+      const updatedDetails = content.querySelector(".diagnostics-details");
+      if (updatedDetails) {
+        updatedDetails.open = detailsWereOpen;
+        if (detailsHadFocus) updatedDetails.querySelector("summary")?.focus();
+      }
     }).catch((error) => {
       console.error("Diagnostics request failed:", error);
       const controller = getStreamController();

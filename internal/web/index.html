@@ -621,6 +621,88 @@
             color: var(--color-error-dark);
         }
 
+        .overview-summary {
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .overview-state {
+            margin-bottom: var(--spacing-xs);
+            color: var(--color-text);
+            font-size: var(--font-size-lg);
+            font-weight: 700;
+        }
+
+        .overview-description {
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+        }
+
+        .overview-highlight {
+            padding: var(--spacing-lg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            background: var(--color-bg-secondary);
+            text-align: left;
+        }
+
+        .overview-highlight .metric-card__label {
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .overview-highlight .metric-card__value {
+            font-size: var(--font-size-2xl);
+        }
+
+        .overview-details,
+        .diagnostics-details {
+            border-top: 1px solid var(--color-border);
+            padding-top: var(--spacing-lg);
+        }
+
+        .overview-details {
+            margin-top: var(--spacing-lg);
+        }
+
+        .disclosure-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-md);
+            color: var(--color-primary);
+            cursor: pointer;
+            font-size: var(--font-size-sm);
+            font-weight: 600;
+            list-style: none;
+        }
+
+        .disclosure-summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .disclosure-summary::after {
+            content: "⌄";
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-lg);
+            line-height: 1;
+            transition: transform var(--transition-fast);
+        }
+
+        details[open] > .disclosure-summary::after {
+            transform: rotate(180deg);
+        }
+
+        .disclosure-summary:focus-visible {
+            outline: 3px solid var(--color-focus-ring);
+            outline-offset: 4px;
+            border-radius: var(--radius-sm);
+        }
+
+        .overview-details .stats {
+            margin-top: var(--spacing-md);
+            padding-top: 0;
+            border-top: 0;
+        }
+
         /* ====== NOTICES ====== */
         .notice {
             padding: var(--spacing-lg);
@@ -837,20 +919,17 @@
             font-size: var(--font-size-xl);
         }
 
-        .diagnostics-details {
-            padding-top: var(--spacing-lg);
-            border-top: 1px solid var(--color-border);
-        }
-
-        .diagnostics-subtitle {
-            margin: 0 0 var(--spacing-lg);
-            color: var(--color-text);
-            font-size: var(--font-size-lg);
+        .diagnostics-secondary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--spacing-md);
+            margin-top: var(--spacing-lg);
         }
 
         .diagnostic-metric-list {
             display: grid;
             gap: var(--spacing-md);
+            margin-top: var(--spacing-md);
         }
 
         .metric-row {
@@ -1148,34 +1227,43 @@
             <section class="card surface-panel controls-section" aria-labelledby="status-title">
                 <h2 class="section-title" id="status-title">
                     <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
-                    <span>Camera overview</span>
+                    <span>Camera status</span>
                 </h2>
 
                 <div id="message" class="message" role="alert" aria-live="assertive"></div>
+
+                <div class="overview-summary">
+                    <p class="overview-state" id="overview-state">Ready to start</p>
+                    <p class="overview-description" id="overview-description">Start the stream to see live camera performance.</p>
+                </div>
+
+                <div class="overview-highlight" role="group" aria-label="Current frame rate">
+                    <div class="metric-card__label">Current frame rate</div>
+                    <div class="metric-card__value" id="stat-fps">--</div>
+                </div>
+
+                <details class="overview-details">
+                    <summary class="disclosure-summary">Camera details</summary>
+                    <div class="stats" aria-label="Camera details">
+                        <div class="metric-card">
+                            <div class="metric-card__label">Resolution</div>
+                            <div class="metric-card__value metric-card__value--compact" id="stat-resolution">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-card__label">JPEG quality</div>
+                            <div class="metric-card__value" id="stat-quality">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-card__label">Active streams</div>
+                            <div class="metric-card__value" id="stat-connections">--</div>
+                        </div>
+                    </div>
+                </details>
 
                 <button type="button" class="button button--secondary diagnostics-button" id="diagnostics-btn" aria-haspopup="dialog" aria-controls="diagnostics-modal">
                     <svg class="icon" aria-hidden="true"><use href="#icon-chart"></use></svg>
                     <span>Diagnostics</span>
                 </button>
-
-                <div class="stats" aria-label="Camera metrics">
-                    <div class="metric-card">
-                        <div class="metric-card__label">Frame rate</div>
-                        <div class="metric-card__value" id="stat-fps">--</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-card__label">Resolution</div>
-                        <div class="metric-card__value metric-card__value--compact" id="stat-resolution">--</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-card__label">JPEG quality</div>
-                        <div class="metric-card__value" id="stat-quality">--</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-card__label">Active streams</div>
-                        <div class="metric-card__value" id="stat-connections">--</div>
-                    </div>
-                </div>
             </section>
         </div>
     </main>
@@ -1203,6 +1291,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=308b49394be4b4bbeaeae72abd51cdad908a4e2fbc31d62f87b58a2eef7c66b4"></script>
+    <script src="/static/app.js?v=ae2f64edf81dde10a66dd3e93309207988ae08079c5f2b1460062c9738996b16"></script>
 </body>
 </html>
