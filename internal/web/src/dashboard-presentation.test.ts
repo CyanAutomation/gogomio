@@ -8,6 +8,8 @@ import {
     formatStreamConnections,
     getFrameRateTone,
     getHealthTone,
+    getCameraOverviewPresentation,
+    getStreamControlPresentation,
     getStreamStatusPresentation,
 } from "./dashboard-presentation";
 
@@ -44,6 +46,57 @@ test("stream states have consistent labels and semantic tones", () => {
     assert.deepEqual(getStreamStatusPresentation("live"), { label: "Live", tone: "success" });
     assert.deepEqual(getStreamStatusPresentation("reconnecting"), { label: "Reconnecting…", tone: "warning" });
     assert.deepEqual(getStreamStatusPresentation("unavailable"), { label: "Unavailable", tone: "error" });
+});
+
+test("camera overview gives users next-step context for each stream state", () => {
+    assert.deepEqual(getCameraOverviewPresentation("ready"), {
+        title: "Ready to start",
+        description: "Start the stream to see live camera performance.",
+    });
+    assert.deepEqual(getCameraOverviewPresentation("connecting"), {
+        title: "Connecting to camera",
+        description: "Live camera performance will appear when frames arrive.",
+    });
+    assert.deepEqual(getCameraOverviewPresentation("live"), {
+        title: "Streaming live",
+        description: "The frame rate is shown here. Open camera details for the rest.",
+    });
+    assert.deepEqual(getCameraOverviewPresentation("reconnecting"), {
+        title: "Reconnecting",
+        description: "The stream paused. GoGoMio is trying to restore it.",
+    });
+    assert.deepEqual(getCameraOverviewPresentation("unavailable"), {
+        title: "Stream unavailable",
+        description: "Check the camera connection, then try again.",
+    });
+});
+
+test("only the action relevant to the current stream state is shown", () => {
+    assert.deepEqual(getStreamControlPresentation("ready"), {
+        startHidden: false,
+        stopHidden: true,
+        stopPrimary: false,
+    });
+    assert.deepEqual(getStreamControlPresentation("connecting"), {
+        startHidden: true,
+        stopHidden: false,
+        stopPrimary: true,
+    });
+    assert.deepEqual(getStreamControlPresentation("live"), {
+        startHidden: true,
+        stopHidden: false,
+        stopPrimary: true,
+    });
+    assert.deepEqual(getStreamControlPresentation("reconnecting"), {
+        startHidden: true,
+        stopHidden: false,
+        stopPrimary: true,
+    });
+    assert.deepEqual(getStreamControlPresentation("unavailable"), {
+        startHidden: false,
+        stopHidden: true,
+        stopPrimary: false,
+    });
 });
 
 test("frame rate color is neutral while idle and compares live rate to target", () => {
