@@ -17,7 +17,9 @@ class FakeScheduler implements SnackbarScheduler {
     }
 
     fireNext(): void {
-        const [handle, timer] = this.pending.entries().next().value as [number, { callback: () => void; delayMs: number }];
+        const entry = this.pending.entries().next().value as [number, { callback: () => void; delayMs: number }] | undefined;
+        if (!entry) throw new Error("FakeScheduler.fireNext(): no pending timers");
+        const [handle, timer] = entry;
         this.pending.delete(handle);
         timer.callback();
     }
@@ -91,6 +93,27 @@ test("hover or keyboard focus pauses dismissal until the snackbar is resumed", (
     assert.equal(scheduler.pending.size, 1);
     scheduler.fireNext();
     assert.equal(view.hidden, 1);
+});
+
+test("a new message while paused does not restart the dismissal timer", () => {
+    const scheduler = new FakeScheduler();
+    const view = new FakeView();
+    const snackbar = new SnackbarController(view, scheduler, 4500);
+
+    snackbar.show("First.", "info");
+    snackbar.pause();
+    snackbar.show("Second.", "warning");
+
+    assert.equal(scheduler.pending.size, 0, "timer must remain cleared while paused");
+    assert.equal(view.shown[1]?.text, "Second.");
+});
+
+test("fake scheduler reports an informative error when no timer is pending", () => {
+    const scheduler = new FakeScheduler();
+
+    assert.throws(() => scheduler.fireNext(), {
+        message: "FakeScheduler.fireNext(): no pending timers",
+    });
 });
 
 test("snackbar can be dismissed immediately", () => {

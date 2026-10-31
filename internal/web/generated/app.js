@@ -178,7 +178,6 @@
         this.tone = tone;
         this.view.show(text, tone);
       }
-      this.paused = false;
       this.scheduleDismissal();
     }
     pause() {
