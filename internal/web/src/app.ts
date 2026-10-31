@@ -20,9 +20,9 @@ import {
 } from "./diagnostics-dialog";
 import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
 import { shouldRunDashboardPoller } from "./polling";
+import { SnackbarController, type SnackbarTone } from "./snackbar";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
-type MessageTone = "info" | "success" | "warning" | "error";
 type IconName = "alert" | "camera" | "chart" | "clock" | "close" | "grid" | "image" | "info" | "link" | "play" | "quality" | "refresh" | "settings" | "stop";
 
 interface Pose {
@@ -101,6 +101,7 @@ class StreamController {
     private readonly statusText: HTMLElement;
     private readonly startButton: HTMLButtonElement;
     private readonly stopButton: HTMLButtonElement;
+    private readonly snackbar: SnackbarController;
     isStreaming = false;
     private streamState: StreamState = "ready";
     private statsInterval: number | null = null;
@@ -125,6 +126,26 @@ class StreamController {
         this.statusText = getElement("status-text");
         this.startButton = getElement<HTMLButtonElement>("start-stream");
         this.stopButton = getElement<HTMLButtonElement>("stop-stream");
+        const snackbarElement = getElement("snackbar");
+        const snackbarText = getElement("snackbar-text");
+        this.snackbar = new SnackbarController({
+            show: (text: string, tone: SnackbarTone) => {
+                snackbarText.textContent = text;
+                snackbarElement.className = `snackbar notice notice--${tone} is-visible`;
+            },
+            hide: () => snackbarElement.classList.remove("is-visible"),
+        });
+        snackbarElement.addEventListener("mouseenter", () => this.snackbar.pause());
+        snackbarElement.addEventListener("mouseleave", () => {
+            if (!snackbarElement.contains(document.activeElement)) this.snackbar.resume();
+        });
+        snackbarElement.addEventListener("focusin", () => this.snackbar.pause());
+        snackbarElement.addEventListener("focusout", event => {
+            if (!snackbarElement.contains(event.relatedTarget as Node | null) && !snackbarElement.matches(":hover")) {
+                this.snackbar.resume();
+            }
+        });
+        getElement<HTMLButtonElement>("snackbar-dismiss").addEventListener("click", () => this.snackbar.dismiss());
         this.poseByState = {
             idle: {
                 src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
@@ -245,7 +266,6 @@ class StreamController {
                 this.placeholderText.textContent = "We lost the stream.";
                 this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})…`;
                 this.updateStatus("reconnecting");
-                this.showMessage(`MIO is reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})…`, "warning");
                 this.setLoadingPose("running");
                 const scheduledRetryCount = nextRetryCount;
                 window.setTimeout(() => {
@@ -257,7 +277,6 @@ class StreamController {
                 this.placeholderText.textContent = "We couldn't reconnect.";
                 this.placeholderDesc.textContent = "Check the camera connection, then try again.";
                 this.updateStatus("unavailable");
-                this.showMessage("MIO couldn't reconnect. Check the camera connection, then try again.", "error");
             }
 
             this.updateStreamControls();
@@ -318,6 +337,7 @@ class StreamController {
         this.updateStatus("ready");
         this.updateStreamControls();
         this.stopStatsPolling();
+        this.snackbar.show("Stream stopped.", "success");
     }
 
     updateStreamControls(): void {
@@ -403,34 +423,6 @@ class StreamController {
         return this.cameraConfigPromise;
     }
 
-    showMessage(text: string, type: MessageTone = "info"): void {
-        const msg = getElement("message");
-        msg.textContent = text;
-        msg.className = `message notice notice--${type}`;
-
-        if (!this.isStreaming) {
-            if (type === "success") {
-                this.setIdlePose("success");
-                this.schedulePoseResetToIdle(2200);
-            } else if (type === "error") {
-                this.setIdlePose("error");
-                this.schedulePoseResetToIdle(5000);
-            } else if (type === "warning") {
-                this.setIdlePose("warning");
-                this.schedulePoseResetToIdle(3000);
-            }
-        }
-
-        // Ensure message is visible and animate in
-        window.setTimeout(() => {
-            msg.classList.add("show");
-        }, 10);
-
-        // Auto-dismiss after 4 seconds
-        window.setTimeout(() => {
-            msg.classList.remove("show");
-        }, 4000);
-    }
 }
 
 // Diagnostics functions
