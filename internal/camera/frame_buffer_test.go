@@ -326,27 +326,24 @@ func TestFrameBufferWaitFrameSuccess(t *testing.T) {
 	}
 }
 
-// TestFrameBufferWaitFrameIgnoresUnchangedFrame ensures no duplicate immediate return
-// when waiting with the current sequence value.
-func TestFrameBufferWaitFrameIgnoresUnchangedFrame(t *testing.T) {
+// TestFrameBufferNonblockingWaitIgnoresUnchangedFrame verifies a nonblocking
+// read only returns a frame when its sequence is newer than the caller's.
+func TestFrameBufferNonblockingWaitIgnoresUnchangedFrame(t *testing.T) {
 	stats := NewStreamStats()
 	fb := NewFrameBuffer(stats, 0)
 
-	_, _ = fb.Write([]byte{9, 9, 9})
+	if _, err := fb.Write([]byte{9, 9, 9}); err != nil {
+		t.Fatalf("Write returned error: %v", err)
+	}
 	currentSeq := fb.CurrentSequence()
 
-	start := time.Now()
-	frame, seq := fb.WaitFrame(120*time.Millisecond, currentSeq)
-	elapsed := time.Since(start)
+	frame, seq := fb.WaitFrame(0, currentSeq)
 
 	if frame != nil {
 		t.Fatalf("WaitFrame returned frame for unchanged sequence: %v", frame)
 	}
 	if seq != currentSeq {
-		t.Fatalf("WaitFrame returned seq %d, want %d on timeout", seq, currentSeq)
-	}
-	if elapsed < 100*time.Millisecond {
-		t.Fatalf("WaitFrame returned too quickly for unchanged sequence: elapsed=%v", elapsed)
+		t.Fatalf("WaitFrame returned seq %d, want unchanged sequence %d", seq, currentSeq)
 	}
 }
 

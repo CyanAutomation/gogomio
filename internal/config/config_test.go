@@ -183,37 +183,24 @@ func TestConfigFrameTimeoutBoundaries(t *testing.T) {
 	}
 }
 
-// ====================== PHASE 4: Config Validation Tests ======================
+// ====================== Config Validation Tests ======================
 
-// TestConfig_InvalidResolution_ZeroWidth tests zero width in resolution
-func TestConfig_InvalidResolution_ZeroWidth(t *testing.T) {
-	t.Setenv("MIO_RESOLUTION", "0x480")
-
-	cfg := LoadFromEnv()
-	// Should fall back to default when invalid
-	if cfg.Resolution != [2]int{640, 480} {
-		t.Errorf("invalid resolution should use default, got %v", cfg.Resolution)
-	}
-}
-
-// TestConfig_InvalidResolution_ZeroHeight tests zero height in resolution
-func TestConfig_InvalidResolution_ZeroHeight(t *testing.T) {
-	t.Setenv("MIO_RESOLUTION", "640x0")
-
-	cfg := LoadFromEnv()
-	// Should fall back to default when invalid
-	if cfg.Resolution != [2]int{640, 480} {
-		t.Errorf("invalid resolution should use default, got %v", cfg.Resolution)
-	}
-}
-
-// TestConfig_InvalidResolution_NegativeWidth tests negative width
-func TestConfig_InvalidResolution_NegativeWidth(t *testing.T) {
-	t.Setenv("MIO_RESOLUTION", "-640x480")
-
-	cfg := LoadFromEnv()
-	if cfg.Resolution != [2]int{640, 480} {
-		t.Errorf("invalid resolution should use default, got %v", cfg.Resolution)
+// TestConfig_InvalidResolutionFallsBackToDefault covers malformed and
+// nonpositive dimensions as one configuration fallback contract.
+func TestConfig_InvalidResolutionFallsBackToDefault(t *testing.T) {
+	for _, resolution := range []string{
+		"0x480",
+		"640x0",
+		"-640x480",
+		"640x-480",
+	} {
+		t.Run(resolution, func(t *testing.T) {
+			t.Setenv("MIO_RESOLUTION", resolution)
+			cfg := LoadFromEnv()
+			if cfg.Resolution != [2]int{640, 480} {
+				t.Fatalf("resolution %q produced %v, want default [640 480]", resolution, cfg.Resolution)
+			}
+		})
 	}
 }
 
