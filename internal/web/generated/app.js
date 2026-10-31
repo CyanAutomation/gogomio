@@ -157,6 +157,58 @@
     return isVisible && isActive;
   }
 
+  // internal/web/src/snackbar.ts
+  var browserScheduler = {
+    set: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    clear: (handle) => window.clearTimeout(handle)
+  };
+  var SnackbarController = class {
+    constructor(view, scheduler = browserScheduler, durationMs = 4500) {
+      this.view = view;
+      this.scheduler = scheduler;
+      this.durationMs = durationMs;
+      this.timer = null;
+      this.message = null;
+      this.tone = null;
+      this.paused = false;
+    }
+    show(text, tone = "info") {
+      if (this.message !== text || this.tone !== tone) {
+        this.message = text;
+        this.tone = tone;
+        this.view.show(text, tone);
+      }
+      this.scheduleDismissal();
+    }
+    pause() {
+      if (this.message === null || this.paused) return;
+      this.paused = true;
+      this.clearTimer();
+    }
+    resume() {
+      if (this.message === null || !this.paused) return;
+      this.paused = false;
+      this.scheduleDismissal();
+    }
+    dismiss() {
+      this.clearTimer();
+      if (this.message !== null) this.view.hide();
+      this.message = null;
+      this.tone = null;
+      this.paused = false;
+    }
+    scheduleDismissal() {
+      this.clearTimer();
+      if (this.paused || this.message === null) return;
+      this.timer = this.scheduler.set(() => this.dismiss(), this.durationMs);
+    }
+    clearTimer() {
+      if (this.timer === null) return;
+      this.scheduler.clear(this.timer);
+      this.timer = null;
+    }
+  };
+
   // internal/web/src/app.ts
   function getElement(id) {
     const element = document.getElementById(id);
@@ -203,6 +255,26 @@
       this.statusText = getElement("status-text");
       this.startButton = getElement("start-stream");
       this.stopButton = getElement("stop-stream");
+      const snackbarElement = getElement("snackbar");
+      const snackbarText = getElement("snackbar-text");
+      this.snackbar = new SnackbarController({
+        show: (text, tone) => {
+          snackbarText.textContent = text;
+          snackbarElement.className = `snackbar notice notice--${tone} is-visible`;
+        },
+        hide: () => snackbarElement.classList.remove("is-visible")
+      });
+      snackbarElement.addEventListener("mouseenter", () => this.snackbar.pause());
+      snackbarElement.addEventListener("mouseleave", () => {
+        if (!snackbarElement.contains(document.activeElement)) this.snackbar.resume();
+      });
+      snackbarElement.addEventListener("focusin", () => this.snackbar.pause());
+      snackbarElement.addEventListener("focusout", (event) => {
+        if (!snackbarElement.contains(event.relatedTarget) && !snackbarElement.matches(":hover")) {
+          this.snackbar.resume();
+        }
+      });
+      getElement("snackbar-dismiss").addEventListener("click", () => this.snackbar.dismiss());
       this.poseByState = {
         idle: {
           src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
@@ -311,7 +383,6 @@
           this.placeholderText.textContent = "We lost the stream.";
           this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`;
           this.updateStatus("reconnecting");
-          this.showMessage(`MIO is reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`, "warning");
           this.setLoadingPose("running");
           const scheduledRetryCount = nextRetryCount;
           window.setTimeout(() => {
@@ -323,7 +394,6 @@
           this.placeholderText.textContent = "We couldn't reconnect.";
           this.placeholderDesc.textContent = "Check the camera connection, then try again.";
           this.updateStatus("unavailable");
-          this.showMessage("MIO couldn't reconnect. Check the camera connection, then try again.", "error");
         }
         this.updateStreamControls();
         this.stopStatsPolling();
@@ -370,6 +440,7 @@
       this.updateStatus("ready");
       this.updateStreamControls();
       this.stopStatsPolling();
+      this.snackbar.show("Stream stopped.", "success");
     }
     updateStreamControls() {
       const presentation = getStreamControlPresentation(this.streamState);
@@ -439,29 +510,6 @@
         this.cameraConfigPromise = null;
       });
       return this.cameraConfigPromise;
-    }
-    showMessage(text, type = "info") {
-      const msg = getElement("message");
-      msg.textContent = text;
-      msg.className = `message notice notice--${type}`;
-      if (!this.isStreaming) {
-        if (type === "success") {
-          this.setIdlePose("success");
-          this.schedulePoseResetToIdle(2200);
-        } else if (type === "error") {
-          this.setIdlePose("error");
-          this.schedulePoseResetToIdle(5e3);
-        } else if (type === "warning") {
-          this.setIdlePose("warning");
-          this.schedulePoseResetToIdle(3e3);
-        }
-      }
-      window.setTimeout(() => {
-        msg.classList.add("show");
-      }, 10);
-      window.setTimeout(() => {
-        msg.classList.remove("show");
-      }, 4e3);
     }
   };
   var diagnosticsRefreshInterval = null;

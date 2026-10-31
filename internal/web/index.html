@@ -734,6 +734,65 @@
             color: var(--color-info-dark);
         }
 
+        /* The reserved tray keeps notifications from covering dashboard content or shifting it. */
+        .snackbar-region {
+            min-height: 88px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-sm) 0;
+        }
+
+        .snackbar {
+            width: min(100%, 560px);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-lg);
+            padding: var(--spacing-md) var(--spacing-lg);
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(14px);
+            transition: opacity var(--transition-base), transform var(--transition-base), visibility 0s linear var(--transition-base);
+        }
+
+        .snackbar.is-visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            transition-delay: 0s;
+        }
+
+        .snackbar__text {
+            flex: 1;
+            min-width: 0;
+            font-weight: 600;
+            font-size: var(--font-size-sm);
+        }
+
+        .snackbar__dismiss {
+            width: 2rem;
+            height: 2rem;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: currentColor;
+            cursor: pointer;
+        }
+
+        .snackbar__dismiss:hover {
+            background: rgba(15, 26, 43, 0.08);
+        }
+
+        .snackbar__dismiss:focus-visible {
+            outline: 3px solid var(--color-focus-ring);
+            outline-offset: 2px;
+        }
+
         .message {
             margin-bottom: var(--spacing-lg);
             display: none;
@@ -749,16 +808,8 @@
         }
 
         @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-15px);
-                max-height: 0;
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-                max-height: 500px;
-            }
+            from { opacity: 0; transform: translateY(-15px); max-height: 0; }
+            to { opacity: 1; transform: translateY(0); max-height: 500px; }
         }
 
         /* ====== FOOTER ====== */
@@ -1076,6 +1127,15 @@
             .footer-content {
                 flex-wrap: wrap;
             }
+
+            .snackbar-region {
+                min-height: 80px;
+            }
+
+            .snackbar {
+                gap: var(--spacing-sm);
+                padding: var(--spacing-md);
+            }
         }
 
         @media (max-width: 480px) {
@@ -1230,8 +1290,6 @@
                     <span>Camera status</span>
                 </h2>
 
-                <div id="message" class="message" role="alert" aria-live="assertive"></div>
-
                 <div class="overview-summary">
                     <p class="overview-state" id="overview-state">Ready to start</p>
                     <p class="overview-description" id="overview-description">Start the stream to see live camera performance.</p>
@@ -1266,6 +1324,15 @@
                 </button>
             </section>
         </div>
+
+        <div class="snackbar-region">
+            <div id="snackbar" class="snackbar notice">
+                <p id="snackbar-text" class="snackbar__text" role="status" aria-live="polite" aria-atomic="true"></p>
+                <button type="button" id="snackbar-dismiss" class="snackbar__dismiss" aria-label="Dismiss notification">
+                    <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+                </button>
+            </div>
+        </div>
     </main>
 
     <footer class="site-footer">
@@ -1291,6 +1358,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=ae2f64edf81dde10a66dd3e93309207988ae08079c5f2b1460062c9738996b16"></script>
+    <script src="/static/app.js?v=0e86508163e001b4111744c28ebb7db9d159aa098aa0cdceece4fd1225e4f719"></script>
 </body>
 </html>
