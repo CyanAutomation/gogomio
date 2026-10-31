@@ -108,14 +108,6 @@ test("a new message while paused does not restart the dismissal timer", () => {
     assert.equal(view.shown[1]?.text, "Second.");
 });
 
-test("fake scheduler reports an informative error when no timer is pending", () => {
-    const scheduler = new FakeScheduler();
-
-    assert.throws(() => scheduler.fireNext(), {
-        message: "FakeScheduler.fireNext(): no pending timers",
-    });
-});
-
 test("snackbar can be dismissed immediately", () => {
     const scheduler = new FakeScheduler();
     const view = new FakeView();

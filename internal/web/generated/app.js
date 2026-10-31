@@ -153,8 +153,9 @@
   }
 
   // internal/web/src/polling.ts
-  function shouldRunDashboardPoller(isVisible, isActive) {
-    return isVisible && isActive;
+  function startDashboardPoller(isVisible, isActive, intervalMs, poll, schedule = (callback, delay) => window.setInterval(callback, delay)) {
+    if (!isVisible || !isActive) return null;
+    return schedule(poll, intervalMs);
   }
 
   // internal/web/src/snackbar.ts
@@ -455,10 +456,10 @@
       if (activeControl === "stop" && presentation.stopHidden) this.startButton.focus();
     }
     startStatsPolling() {
-      if (this.statsInterval !== null || !shouldRunDashboardPoller(!document.hidden, this.isStreaming)) return;
-      this.statsInterval = window.setInterval(() => {
+      if (this.statsInterval !== null) return;
+      this.statsInterval = startDashboardPoller(!document.hidden, this.isStreaming, 2e3, () => {
         this.loadStats();
-      }, 2e3);
+      });
     }
     stopStatsPolling() {
       if (this.statsInterval === null) return;
@@ -569,9 +570,10 @@
   function startDiagnosticsPolling() {
     stopDiagnosticsPolling();
     const modal = getElement("diagnostics-modal");
-    if (!shouldRunDashboardPoller(!document.hidden, !modal.hidden)) return;
+    const interval = startDashboardPoller(!document.hidden, !modal.hidden, 3e3, fetchDiagnostics);
+    if (interval === null) return;
     fetchDiagnostics();
-    diagnosticsRefreshInterval = window.setInterval(fetchDiagnostics, 3e3);
+    diagnosticsRefreshInterval = interval;
   }
   function stopDiagnosticsPolling() {
     if (diagnosticsRefreshInterval === null) return;
