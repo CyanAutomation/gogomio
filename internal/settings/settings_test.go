@@ -12,36 +12,31 @@ import (
 	"testing"
 )
 
-// TestSettingsSetGet tests basic set and get operations
-func TestSettingsSetGet(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
-
-	_ = m.Set("key", "value")
+// TestSettingsGetReturnsStoredValueAndNilForMissingKey verifies Get's value
+// and missing-key behavior using a single populated manager.
+func TestSettingsGetReturnsStoredValueAndNilForMissingKey(t *testing.T) {
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
+	if err := m.Set("key", "value"); err != nil {
+		t.Fatalf("Set returned error: %v", err)
+	}
 	result := m.Get("key")
 
 	if result != "value" {
-		t.Errorf("Get returned %v, want value", result)
+		t.Fatalf("Get returned %v, want value", result)
 	}
-}
-
-// TestSettingsGetNonexistent tests getting a non-existent key
-func TestSettingsGetNonexistent(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
-
-	result := m.Get("nonexistent")
+	result = m.Get("nonexistent")
 	if result != nil {
-		t.Errorf("Get nonexistent returned %v, want nil", result)
+		t.Fatalf("Get nonexistent returned %v, want nil", result)
 	}
 }
 
 // TestSettingsGetString tests GetString with defaults
 func TestSettingsGetString(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
 
-	_ = m.Set("str", "hello")
+	if err := m.Set("str", "hello"); err != nil {
+		t.Fatalf("Set string returned error: %v", err)
+	}
 	result := m.GetString("str", "default")
 	if result != "hello" {
 		t.Errorf("GetString returned %q, want hello", result)
@@ -52,7 +47,9 @@ func TestSettingsGetString(t *testing.T) {
 		t.Errorf("GetString missing returned %q, want default", result)
 	}
 
-	_ = m.Set("notstring", 42)
+	if err := m.Set("notstring", 42); err != nil {
+		t.Fatalf("Set non-string returned error: %v", err)
+	}
 	result = m.GetString("notstring", "default")
 	if result != "default" {
 		t.Errorf("GetString non-string returned %q, want default", result)
@@ -61,17 +58,20 @@ func TestSettingsGetString(t *testing.T) {
 
 // TestSettingsGetInt tests GetInt with type conversions
 func TestSettingsGetInt(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
 
-	_ = m.Set("int", 42)
+	if err := m.Set("int", 42); err != nil {
+		t.Fatalf("Set int returned error: %v", err)
+	}
 	result := m.GetInt("int", 0)
 	if result != 42 {
 		t.Errorf("GetInt returned %d, want 42", result)
 	}
 
 	// JSON unmarshals numbers as float64
-	_ = m.Set("float", 99.0)
+	if err := m.Set("float", 99.0); err != nil {
+		t.Fatalf("Set float returned error: %v", err)
+	}
 	result = m.GetInt("float", 0)
 	if result != 99 {
 		t.Errorf("GetInt float returned %d, want 99", result)
@@ -99,34 +99,30 @@ func TestSettingsDelete(t *testing.T) {
 
 // TestSettingsClear tests clearing all settings
 func TestSettingsClear(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
+	if err := m.SetMany(map[string]interface{}{"key1": "value1", "key2": "value2"}); err != nil {
+		t.Fatalf("SetMany returned error: %v", err)
+	}
+	if err := m.Clear(); err != nil {
+		t.Fatalf("Clear returned error: %v", err)
+	}
 
-	_ = m.Set("key1", "value1")
-	_ = m.Set("key2", "value2")
-	_ = m.Clear()
-
-	if len(m.GetAll()) != 0 {
-		t.Errorf("GetAll after Clear returned %d items, want 0", len(m.GetAll()))
+	if got := m.GetAll(); len(got) != 0 {
+		t.Fatalf("GetAll after Clear returned %v, want empty settings", got)
 	}
 }
 
 // TestSettingsGetAll tests getting all settings
 func TestSettingsGetAll(t *testing.T) {
-	m := NewManager("")
-	defer func() { _ = m.Clear() }()
-
-	_ = m.Set("key1", "value1")
-	_ = m.Set("key2", 42)
-	_ = m.Set("key3", true)
-
-	all := m.GetAll()
-	if len(all) != 3 {
-		t.Errorf("GetAll returned %d items, want 3", len(all))
+	m := NewManager(filepath.Join(t.TempDir(), "settings.json"))
+	want := map[string]interface{}{"key1": "value1", "key2": 42, "key3": true}
+	if err := m.SetMany(want); err != nil {
+		t.Fatalf("SetMany returned error: %v", err)
 	}
 
-	if val := all["key1"]; val != "value1" {
-		t.Errorf("key1 = %v, want value1", val)
+	all := m.GetAll()
+	if !reflect.DeepEqual(all, want) {
+		t.Fatalf("GetAll() = %#v, want %#v", all, want)
 	}
 }
 

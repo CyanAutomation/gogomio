@@ -19,7 +19,7 @@ import {
     type ReturnFocusTarget,
 } from "./diagnostics-dialog";
 import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
-import { shouldRunDashboardPoller } from "./polling";
+import { startDashboardPoller } from "./polling";
 import { SnackbarController, type SnackbarTone } from "./snackbar";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
@@ -357,10 +357,10 @@ class StreamController {
     }
 
     startStatsPolling(): void {
-        if (this.statsInterval !== null || !shouldRunDashboardPoller(!document.hidden, this.isStreaming)) return;
-        this.statsInterval = window.setInterval(() => {
+        if (this.statsInterval !== null) return;
+        this.statsInterval = startDashboardPoller(!document.hidden, this.isStreaming, 2000, () => {
             this.loadStats();
-        }, 2000);
+        });
     }
 
     stopStatsPolling(): void {
@@ -503,9 +503,10 @@ function closeDiagnosticsModal(): void {
 function startDiagnosticsPolling(): void {
     stopDiagnosticsPolling();
     const modal = getElement<HTMLDivElement>("diagnostics-modal");
-    if (!shouldRunDashboardPoller(!document.hidden, !modal.hidden)) return;
+    const interval = startDashboardPoller(!document.hidden, !modal.hidden, 3000, fetchDiagnostics);
+    if (interval === null) return;
     fetchDiagnostics();
-    diagnosticsRefreshInterval = window.setInterval(fetchDiagnostics, 3000);
+    diagnosticsRefreshInterval = interval;
 }
 
 function stopDiagnosticsPolling(): void {
