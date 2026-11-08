@@ -5,6 +5,13 @@
 #
 # Trigger: Manual only via Cloud Build UI or `gcloud builds submit`; do not configure tag triggers.
 # Platform: linux/amd64 (Cloud Run is amd64-only; no emulation needed)
+# Registry: Google Artifact Registry (GAR)
+#
+# Pre-requisite: GAR repository must exist before running this build (one-time setup):
+#   gcloud artifacts repositories create gogomio \
+#     --repository-format=docker \
+#     --location=us-central1 \
+#     --description="GoGoMio demo images"
 #
 # Required substitutions (override in GCP trigger or --substitutions flag):
 #   _GAR_REGION      : Artifact Registry region       (e.g. us-central1, europe-west1)
