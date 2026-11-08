@@ -495,7 +495,7 @@ export MIO_JPEG_QUALITY=45
 
 ### Build & Test
 
-The Go service can be built directly. Web UI changes require Node.js 22 and npm;
+The Go service can be built directly. Web UI changes require Node.js 26 and npm;
 rebuild the embedded browser bundle, then type-check the sources and verify the
 generated bundle with the commands below.
 
