@@ -2,9 +2,9 @@
 # Generic amd64/arm64 image for the mock-camera demo and API development.
 # Hardware camera dependencies belong only in the Pi-specific Dockerfile.
 
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /src
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY . .
 RUN npm run build:web && npm run check:web
