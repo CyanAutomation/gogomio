@@ -1,3 +1,4 @@
+import json
 import re
 import unittest
 from pathlib import Path
@@ -32,6 +33,31 @@ def workflow_job(text, name):
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_web_toolchain_targets_node_26(self):
+        package = json.loads((ROOT / "package.json").read_text())
+        lock = json.loads((ROOT / "package-lock.json").read_text())
+        expected_engine = ">=26 <27"
+
+        self.assertEqual((ROOT / ".nvmrc").read_text().strip(), "26")
+        self.assertIn("engine-strict=true", (ROOT / ".npmrc").read_text())
+        self.assertEqual(package["engines"]["node"], expected_engine)
+        self.assertEqual(lock["packages"][""]["engines"]["node"], expected_engine)
+        self.assertTrue(package["devDependencies"]["@types/node"].startswith("^26."))
+        self.assertEqual(
+            lock["packages"][""]["devDependencies"]["@types/node"],
+            package["devDependencies"]["@types/node"],
+        )
+        self.assertTrue(
+            lock["packages"]["node_modules/@types/node"]["version"].startswith("26.")
+        )
+
+        for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
+            with self.subTest(workflow=name):
+                text = workflow(name)
+                expected_pins = 1 if name == "code-coverage-test.yml" else 2
+                self.assertEqual(text.count("node-version-file: .nvmrc"), expected_pins)
+                self.assertNotRegex(text, r"(?m)^\s+node-version:")
+
     def test_kaseki_wrappers_share_a_main_only_normal_pr_workflow(self):
         reusable = workflow("kaseki-sweep.yml")
         for name in ("kaseki-docs.yaml", "kaseki-dry.yaml"):
@@ -120,8 +146,8 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn("RUN go mod download", text)
                 self.assertIn("target=/root/.cache/go-build", text)
 
-        self.assertIn("FROM node:22-alpine AS web", demo_dockerfile)
-        self.assertIn("COPY package.json package-lock.json", demo_dockerfile)
+        self.assertIn("FROM node:26-alpine AS web", demo_dockerfile)
+        self.assertIn("COPY package.json package-lock.json .npmrc ./", demo_dockerfile)
         self.assertIn("RUN npm ci", demo_dockerfile)
         self.assertIn("npm run build:web && npm run check:web", demo_dockerfile)
         self.assertIn("COPY --from=web /src/internal/web/index.html", demo_dockerfile)
@@ -226,7 +252,10 @@ class WorkflowContractTests(unittest.TestCase):
         for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(node_workflow=name):
                 self.assertIn("actions/setup-node@", workflow(name))
-                self.assertIn("node-version: 22", workflow(name))
+                expected_pins = 1 if name == "code-coverage-test.yml" else 2
+                self.assertEqual(
+                    workflow(name).count("node-version-file: .nvmrc"), expected_pins
+                )
 
         docker_build = workflow_job(workflow(DOCKER_WORKFLOW), "build")
         self.assertIn("npm run build:web", docker_build)
