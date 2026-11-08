@@ -10,7 +10,7 @@
 # Pre-requisite: GAR repository must exist before running this build (one-time setup):
 #   gcloud artifacts repositories create gogomio \
 #     --repository-format=docker \
-#     --location=us-central1 \
+#     --location=us-europe-west1 \
 #     --description="GoGoMio demo images"
 #
 # Required substitutions (override in GCP trigger or --substitutions flag):
