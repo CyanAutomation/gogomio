@@ -194,6 +194,11 @@
   function renderMetricCard(label, value, tone = "neutral") {
     return `<div class="metric-card"><div class="metric-card__label">${escapeHTML(label)}</div><div class="metric-card__value metric-card__value--${tone}">${escapeHTML(value)}</div></div>`;
   }
+  function renderMetricRow(label, value, icon, tone = "neutral") {
+    const iconMarkup2 = `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${icon}"></use></svg>`;
+    const toneClass = tone === "error" ? " metric-card__value--error" : "";
+    return `<div class="metric-row"><span class="metric-row__label">${iconMarkup2}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
+  }
   function escapeHTML(value) {
     const entities = {
       "&": "&amp;",
@@ -212,11 +217,8 @@
     return element;
   }
   var iconMarkup = (name) => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
-  function diagnosticMetric(label, value, icon, valueClass = "") {
-    return `<div class="metric-row">
-        <span class="metric-row__label">${iconMarkup(icon)}<span>${label}</span></span>
-        <span class="metric-row__value ${valueClass}">${escapeHTML(value)}</span>
-    </div>`;
+  function diagnosticMetric(label, value, icon, tone = "neutral") {
+    return renderMetricRow(label, value, icon, tone);
   }
   var StreamController = class {
     constructor() {
@@ -681,7 +683,7 @@
                         ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
                         ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
                         ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
-                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
+                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "error" : "neutral")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}
                     </div>
                 </details>

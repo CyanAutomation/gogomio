@@ -1,6 +1,8 @@
 import type { MetricTone, StatusTone } from "./dashboard-presentation";
 
 export type BadgeTone = StatusTone | "info";
+export type MetricRowIcon = "alert" | "camera" | "chart" | "clock" | "grid" | "image" | "link" | "quality";
+export type MetricRowTone = "neutral" | "error";
 
 export interface StatusBadgeView {
     root: Pick<HTMLElement, "className">;
@@ -21,6 +23,18 @@ export function renderStatusBadge(label: string, tone: BadgeTone): string {
 /** Renders a shared metric card with escaped content and a constrained semantic tone. */
 export function renderMetricCard(label: string, value: unknown, tone: MetricTone = "neutral"): string {
     return `<div class="metric-card"><div class="metric-card__label">${escapeHTML(label)}</div><div class="metric-card__value metric-card__value--${tone}">${escapeHTML(value)}</div></div>`;
+}
+
+/** Renders a diagnostics row with escaped text and constrained icon and tone values. */
+export function renderMetricRow(
+    label: string,
+    value: unknown,
+    icon: MetricRowIcon,
+    tone: MetricRowTone = "neutral",
+): string {
+    const iconMarkup = `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${icon}"></use></svg>`;
+    const toneClass = tone === "error" ? " metric-card__value--error" : "";
+    return `<div class="metric-row"><span class="metric-row__label">${iconMarkup}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
 }
 
 export function escapeHTML(value: unknown): string {

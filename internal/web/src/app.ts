@@ -17,7 +17,15 @@ import { closeNativeDialog, openNativeDialog } from "./diagnostics-dialog";
 import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
 import { startDashboardPoller } from "./polling";
 import { SnackbarController, type SnackbarTone } from "./snackbar";
-import { escapeHTML, renderMetricCard, renderStatusBadge, updateStatusBadge } from "./ui-components";
+import {
+    escapeHTML,
+    renderMetricCard,
+    renderMetricRow,
+    renderStatusBadge,
+    updateStatusBadge,
+    type MetricRowIcon,
+    type MetricRowTone,
+} from "./ui-components";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
 type IconName = "alert" | "camera" | "chart" | "clock" | "close" | "grid" | "image" | "info" | "link" | "play" | "quality" | "refresh" | "settings" | "stop";
@@ -71,11 +79,8 @@ function getElement<T extends HTMLElement = HTMLElement>(id: string): T {
 
 const iconMarkup = (name: IconName): string => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
 
-function diagnosticMetric(label: string, value: unknown, icon: IconName, valueClass = ""): string {
-    return `<div class="metric-row">
-        <span class="metric-row__label">${iconMarkup(icon)}<span>${label}</span></span>
-        <span class="metric-row__value ${valueClass}">${escapeHTML(value)}</span>
-    </div>`;
+function diagnosticMetric(label: string, value: unknown, icon: MetricRowIcon, tone: MetricRowTone = "neutral"): string {
+    return renderMetricRow(label, value, icon, tone);
 }
 
 class StreamController {
@@ -631,7 +636,7 @@ function fetchDiagnostics(): void {
                         ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
                         ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
                         ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
-                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
+                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "error" : "neutral")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}
                     </div>
                 </details>
