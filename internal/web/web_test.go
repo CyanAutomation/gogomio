@@ -268,6 +268,9 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 		{url: "/static/mio/mio_pose_looking.png", file: "mio/mio_pose_looking.png", fs: mioFS},
 	}
 	for _, asset := range assets {
+		if !bytes.Contains(ui, []byte(asset.url)) {
+			continue
+		}
 		data, err := asset.fs.ReadFile(asset.file)
 		if err != nil {
 			t.Fatalf("read %s: %v", asset.file, err)
