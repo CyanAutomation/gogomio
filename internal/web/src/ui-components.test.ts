@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderMetricCard, renderStatusBadge, updateStatusBadge, type StatusBadgeView } from "./ui-components";
+import { renderMetricCard, renderMetricRow, renderStatusBadge, updateStatusBadge, type StatusBadgeView } from "./ui-components";
 
 test("status badge rendering escapes its label and marks its decorative dot", () => {
     assert.equal(
@@ -42,5 +42,12 @@ test("metric cards escape user-facing content and constrain tones", () => {
     assert.equal(
         renderMetricCard("System <health>", "Excellent & stable", "success"),
         '<div class="metric-card"><div class="metric-card__label">System &lt;health&gt;</div><div class="metric-card__value metric-card__value--success">Excellent &amp; stable</div></div>',
+    );
+});
+
+test("metric rows escape labels and values and use only a known tone class", () => {
+    assert.equal(
+        renderMetricRow(`Recent <img src=x onerror="alert(1)">`, "3 & counting", "alert", "error"),
+        '<div class="metric-row"><span class="metric-row__label"><svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-alert"></use></svg><span>Recent &lt;img src=x onerror=&quot;alert(1)&quot;&gt;</span></span><span class="metric-row__value metric-card__value--error">3 &amp; counting</span></div>',
     );
 });
