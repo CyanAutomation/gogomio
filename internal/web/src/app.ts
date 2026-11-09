@@ -1,26 +1,31 @@
 import { resolutionToAspectRatio } from "./aspect-ratio";
-import { requestCameraConfig, requestDiagnostics, requestLiveMetrics, requestStopStream } from "./api";
+import { requestCameraConfig, requestCameraReadiness, requestDiagnostics, requestLiveMetrics, requestStopStream } from "./api";
 import {
     formatFrameAge,
     formatFrameRate,
     formatResolution,
     formatStreamConnections,
-    getCameraOverviewPresentation,
+    getCameraReadinessPresentation,
     getFrameRateTone,
     getHealthTone,
     getStreamControlPresentation,
     getStreamStatusPresentation,
+    type CameraReadinessState,
     type StreamState,
 } from "./dashboard-presentation";
-import {
-    handleKeydown,
-    rememberReturnFocus,
-    restoreReturnFocus,
-    type ReturnFocusTarget,
-} from "./diagnostics-dialog";
+import { closeNativeDialog, openNativeDialog } from "./diagnostics-dialog";
 import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
 import { startDashboardPoller } from "./polling";
 import { SnackbarController, type SnackbarTone } from "./snackbar";
+import {
+    escapeHTML,
+    renderMetricCard,
+    renderMetricRow,
+    renderStatusBadge,
+    updateStatusBadge,
+    type MetricRowIcon,
+    type MetricRowTone,
+} from "./ui-components";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
 type IconName = "alert" | "camera" | "chart" | "clock" | "close" | "grid" | "image" | "info" | "link" | "play" | "quality" | "refresh" | "settings" | "stop";
@@ -62,6 +67,10 @@ interface DiagnosticsResponse {
     message: string;
 }
 
+interface CameraReadinessResponse {
+    status: string;
+}
+
 function getElement<T extends HTMLElement = HTMLElement>(id: string): T {
     const element = document.getElementById(id);
     if (!element) throw new Error(`Required dashboard element #${id} was not found`);
@@ -70,22 +79,8 @@ function getElement<T extends HTMLElement = HTMLElement>(id: string): T {
 
 const iconMarkup = (name: IconName): string => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
 
-function escapeHTML(value: unknown): string {
-    const entities: Record<string, string> = {
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-    };
-    return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]!);
-}
-
-function diagnosticMetric(label: string, value: unknown, icon: IconName, valueClass = ""): string {
-    return `<div class="metric-row">
-        <span class="metric-row__label">${iconMarkup(icon)}<span>${label}</span></span>
-        <span class="metric-row__value ${valueClass}">${escapeHTML(value)}</span>
-    </div>`;
+function diagnosticMetric(label: string, value: unknown, icon: MetricRowIcon, tone: MetricRowTone = "neutral"): string {
+    return renderMetricRow(label, value, icon, tone);
 }
 
 class StreamController {
@@ -97,14 +92,20 @@ class StreamController {
     private readonly idleElement: HTMLElement;
     private readonly spinnerImage: HTMLImageElement;
     private readonly idleImage: HTMLImageElement;
-    private readonly statusIndicator: HTMLElement;
+    private readonly streamStatusBadge: HTMLElement;
     private readonly statusText: HTMLElement;
+    private readonly cameraStatusBadge: HTMLElement;
+    private readonly cameraStatusText: HTMLElement;
+    private readonly cameraStatusGuidance: HTMLElement;
     private readonly startButton: HTMLButtonElement;
     private readonly stopButton: HTMLButtonElement;
     private readonly snackbar: SnackbarController;
     isStreaming = false;
     private streamState: StreamState = "ready";
     private statsInterval: number | null = null;
+    private cameraReadinessInterval: number | null = null;
+    private cameraReadinessPromise: Promise<void> | null = null;
+    private cameraReadiness: CameraReadinessState = "checking";
     private cameraConfig: CameraConfigResponse | null = null;
     private cameraConfigExpiresAt = 0;
     private cameraConfigPromise: Promise<CameraConfigResponse> | null = null;
@@ -122,8 +123,11 @@ class StreamController {
         this.idleElement = getElement("stream-idle");
         this.spinnerImage = getElement<HTMLImageElement>("stream-spinner-image");
         this.idleImage = getElement<HTMLImageElement>("stream-idle-image");
-        this.statusIndicator = getElement("status-indicator");
+        this.streamStatusBadge = getElement("stream-status-badge");
         this.statusText = getElement("status-text");
+        this.cameraStatusBadge = getElement("camera-status-badge");
+        this.cameraStatusText = getElement("camera-status-text");
+        this.cameraStatusGuidance = getElement("camera-status-guidance");
         this.startButton = getElement<HTMLButtonElement>("start-stream");
         this.stopButton = getElement<HTMLButtonElement>("stop-stream");
         const snackbarElement = getElement("snackbar");
@@ -185,8 +189,11 @@ class StreamController {
         };
 
         this.updateStatus("ready");
+        this.updateCameraReadiness("checking");
         this.initializeStream();
         this.attachEventListeners();
+        this.loadCameraReadiness();
+        this.startCameraReadinessPolling();
         this.loadStats();
     }
 
@@ -223,8 +230,8 @@ class StreamController {
     schedulePoseResetToIdle(delayMs = 2200): void {
         this.clearPoseResetTimer();
         this.poseResetTimer = window.setTimeout(() => {
-            const diagnosticsModal = getElement<HTMLDivElement>("diagnostics-modal");
-            const diagnosticsOpen = !diagnosticsModal.hidden;
+            const diagnosticsModal = getElement<HTMLDialogElement>("diagnostics-modal");
+            const diagnosticsOpen = diagnosticsModal.open;
             if (!this.isStreaming && !diagnosticsOpen) {
                 this.setIdlePose("idle");
             }
@@ -242,8 +249,8 @@ class StreamController {
             this.setIdlePose("success");
             this.idleElement.classList.add("is-hidden");
             this.schedulePoseResetToIdle();
-            this.updateStreamControls();
             this.updateStatus("live");
+            this.updateStreamControls();
             if (!document.hidden) {
                 this.loadStats();
                 this.startStatsPolling();
@@ -263,7 +270,7 @@ class StreamController {
             const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
             if (nextRetryCount !== null) {
                 this.streamRetryCount = nextRetryCount;
-                this.placeholderText.textContent = "We lost the stream.";
+                this.placeholderText.textContent = "Stream interrupted";
                 this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})…`;
                 this.updateStatus("reconnecting");
                 this.setLoadingPose("running");
@@ -274,8 +281,8 @@ class StreamController {
                     }
                 }, 2000);
             } else {
-                this.placeholderText.textContent = "We couldn't reconnect.";
-                this.placeholderDesc.textContent = "Check the camera connection, then try again.";
+                this.placeholderText.textContent = "Stream unavailable";
+                this.placeholderDesc.textContent = "Check the camera connection, then retry the stream.";
                 this.updateStatus("unavailable");
             }
 
@@ -288,12 +295,60 @@ class StreamController {
     updateStatus(state: StreamState): void {
         this.streamState = state;
         const presentation = getStreamStatusPresentation(state);
-        this.statusText.textContent = presentation.label;
-        this.statusIndicator.className = `status-indicator status-indicator--${presentation.tone}`;
+        updateStatusBadge(
+            { root: this.streamStatusBadge, label: this.statusText },
+            presentation.label,
+            presentation.tone,
+        );
+    }
 
-        const overview = getCameraOverviewPresentation(state);
-        getElement("overview-state").textContent = overview.title;
-        getElement("overview-description").textContent = overview.description;
+    updateCameraReadiness(state: CameraReadinessState): void {
+        if (this.cameraReadiness === state) return;
+        this.cameraReadiness = state;
+        const presentation = getCameraReadinessPresentation(state);
+        updateStatusBadge(
+            { root: this.cameraStatusBadge, label: this.cameraStatusText },
+            presentation.label,
+            presentation.tone,
+        );
+        this.cameraStatusGuidance.textContent = presentation.guidance;
+        this.cameraStatusGuidance.hidden = presentation.guidance.length === 0;
+    }
+
+    loadCameraReadiness(): Promise<void> {
+        if (this.cameraReadinessPromise) return this.cameraReadinessPromise;
+        this.cameraReadinessPromise = requestCameraReadiness()
+            .then(async response => {
+                const data = await response.json() as CameraReadinessResponse;
+                if (response.ok && data.status === "ready") {
+                    this.updateCameraReadiness("ready");
+                } else if (data.status === "initializing") {
+                    this.updateCameraReadiness("initializing");
+                } else {
+                    this.updateCameraReadiness("unavailable");
+                }
+            })
+            .catch(() => this.updateCameraReadiness("unknown"))
+            .finally(() => {
+                this.cameraReadinessPromise = null;
+            });
+        return this.cameraReadinessPromise;
+    }
+
+    startCameraReadinessPolling(): void {
+        if (this.cameraReadinessInterval !== null) return;
+        this.cameraReadinessInterval = startDashboardPoller(
+            !document.hidden,
+            true,
+            5000,
+            () => { void this.loadCameraReadiness(); },
+        );
+    }
+
+    stopCameraReadinessPolling(): void {
+        if (this.cameraReadinessInterval === null) return;
+        window.clearInterval(this.cameraReadinessInterval);
+        this.cameraReadinessInterval = null;
     }
 
     attachEventListeners(): void {
@@ -304,8 +359,8 @@ class StreamController {
     startStream(): void {
         if (this.isStreaming) return;
 
-        this.placeholderText.textContent = "MIO is warming things up…";
-        this.placeholderDesc.textContent = "Your camera stream should be ready in a moment.";
+        this.placeholderText.textContent = "Connecting to camera…";
+        this.placeholderDesc.textContent = "The live view will appear when the first frame arrives.";
         this.loadingElement.classList.remove("is-hidden");
         this.setLoadingPose("loading");
         this.clearPoseResetTimer();
@@ -332,8 +387,8 @@ class StreamController {
         this.loadingElement.classList.remove("is-hidden");
         this.setIdlePose("idle");
         this.clearPoseResetTimer();
-        this.placeholderText.textContent = "MIO's ready when you are.";
-        this.placeholderDesc.textContent = "Start the stream to see what's happening.";
+        this.placeholderText.textContent = "Stream is stopped";
+        this.placeholderDesc.textContent = "Start the stream to view the camera.";
         this.updateStatus("ready");
         this.updateStreamControls();
         this.stopStatsPolling();
@@ -347,8 +402,10 @@ class StreamController {
             : document.activeElement === this.stopButton ? "stop" : null;
         this.startButton.hidden = presentation.startHidden;
         this.startButton.disabled = presentation.startHidden;
+        this.startButton.querySelector("span")!.textContent = presentation.startLabel;
         this.stopButton.hidden = presentation.stopHidden;
         this.stopButton.disabled = presentation.stopHidden;
+        this.stopButton.querySelector("span")!.textContent = presentation.stopLabel;
         this.stopButton.classList.toggle("button--primary", presentation.stopPrimary);
         this.stopButton.classList.toggle("button--secondary", !presentation.stopPrimary);
 
@@ -465,17 +522,10 @@ function setCompanionPoseFromDiagnostics(data: DiagnosticsResponse): void {
     controller.setIdlePose("success");
 }
 
-let diagnosticsReturnFocus: ReturnFocusTarget | null = null;
-
 function openDiagnosticsModal(): void {
-    const modal = getElement<HTMLDivElement>("diagnostics-modal");
-    if (!modal.hidden) return;
-
-    diagnosticsReturnFocus = rememberReturnFocus(document);
-    modal.hidden = false;
-    modal.classList.add("is-open");
-    document.body.classList.add("modal-open");
-    getElement<HTMLButtonElement>("diagnostics-close").focus();
+    const modal = getElement<HTMLDialogElement>("diagnostics-modal");
+    const closeButton = getElement<HTMLButtonElement>("diagnostics-close");
+    if (!openNativeDialog(modal, closeButton)) return;
 
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
@@ -485,25 +535,22 @@ function openDiagnosticsModal(): void {
 }
 
 function closeDiagnosticsModal(): void {
-    const modal = getElement<HTMLDivElement>("diagnostics-modal");
-    if (modal.hidden) return;
+    const modal = getElement<HTMLDialogElement>("diagnostics-modal");
+    closeNativeDialog(modal);
+}
 
-    modal.classList.remove("is-open");
-    modal.hidden = true;
-    document.body.classList.remove("modal-open");
+function handleDiagnosticsDialogClose(): void {
     stopDiagnosticsPolling();
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
         controller.setIdlePose("idle");
     }
-    restoreReturnFocus(diagnosticsReturnFocus);
-    diagnosticsReturnFocus = null;
 }
 
 function startDiagnosticsPolling(): void {
     stopDiagnosticsPolling();
-    const modal = getElement<HTMLDivElement>("diagnostics-modal");
-    const interval = startDashboardPoller(!document.hidden, !modal.hidden, 3000, fetchDiagnostics);
+    const modal = getElement<HTMLDialogElement>("diagnostics-modal");
+    const interval = startDashboardPoller(!document.hidden, modal.open, 3000, fetchDiagnostics);
     if (interval === null) return;
     fetchDiagnostics();
     diagnosticsRefreshInterval = interval;
@@ -519,15 +566,18 @@ function handleDashboardVisibilityChange(): void {
     const controller = getStreamController();
     if (document.hidden) {
         controller?.stopStatsPolling();
+        controller?.stopCameraReadinessPolling();
         stopDiagnosticsPolling();
         return;
     }
 
+    controller?.loadCameraReadiness();
+    controller?.startCameraReadinessPolling();
     if (controller?.isStreaming) {
         controller.loadStats();
         controller.startStatsPolling();
     }
-    if (!getElement<HTMLDivElement>("diagnostics-modal").hidden) {
+    if (getElement<HTMLDialogElement>("diagnostics-modal").open) {
         startDiagnosticsPolling();
     }
 }
@@ -540,19 +590,20 @@ function fetchDiagnostics(): void {
         })
         .then((data) => {
             setCompanionPoseFromDiagnostics(data);
+            getStreamController()?.updateCameraReadiness(data.camera_ready ? "ready" : "unavailable");
             const content = getElement<HTMLDivElement>("diagnostics-content");
             const errorRate = Number(data.error_rate_percent || 0);
             const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
             const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
             const cameraTone = data.camera_ready ? "success" : "error";
             const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
-            const cameraCard = `<div class="metric-card metric-card--status metric-card--${cameraTone}">
+            const cameraCard = `<div class="metric-card metric-card--status">
                 <div class="metric-card__label">Camera</div>
-                <div class="metric-card__value">${cameraStatus}</div>
+                ${renderStatusBadge(cameraStatus, cameraTone)}
             </div>`;
-            const healthCard = `<div class="metric-card metric-card--status metric-card--${healthTone}">
+            const healthCard = `<div class="metric-card metric-card--status">
                 <div class="metric-card__label">System health</div>
-                <div class="metric-card__value">${escapeHTML(data.health_status || "Unknown")}</div>
+                ${renderStatusBadge(data.health_status || "Unknown", healthTone)}
             </div>`;
             const totalFailures = Number(data.capture_failures_total || 0);
             const noticeTone = healthTone === "neutral" ? "info" : healthTone;
@@ -574,14 +625,8 @@ function fetchDiagnostics(): void {
                 <details class="diagnostics-details">
                     <summary class="disclosure-summary">Detailed metrics</summary>
                     <div class="diagnostics-secondary-grid">
-                        <div class="metric-card">
-                            <div class="metric-card__label">${iconMarkup("clock")} Uptime</div>
-                            <div class="metric-card__value">${formatUptime(Number(data.uptime_seconds || 0))}</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-card__label">${iconMarkup("alert")} Error rate</div>
-                            <div class="metric-card__value metric-card__value--${healthTone}">${errorRate.toFixed(1)}%</div>
-                        </div>
+                        ${renderMetricCard("Uptime", formatUptime(Number(data.uptime_seconds || 0)))}
+                        ${renderMetricCard("Error rate", `${errorRate.toFixed(1)}%`, healthTone)}
                     </div>
 
                     <div class="diagnostic-metric-list">
@@ -591,7 +636,7 @@ function fetchDiagnostics(): void {
                         ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
                         ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
                         ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
-                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
+                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "error" : "neutral")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}
                     </div>
                 </details>
@@ -628,21 +673,11 @@ function formatUptime(seconds: number): string {
     return `${secs}s`;
 }
 
-// Keyboard accessibility for modal
-document.addEventListener("keydown", (event: KeyboardEvent) => {
-    const modal = getElement<HTMLDivElement>("diagnostics-modal");
-    handleKeydown(event, modal, closeDiagnosticsModal, document);
-});
-
-// Close modal when clicking outside
-getElement<HTMLDivElement>("diagnostics-modal").addEventListener("click", (event: MouseEvent) => {
-    if (event.target === event.currentTarget) closeDiagnosticsModal();
-});
-
 // Initialize when DOM is ready
 document.addEventListener("DOMContentLoaded", () => {
     window.streamController = new StreamController();
     getElement<HTMLButtonElement>("diagnostics-btn").addEventListener("click", openDiagnosticsModal);
     getElement<HTMLButtonElement>("diagnostics-close").addEventListener("click", closeDiagnosticsModal);
+    getElement<HTMLDialogElement>("diagnostics-modal").addEventListener("close", handleDiagnosticsDialogClose);
     document.addEventListener("visibilitychange", handleDashboardVisibilityChange);
 });

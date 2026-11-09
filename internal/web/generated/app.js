@@ -14,6 +14,9 @@
   function requestCameraConfig(fetcher = fetch) {
     return fetcher("/v1/config/camera");
   }
+  function requestCameraReadiness(fetcher = fetch) {
+    return fetcher("/v1/ready", { cache: "no-store" });
+  }
   function requestLiveMetrics(fetcher = fetch) {
     return fetcher("/v1/metrics/live", { cache: "no-store" });
   }
@@ -26,36 +29,33 @@
 
   // internal/web/src/dashboard-presentation.ts
   var streamStatuses = {
-    ready: { label: "Ready", tone: "neutral" },
+    ready: { label: "Stream stopped", tone: "neutral" },
     connecting: { label: "Connecting\u2026", tone: "warning" },
     live: { label: "Live", tone: "success" },
     reconnecting: { label: "Reconnecting\u2026", tone: "warning" },
-    unavailable: { label: "Unavailable", tone: "error" }
+    unavailable: { label: "Stream unavailable", tone: "error" }
   };
   function getStreamStatusPresentation(state) {
     return streamStatuses[state];
   }
-  function getCameraOverviewPresentation(state) {
+  function getCameraReadinessPresentation(state) {
     const presentations = {
-      ready: {
-        title: "Ready to start",
-        description: "Start the stream to see live camera performance."
-      },
-      connecting: {
-        title: "Connecting to camera",
-        description: "Live camera performance will appear when frames arrive."
-      },
-      live: {
-        title: "Streaming live",
-        description: "The frame rate is shown here. Open camera details for the rest."
-      },
-      reconnecting: {
-        title: "Reconnecting",
-        description: "The stream paused. GoGoMio is trying to restore it."
+      checking: { label: "Checking camera\u2026", tone: "info", guidance: "" },
+      ready: { label: "Camera ready", tone: "success", guidance: "" },
+      initializing: {
+        label: "Camera starting",
+        tone: "warning",
+        guidance: "The camera is still starting. Try again in a moment."
       },
       unavailable: {
-        title: "Stream unavailable",
-        description: "Check the camera connection, then try again."
+        label: "Camera unavailable",
+        tone: "error",
+        guidance: "Check the camera connection, then try the stream again."
+      },
+      unknown: {
+        label: "Camera status unknown",
+        tone: "warning",
+        guidance: "Could not check camera status. Check your connection to GoGoMio."
       }
     };
     return presentations[state];
@@ -64,8 +64,10 @@
     const active = state === "connecting" || state === "live" || state === "reconnecting";
     return {
       startHidden: active,
+      startLabel: state === "unavailable" ? "Retry stream" : "Start stream",
       stopHidden: !active,
-      stopPrimary: active
+      stopLabel: state === "connecting" ? "Cancel connection" : "Stop stream",
+      stopPrimary: state === "live" || state === "reconnecting"
     };
   }
   function formatFrameRate(frameRate) {
@@ -103,45 +105,16 @@
   }
 
   // internal/web/src/diagnostics-dialog.ts
-  var FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-  function focusableElements(modal) {
-    return Array.from(modal.querySelectorAll(FOCUSABLE_SELECTOR)).filter((element) => {
-      const control = element;
-      return !control.disabled && !element.hidden && element.tabIndex >= 0;
-    });
+  function openNativeDialog(dialog, initialFocus) {
+    if (dialog.open) return false;
+    dialog.showModal();
+    initialFocus?.focus();
+    return true;
   }
-  function rememberReturnFocus(documentRef) {
-    const activeElement = documentRef.activeElement;
-    if (activeElement && "focus" in activeElement && typeof activeElement.focus === "function") {
-      return activeElement;
-    }
-    return null;
-  }
-  function restoreReturnFocus(element) {
-    if (element && element.isConnected) {
-      element.focus();
-    }
-  }
-  function handleKeydown(event, modal, closeModal, documentRef) {
-    if (modal.hidden) return;
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeModal();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = focusableElements(modal);
-    if (focusable.length === 0) {
-      event.preventDefault();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const focusIsOutsideDialog = !modal.contains(documentRef.activeElement);
-    if (focusIsOutsideDialog || (event.shiftKey ? documentRef.activeElement === first : documentRef.activeElement === last)) {
-      event.preventDefault();
-      (event.shiftKey ? last : first).focus();
-    }
+  function closeNativeDialog(dialog, returnValue) {
+    if (!dialog.open) return false;
+    dialog.close(returnValue);
+    return true;
   }
 
   // internal/web/src/stream-retry.ts
@@ -210,13 +183,22 @@
     }
   };
 
-  // internal/web/src/app.ts
-  function getElement(id) {
-    const element = document.getElementById(id);
-    if (!element) throw new Error(`Required dashboard element #${id} was not found`);
-    return element;
+  // internal/web/src/ui-components.ts
+  function updateStatusBadge(view, label, tone) {
+    view.root.className = `ui-badge ui-badge--${tone}`;
+    if (view.label.textContent !== label) view.label.textContent = label;
   }
-  var iconMarkup = (name) => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
+  function renderStatusBadge(label, tone) {
+    return `<span class="ui-badge ui-badge--${tone}"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">${escapeHTML(label)}</span></span>`;
+  }
+  function renderMetricCard(label, value, tone = "neutral") {
+    return `<div class="metric-card"><div class="metric-card__label">${escapeHTML(label)}</div><div class="metric-card__value metric-card__value--${tone}">${escapeHTML(value)}</div></div>`;
+  }
+  function renderMetricRow(label, value, icon, tone = "neutral") {
+    const iconMarkup2 = `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${icon}"></use></svg>`;
+    const toneClass = tone === "error" ? " metric-card__value--error" : "";
+    return `<div class="metric-row"><span class="metric-row__label">${iconMarkup2}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
+  }
   function escapeHTML(value) {
     const entities = {
       "&": "&amp;",
@@ -227,17 +209,25 @@
     };
     return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
   }
-  function diagnosticMetric(label, value, icon, valueClass = "") {
-    return `<div class="metric-row">
-        <span class="metric-row__label">${iconMarkup(icon)}<span>${label}</span></span>
-        <span class="metric-row__value ${valueClass}">${escapeHTML(value)}</span>
-    </div>`;
+
+  // internal/web/src/app.ts
+  function getElement(id) {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`Required dashboard element #${id} was not found`);
+    return element;
+  }
+  var iconMarkup = (name) => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
+  function diagnosticMetric(label, value, icon, tone = "neutral") {
+    return renderMetricRow(label, value, icon, tone);
   }
   var StreamController = class {
     constructor() {
       this.isStreaming = false;
       this.streamState = "ready";
       this.statsInterval = null;
+      this.cameraReadinessInterval = null;
+      this.cameraReadinessPromise = null;
+      this.cameraReadiness = "checking";
       this.cameraConfig = null;
       this.cameraConfigExpiresAt = 0;
       this.cameraConfigPromise = null;
@@ -252,8 +242,11 @@
       this.idleElement = getElement("stream-idle");
       this.spinnerImage = getElement("stream-spinner-image");
       this.idleImage = getElement("stream-idle-image");
-      this.statusIndicator = getElement("status-indicator");
+      this.streamStatusBadge = getElement("stream-status-badge");
       this.statusText = getElement("status-text");
+      this.cameraStatusBadge = getElement("camera-status-badge");
+      this.cameraStatusText = getElement("camera-status-text");
+      this.cameraStatusGuidance = getElement("camera-status-guidance");
       this.startButton = getElement("start-stream");
       this.stopButton = getElement("stop-stream");
       const snackbarElement = getElement("snackbar");
@@ -314,8 +307,11 @@
         }
       };
       this.updateStatus("ready");
+      this.updateCameraReadiness("checking");
       this.initializeStream();
       this.attachEventListeners();
+      this.loadCameraReadiness();
+      this.startCameraReadinessPolling();
       this.loadStats();
     }
     getPoseForState(state) {
@@ -347,7 +343,7 @@
       this.clearPoseResetTimer();
       this.poseResetTimer = window.setTimeout(() => {
         const diagnosticsModal = getElement("diagnostics-modal");
-        const diagnosticsOpen = !diagnosticsModal.hidden;
+        const diagnosticsOpen = diagnosticsModal.open;
         if (!this.isStreaming && !diagnosticsOpen) {
           this.setIdlePose("idle");
         }
@@ -364,8 +360,8 @@
         this.setIdlePose("success");
         this.idleElement.classList.add("is-hidden");
         this.schedulePoseResetToIdle();
-        this.updateStreamControls();
         this.updateStatus("live");
+        this.updateStreamControls();
         if (!document.hidden) {
           this.loadStats();
           this.startStatsPolling();
@@ -381,7 +377,7 @@
         const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
         if (nextRetryCount !== null) {
           this.streamRetryCount = nextRetryCount;
-          this.placeholderText.textContent = "We lost the stream.";
+          this.placeholderText.textContent = "Stream interrupted";
           this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`;
           this.updateStatus("reconnecting");
           this.setLoadingPose("running");
@@ -392,8 +388,8 @@
             }
           }, 2e3);
         } else {
-          this.placeholderText.textContent = "We couldn't reconnect.";
-          this.placeholderDesc.textContent = "Check the camera connection, then try again.";
+          this.placeholderText.textContent = "Stream unavailable";
+          this.placeholderDesc.textContent = "Check the camera connection, then retry the stream.";
           this.updateStatus("unavailable");
         }
         this.updateStreamControls();
@@ -404,11 +400,55 @@
     updateStatus(state) {
       this.streamState = state;
       const presentation = getStreamStatusPresentation(state);
-      this.statusText.textContent = presentation.label;
-      this.statusIndicator.className = `status-indicator status-indicator--${presentation.tone}`;
-      const overview = getCameraOverviewPresentation(state);
-      getElement("overview-state").textContent = overview.title;
-      getElement("overview-description").textContent = overview.description;
+      updateStatusBadge(
+        { root: this.streamStatusBadge, label: this.statusText },
+        presentation.label,
+        presentation.tone
+      );
+    }
+    updateCameraReadiness(state) {
+      if (this.cameraReadiness === state) return;
+      this.cameraReadiness = state;
+      const presentation = getCameraReadinessPresentation(state);
+      updateStatusBadge(
+        { root: this.cameraStatusBadge, label: this.cameraStatusText },
+        presentation.label,
+        presentation.tone
+      );
+      this.cameraStatusGuidance.textContent = presentation.guidance;
+      this.cameraStatusGuidance.hidden = presentation.guidance.length === 0;
+    }
+    loadCameraReadiness() {
+      if (this.cameraReadinessPromise) return this.cameraReadinessPromise;
+      this.cameraReadinessPromise = requestCameraReadiness().then(async (response) => {
+        const data = await response.json();
+        if (response.ok && data.status === "ready") {
+          this.updateCameraReadiness("ready");
+        } else if (data.status === "initializing") {
+          this.updateCameraReadiness("initializing");
+        } else {
+          this.updateCameraReadiness("unavailable");
+        }
+      }).catch(() => this.updateCameraReadiness("unknown")).finally(() => {
+        this.cameraReadinessPromise = null;
+      });
+      return this.cameraReadinessPromise;
+    }
+    startCameraReadinessPolling() {
+      if (this.cameraReadinessInterval !== null) return;
+      this.cameraReadinessInterval = startDashboardPoller(
+        !document.hidden,
+        true,
+        5e3,
+        () => {
+          void this.loadCameraReadiness();
+        }
+      );
+    }
+    stopCameraReadinessPolling() {
+      if (this.cameraReadinessInterval === null) return;
+      window.clearInterval(this.cameraReadinessInterval);
+      this.cameraReadinessInterval = null;
     }
     attachEventListeners() {
       this.startButton.addEventListener("click", () => this.startStream());
@@ -416,8 +456,8 @@
     }
     startStream() {
       if (this.isStreaming) return;
-      this.placeholderText.textContent = "MIO is warming things up\u2026";
-      this.placeholderDesc.textContent = "Your camera stream should be ready in a moment.";
+      this.placeholderText.textContent = "Connecting to camera\u2026";
+      this.placeholderDesc.textContent = "The live view will appear when the first frame arrives.";
       this.loadingElement.classList.remove("is-hidden");
       this.setLoadingPose("loading");
       this.clearPoseResetTimer();
@@ -436,8 +476,8 @@
       this.loadingElement.classList.remove("is-hidden");
       this.setIdlePose("idle");
       this.clearPoseResetTimer();
-      this.placeholderText.textContent = "MIO's ready when you are.";
-      this.placeholderDesc.textContent = "Start the stream to see what's happening.";
+      this.placeholderText.textContent = "Stream is stopped";
+      this.placeholderDesc.textContent = "Start the stream to view the camera.";
       this.updateStatus("ready");
       this.updateStreamControls();
       this.stopStatsPolling();
@@ -448,8 +488,10 @@
       const activeControl = document.activeElement === this.startButton ? "start" : document.activeElement === this.stopButton ? "stop" : null;
       this.startButton.hidden = presentation.startHidden;
       this.startButton.disabled = presentation.startHidden;
+      this.startButton.querySelector("span").textContent = presentation.startLabel;
       this.stopButton.hidden = presentation.stopHidden;
       this.stopButton.disabled = presentation.stopHidden;
+      this.stopButton.querySelector("span").textContent = presentation.stopLabel;
       this.stopButton.classList.toggle("button--primary", presentation.stopPrimary);
       this.stopButton.classList.toggle("button--secondary", !presentation.stopPrimary);
       if (activeControl === "start" && presentation.startHidden) this.stopButton.focus();
@@ -538,15 +580,10 @@
     }
     controller.setIdlePose("success");
   }
-  var diagnosticsReturnFocus = null;
   function openDiagnosticsModal() {
     const modal = getElement("diagnostics-modal");
-    if (!modal.hidden) return;
-    diagnosticsReturnFocus = rememberReturnFocus(document);
-    modal.hidden = false;
-    modal.classList.add("is-open");
-    document.body.classList.add("modal-open");
-    getElement("diagnostics-close").focus();
+    const closeButton = getElement("diagnostics-close");
+    if (!openNativeDialog(modal, closeButton)) return;
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
       controller.setLoadingPose("looking");
@@ -555,22 +592,19 @@
   }
   function closeDiagnosticsModal() {
     const modal = getElement("diagnostics-modal");
-    if (modal.hidden) return;
-    modal.classList.remove("is-open");
-    modal.hidden = true;
-    document.body.classList.remove("modal-open");
+    closeNativeDialog(modal);
+  }
+  function handleDiagnosticsDialogClose() {
     stopDiagnosticsPolling();
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
       controller.setIdlePose("idle");
     }
-    restoreReturnFocus(diagnosticsReturnFocus);
-    diagnosticsReturnFocus = null;
   }
   function startDiagnosticsPolling() {
     stopDiagnosticsPolling();
     const modal = getElement("diagnostics-modal");
-    const interval = startDashboardPoller(!document.hidden, !modal.hidden, 3e3, fetchDiagnostics);
+    const interval = startDashboardPoller(!document.hidden, modal.open, 3e3, fetchDiagnostics);
     if (interval === null) return;
     fetchDiagnostics();
     diagnosticsRefreshInterval = interval;
@@ -584,14 +618,17 @@
     const controller = getStreamController();
     if (document.hidden) {
       controller?.stopStatsPolling();
+      controller?.stopCameraReadinessPolling();
       stopDiagnosticsPolling();
       return;
     }
+    controller?.loadCameraReadiness();
+    controller?.startCameraReadinessPolling();
     if (controller?.isStreaming) {
       controller.loadStats();
       controller.startStatsPolling();
     }
-    if (!getElement("diagnostics-modal").hidden) {
+    if (getElement("diagnostics-modal").open) {
       startDiagnosticsPolling();
     }
   }
@@ -601,19 +638,20 @@
       return response.json();
     }).then((data) => {
       setCompanionPoseFromDiagnostics(data);
+      getStreamController()?.updateCameraReadiness(data.camera_ready ? "ready" : "unavailable");
       const content = getElement("diagnostics-content");
       const errorRate = Number(data.error_rate_percent || 0);
       const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
       const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
       const cameraTone = data.camera_ready ? "success" : "error";
       const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
-      const cameraCard = `<div class="metric-card metric-card--status metric-card--${cameraTone}">
+      const cameraCard = `<div class="metric-card metric-card--status">
                 <div class="metric-card__label">Camera</div>
-                <div class="metric-card__value">${cameraStatus}</div>
+                ${renderStatusBadge(cameraStatus, cameraTone)}
             </div>`;
-      const healthCard = `<div class="metric-card metric-card--status metric-card--${healthTone}">
+      const healthCard = `<div class="metric-card metric-card--status">
                 <div class="metric-card__label">System health</div>
-                <div class="metric-card__value">${escapeHTML(data.health_status || "Unknown")}</div>
+                ${renderStatusBadge(data.health_status || "Unknown", healthTone)}
             </div>`;
       const totalFailures = Number(data.capture_failures_total || 0);
       const noticeTone = healthTone === "neutral" ? "info" : healthTone;
@@ -634,14 +672,8 @@
                 <details class="diagnostics-details">
                     <summary class="disclosure-summary">Detailed metrics</summary>
                     <div class="diagnostics-secondary-grid">
-                        <div class="metric-card">
-                            <div class="metric-card__label">${iconMarkup("clock")} Uptime</div>
-                            <div class="metric-card__value">${formatUptime(Number(data.uptime_seconds || 0))}</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-card__label">${iconMarkup("alert")} Error rate</div>
-                            <div class="metric-card__value metric-card__value--${healthTone}">${errorRate.toFixed(1)}%</div>
-                        </div>
+                        ${renderMetricCard("Uptime", formatUptime(Number(data.uptime_seconds || 0)))}
+                        ${renderMetricCard("Error rate", `${errorRate.toFixed(1)}%`, healthTone)}
                     </div>
 
                     <div class="diagnostic-metric-list">
@@ -651,7 +683,7 @@
                         ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
                         ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
                         ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
-                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "metric-card__value--error" : "")}
+                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "error" : "neutral")}
                         ${diagnosticMetric("Total failures", totalFailures, "chart")}
                     </div>
                 </details>
@@ -683,17 +715,11 @@
     if (mins > 0) return `${mins}m ${secs}s`;
     return `${secs}s`;
   }
-  document.addEventListener("keydown", (event) => {
-    const modal = getElement("diagnostics-modal");
-    handleKeydown(event, modal, closeDiagnosticsModal, document);
-  });
-  getElement("diagnostics-modal").addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) closeDiagnosticsModal();
-  });
   document.addEventListener("DOMContentLoaded", () => {
     window.streamController = new StreamController();
     getElement("diagnostics-btn").addEventListener("click", openDiagnosticsModal);
     getElement("diagnostics-close").addEventListener("click", closeDiagnosticsModal);
+    getElement("diagnostics-modal").addEventListener("close", handleDiagnosticsDialogClose);
     document.addEventListener("visibilitychange", handleDashboardVisibilityChange);
   });
 })();

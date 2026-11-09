@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requestCameraConfig, requestDiagnostics, requestLiveMetrics, requestStopStream } from "./api";
+import { requestCameraConfig, requestCameraReadiness, requestDiagnostics, requestLiveMetrics, requestStopStream } from "./api";
 
 // Contract: TC-WEB-04 (docs/testing/test-contracts.md).
 async function assertRequest(
@@ -23,6 +23,10 @@ async function assertRequest(
 
 test("camera configuration uses the documented read endpoint", async () => {
     await assertRequest(requestCameraConfig, { url: "/v1/config/camera", method: "GET" });
+});
+
+test("camera readiness uses the no-store readiness endpoint", async () => {
+    await assertRequest(requestCameraReadiness, { url: "/v1/ready", method: "GET", cache: "no-store" });
 });
 
 test("live metrics use the no-store polling endpoint", async () => {

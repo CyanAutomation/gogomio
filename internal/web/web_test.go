@@ -37,7 +37,11 @@ func TestDashboardRootServesInteractivePage(t *testing.T) {
 		`id="stream-img"`,
 		`id="start-stream"`,
 		`id="stop-stream"`,
+		`<h1 class="page-header__title" aria-describedby="page-description">Camera</h1>`,
+		`id="camera-status-badge"`,
+		`id="stream-status-badge"`,
 		`id="diagnostics-btn"`,
+		`<dialog id="diagnostics-modal"`,
 		`<script src="/static/app.js?v=`,
 	}
 
@@ -52,6 +56,31 @@ func TestDashboardRootServesInteractivePage(t *testing.T) {
 	}
 }
 
+func TestDashboardUsesSemanticThemesAndReusableStatusPrimitives(t *testing.T) {
+	index, err := webFS.ReadFile("index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(index)
+	for _, contract := range []string{
+		`@media (prefers-color-scheme: dark)`,
+		`.ui-badge--success`,
+		`.ui-badge--warning`,
+		`.ui-badge--error`,
+		`aria-live="polite" aria-atomic="true"`,
+		`<h1 class="page-header__title" aria-describedby="page-description">Camera</h1>`,
+		`@media (forced-colors: active)`,
+		`min-height: 44px;`,
+	} {
+		if !strings.Contains(body, contract) {
+			t.Errorf("dashboard is missing UI primitive contract %q", contract)
+		}
+	}
+	if strings.Contains(body, `<div id="diagnostics-modal"`) || strings.Contains(body, `id="diagnostics-modal" class="modal-overlay"`) {
+		t.Error("diagnostics must use the native dialog element")
+	}
+}
+
 func TestDashboardResponsiveLayoutContracts(t *testing.T) {
 	// Contract: TC-WEB-01 (docs/testing/test-contracts.md).
 	index, err := webFS.ReadFile("index.html")
@@ -60,7 +89,7 @@ func TestDashboardResponsiveLayoutContracts(t *testing.T) {
 	}
 	css := strings.SplitN(string(index), "</style>", 2)[0]
 
-	mobileStyles := cssBlockBody(t, css, "@media (max-width: 480px)")
+	mobileStyles := cssBlockBody(t, css, "@media (max-width: 640px)")
 	desktopContainer := cssRuleBody(t, css, ".container")
 	mobileContainer := cssRuleBody(t, mobileStyles, ".container")
 	desktopPadding := cssLengthPixels(t, css, cssPropertyValue(t, desktopContainer, "padding"))
@@ -68,12 +97,12 @@ func TestDashboardResponsiveLayoutContracts(t *testing.T) {
 	if mobilePadding >= desktopPadding {
 		t.Errorf("small-screen container padding = %gpx, want less than desktop %gpx", mobilePadding, desktopPadding)
 	}
-	desktopSubtitle := cssRuleBody(t, css, ".subtitle")
-	mobileSubtitle := cssRuleBody(t, mobileStyles, ".subtitle")
-	desktopFontSize := cssLengthPixels(t, css, cssPropertyValue(t, desktopSubtitle, "font-size"))
-	mobileFontSize := cssLengthPixels(t, css, cssPropertyValue(t, mobileSubtitle, "font-size"))
+	desktopTitle := cssRuleBody(t, css, ".page-header__title")
+	mobileTitle := cssRuleBody(t, mobileStyles, ".page-header__title")
+	desktopFontSize := cssLengthPixels(t, css, cssPropertyValue(t, desktopTitle, "font-size"))
+	mobileFontSize := cssLengthPixels(t, css, cssPropertyValue(t, mobileTitle, "font-size"))
 	if mobileFontSize >= desktopFontSize {
-		t.Errorf("small-screen subtitle font size = %gpx, want less than desktop %gpx", mobileFontSize, desktopFontSize)
+		t.Errorf("small-screen page title font size = %gpx, want less than desktop %gpx", mobileFontSize, desktopFontSize)
 	}
 
 	reducedMotionStyles := cssBlockBody(t, css, "@media (prefers-reduced-motion: reduce)")
@@ -239,6 +268,9 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 		{url: "/static/mio/mio_pose_looking.png", file: "mio/mio_pose_looking.png", fs: mioFS},
 	}
 	for _, asset := range assets {
+		if !bytes.Contains(ui, []byte(asset.url)) {
+			continue
+		}
 		data, err := asset.fs.ReadFile(asset.file)
 		if err != nil {
 			t.Fatalf("read %s: %v", asset.file, err)

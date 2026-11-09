@@ -7,11 +7,13 @@
     <style>
         /* ====== DESIGN SYSTEM ====== */
         :root {
-            /* Brand and action colors */
+            color-scheme: light;
+
+            /* Semantic color tokens */
             --color-primary: #2A5F8A;
             --color-primary-dark: #214A6B;
             --color-primary-light: #A7D3E8;
-            --color-brand-accent: #5FA8D3;
+            --color-text-accent: #2A5F8A;
             --color-success: #10b981;
             --color-success-light: #d1fae5;
             --color-success-dark: #065f46;
@@ -28,15 +30,15 @@
             --color-info-dark: var(--color-primary);
 
             /* Neutral Colors */
-            --color-bg: #f0f7fc;
-            --color-bg-secondary: #e8f2f8;
-            --color-border: #e2e8f0;
-            --color-text: #1e293b;
-            --color-text-secondary: #52657A;
+            --color-bg: #f3f6f9;
+            --color-bg-secondary: #edf2f6;
+            --color-border: #d7e0e8;
+            --color-text: #172330;
+            --color-text-secondary: #506274;
             
             /* Surfaces */
             --color-surface: #ffffff;
-            --color-surface-hover: #f8fafc;
+            --color-surface-hover: #f6f8fa;
             --color-focus-ring: rgba(42, 95, 138, 0.35);
             
             /* Spacing */
@@ -76,6 +78,41 @@
             --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        @media (prefers-color-scheme: dark) {
+            :root {
+                color-scheme: dark;
+                --color-primary: #24638f;
+                --color-primary-dark: #1f5277;
+                --color-primary-light: #7db7d8;
+                --color-text-accent: #8ccbeb;
+                --color-success: #55c99a;
+                --color-success-light: #17382c;
+                --color-success-dark: #a9ebce;
+                --color-error: #ee777d;
+                --color-error-light: #402126;
+                --color-error-dark: #ffc0c2;
+                --color-warning: #e6b75c;
+                --color-warning-light: #3d321b;
+                --color-warning-dark: #ffe2a6;
+                --color-info: #79bce0;
+                --color-info-light: #1c3445;
+                --color-info-dark: #c0e6fb;
+                --color-bg: #101820;
+                --color-bg-secondary: #192631;
+                --color-border: #354654;
+                --color-text: #e8f0f6;
+                --color-text-secondary: #bdcbd6;
+                --color-surface: #17232e;
+                --color-surface-hover: #21313e;
+                --color-focus-ring: rgba(141, 204, 235, 0.6);
+                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+                --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.24);
+                --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.3);
+                --shadow-xl: 0 20px 32px rgba(0, 0, 0, 0.32);
+                --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.38);
+            }
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -88,25 +125,13 @@
 
         body {
             font-family: var(--font-family);
-            background: linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-secondary) 100%);
+            background: var(--color-bg);
             color: var(--color-text);
             font-size: var(--font-size-base);
             line-height: 1.5;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            position: relative;
-        }
-
-        body::before {
-            content: "";
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            height: 100px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100'%3E%3Cpath fill='%235FA8D3' fill-opacity='0.07' d='M0,50L60,45C120,40,240,30,360,35C480,40,600,60,720,58C840,55,960,35,1080,30C1200,25,1320,35,1380,40L1440,45L1440,100L0,100Z'%3E%3C/path%3E%3C/svg%3E");
-            background-size: cover;
-            pointer-events: none;
-            z-index: 0;
         }
 
         .container {
@@ -118,62 +143,119 @@
             min-width: 0;
         }
 
-        /* ====== HEADER ====== */
-        header {
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
-            color: white;
-            padding: var(--spacing-sm) 0;
-            text-align: center;
-            margin-bottom: var(--spacing-xs);
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: visible;
-        }
-
-        header::after {
-            content: "";
-            position: absolute;
-            bottom: -10px; left: 0; right: 0;
-            height: 20px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 20'%3E%3Cpath fill='%23f0f7fc' d='M0,10L60,7C120,4,240,0,360,3C480,7,600,13,720,13C840,13,960,7,1080,3C1200,0,1320,3,1380,5L1440,7L1440,20L0,20Z'%3E%3C/path%3E%3C/svg%3E");
-            background-size: cover;
-            z-index: 1;
-            pointer-events: none;
-        }
-
-        header .container {
-            position: relative;
-            z-index: 2;
+        /* ====== REUSABLE PAGE AND SURFACE PRIMITIVES ====== */
+        .site-header {
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-surface);
         }
 
         .brand-lockup,
         .footer-content {
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: var(--spacing-md);
         }
 
         .brand-lockup {
-            padding-top: var(--spacing-sm);
-            padding-bottom: var(--spacing-sm);
+            min-height: 56px;
+            padding-block: var(--spacing-sm);
         }
 
-        .brand-copy {
-            min-width: 0;
-        }
-
-        h1 {
-            font-size: var(--font-size-2xl);
-            font-weight: 700;
-            margin-bottom: 2px;
-            letter-spacing: -0.3px;
-        }
-
-        .subtitle {
+        .brand-name {
+            color: var(--color-text-secondary);
             font-size: var(--font-size-sm);
-            opacity: 0.95;
-            font-weight: 400;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: var(--spacing-2xl);
+            margin-bottom: var(--spacing-2xl);
+        }
+
+        .page-header__title {
+            margin: 0;
+            color: var(--color-text);
+            font-size: var(--font-size-3xl);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .page-header__description {
+            margin-top: var(--spacing-xs);
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+        }
+
+        .section-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-lg);
+            padding-bottom: var(--spacing-md);
+            margin-bottom: var(--spacing-xl);
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin: 0;
+            color: var(--color-text);
+            font-size: var(--font-size-xl);
+            font-weight: 650;
+        }
+
+        .ui-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            max-width: 100%;
+            min-height: 30px;
+            padding: 3px var(--spacing-md);
+            border: 1px solid var(--color-border);
+            border-radius: 999px;
+            background: var(--color-bg-secondary);
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-xs);
+            font-weight: 650;
+            line-height: 1.35;
+        }
+
+        .ui-badge__dot {
+            width: 8px;
+            height: 8px;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .ui-badge--success {
+            border-color: var(--color-success);
+            background: var(--color-success-light);
+            color: var(--color-success-dark);
+        }
+
+        .ui-badge--warning {
+            border-color: var(--color-warning);
+            background: var(--color-warning-light);
+            color: var(--color-warning-dark);
+        }
+
+        .ui-badge--error {
+            border-color: var(--color-error);
+            background: var(--color-error-light);
+            color: var(--color-error-dark);
+        }
+
+        .ui-badge--info {
+            border-color: var(--color-info);
+            background: var(--color-info-light);
+            color: var(--color-info-dark);
         }
 
         /* ====== MAIN LAYOUT ====== */
@@ -198,11 +280,11 @@
         .surface-panel {
             background: var(--color-surface);
             border-radius: var(--radius-lg);
+            border: 1px solid var(--color-border);
             box-shadow: var(--shadow-md);
         }
 
         .card {
-            border-top: 3px solid var(--color-brand-accent);
             padding: var(--spacing-2xl);
             display: flex;
             flex-direction: column;
@@ -210,19 +292,6 @@
 
         .controls-section {
             align-self: start;
-        }
-
-        /* ====== SECTION HEADERS ====== */
-        .section-title {
-            font-size: var(--font-size-xl);
-            font-weight: 600;
-            margin-bottom: var(--spacing-xl);
-            color: var(--color-text);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-md);
-            padding-bottom: var(--spacing-md);
-            border-bottom: 2px solid var(--color-border);
         }
 
         /* ====== STREAM SECTION ====== */
@@ -267,14 +336,14 @@
 
         .stream-placeholder__text {
             margin: 0;
-            color: #d3e5ee;
+            color: #dceaf1;
             font-size: var(--font-size-lg);
             font-weight: 500;
         }
 
         .stream-placeholder__description {
             margin: var(--spacing-md) 0 0;
-            color: #b6ceda;
+            color: #c4d7e1;
             font-size: var(--font-size-sm);
         }
 
@@ -307,49 +376,17 @@
         .stream-status {
             display: flex;
             align-items: center;
-            gap: var(--spacing-sm);
+            justify-content: space-between;
+            gap: var(--spacing-md);
             font-size: var(--font-size-sm);
             color: var(--color-text-secondary);
-            padding: var(--spacing-md);
-            background: var(--color-bg-secondary);
-            border-radius: var(--radius-md);
             margin-bottom: var(--spacing-lg);
         }
 
-        .status-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .status-indicator--neutral {
-            background: var(--color-text-secondary);
-        }
-
-        .status-indicator--success {
-            background: var(--color-success);
-            box-shadow: 0 0 8px var(--color-success);
-        }
-
-        .status-indicator--warning {
-            background: var(--color-warning);
-            animation: pulse 2s infinite;
-        }
-
-        .status-indicator--error {
-            background: var(--color-error);
-        }
-
-        #status-text {
-            font-weight: 500;
-            color: var(--color-text);
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+        .camera-status-guidance {
+            margin: calc(-1 * var(--spacing-md)) 0 var(--spacing-lg);
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
         }
 
         .stream-controls {
@@ -495,6 +532,7 @@
         }
 
         .button {
+            min-height: 44px;
             padding: var(--spacing-md) var(--spacing-xl);
             border: none;
             border-radius: var(--radius-sm);
@@ -543,8 +581,8 @@
         }
 
         .button--icon {
-            width: 2.5rem;
-            height: 2.5rem;
+            width: 2.75rem;
+            height: 2.75rem;
             padding: var(--spacing-sm);
             color: var(--color-text-secondary);
             background: transparent;
@@ -601,7 +639,7 @@
         .metric-card__value {
             font-size: var(--font-size-2xl);
             font-weight: 700;
-            color: var(--color-primary);
+            color: var(--color-text-accent);
         }
 
         .metric-card__value--compact {
@@ -619,22 +657,6 @@
 
         .metric-card__value--error {
             color: var(--color-error-dark);
-        }
-
-        .overview-summary {
-            margin-bottom: var(--spacing-lg);
-        }
-
-        .overview-state {
-            margin-bottom: var(--spacing-xs);
-            color: var(--color-text);
-            font-size: var(--font-size-lg);
-            font-weight: 700;
-        }
-
-        .overview-description {
-            color: var(--color-text-secondary);
-            font-size: var(--font-size-sm);
         }
 
         .overview-highlight {
@@ -668,7 +690,8 @@
             align-items: center;
             justify-content: space-between;
             gap: var(--spacing-md);
-            color: var(--color-primary);
+            min-height: 44px;
+            color: var(--color-text-accent);
             cursor: pointer;
             font-size: var(--font-size-sm);
             font-weight: 600;
@@ -813,10 +836,10 @@
         }
 
         /* ====== FOOTER ====== */
-        footer {
+        .site-footer {
             text-align: center;
             color: var(--color-text-secondary);
-            padding: var(--spacing-3xl) var(--spacing-lg);
+            padding: var(--spacing-lg);
             border-top: 1px solid var(--color-border);
             background: var(--color-surface);
             font-size: var(--font-size-sm);
@@ -824,25 +847,11 @@
 
         .footer-content {
             gap: var(--spacing-sm);
-        }
-
-        .footer-mascot {
-            width: 18px;
-            height: 18px;
-            object-fit: contain;
-            opacity: 0.55;
-            flex: 0 0 auto;
+            min-height: 32px;
+            padding-block: var(--spacing-sm);
         }
 
         /* ====== MIO MASCOT ====== */
-        .mio-header-avatar {
-            width: 56px;
-            height: 56px;
-            object-fit: contain;
-            filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
-            animation: mioFloat 3s ease-in-out infinite;
-        }
-
         .mio-state-image {
             width: 120px;
             height: 120px;
@@ -874,41 +883,30 @@
             display: block;
         }
 
-        /* ====== ENTRANCE ANIMATIONS ====== */
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(16px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .main-grid > .card:nth-child(1) {
-            animation: fadeInUp 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
-        }
-
-        .main-grid > .card:nth-child(2) {
-            animation: fadeInUp 400ms 100ms cubic-bezier(0.4, 0, 0.2, 1) both;
-        }
-
         /* ====== DIALOG COMPONENT ====== */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: var(--spacing-2xl);
-            background: rgba(15, 26, 43, 0.62);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
+        .modal-dialog {
+            width: min(100%, 760px);
+            max-width: calc(100% - 2 * var(--spacing-2xl));
+            max-height: calc(100vh - 2 * var(--spacing-2xl));
+            max-height: calc(100dvh - 2 * var(--spacing-2xl));
+            padding: 0;
+            overflow: visible;
+            border: 0;
+            border-radius: var(--radius-lg);
+            color: var(--color-text);
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .modal-dialog::backdrop {
+            background: rgba(10, 20, 30, 0.68);
         }
 
         .modal-inner {
-            width: 100%;
-            max-width: 600px;
-            max-height: 85vh;
-            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            max-height: inherit;
             padding: var(--spacing-3xl);
-            animation: modalEnter var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1) both;
         }
 
         .modal-header {
@@ -919,17 +917,23 @@
             margin-bottom: var(--spacing-2xl);
             padding-bottom: var(--spacing-lg);
             border-bottom: 1px solid var(--color-border);
+            flex: 0 0 auto;
         }
 
         .modal-title {
             margin: 0;
-            color: var(--color-primary);
+            color: var(--color-text-accent);
             font-size: var(--font-size-xl);
         }
 
         .diagnostics-content {
             display: grid;
+            flex: 1 1 auto;
             gap: var(--spacing-lg);
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding-right: var(--spacing-xs);
         }
 
         .diagnostic-summary-grid {
@@ -938,36 +942,17 @@
             gap: var(--spacing-md);
         }
 
-        .metric-card--success {
-            color: var(--color-success-dark);
-            background: var(--color-success-light);
-            border-color: var(--color-success);
-        }
-
-        .metric-card--warning {
-            color: var(--color-warning-dark);
-            background: var(--color-warning-light);
-            border-color: var(--color-warning);
-        }
-
-        .metric-card--error {
-            color: var(--color-error-dark);
-            background: var(--color-error-light);
-            border-color: var(--color-error);
-        }
-
         .metric-card--status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-md);
             text-align: left;
-            border-width: 2px;
+            min-width: 0;
         }
 
-        .metric-card--status .metric-card__label,
-        .metric-card--status .metric-card__value {
-            color: currentColor;
-        }
-
-        .metric-card--status .metric-card__value {
-            font-size: var(--font-size-xl);
+        .metric-card--status .metric-card__label {
+            margin: 0;
         }
 
         .diagnostics-secondary-grid {
@@ -1055,22 +1040,23 @@
             to { transform: rotate(360deg); }
         }
 
-        .modal-overlay.is-open {
-            display: flex;
-        }
-
-        body.modal-open {
-            overflow: hidden;
-        }
-
-        @keyframes modalEnter {
-            from { opacity: 0; transform: scale(0.96) translateY(8px); }
-            to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-
         @media (max-width: 640px) {
             .container {
                 padding: var(--spacing-2xl);
+            }
+
+            .page-header {
+                margin-bottom: var(--spacing-xl);
+            }
+
+            .page-header__title {
+                font-size: var(--font-size-2xl);
+            }
+
+            .section-heading {
+                align-items: flex-start;
+                flex-wrap: wrap;
+                gap: var(--spacing-sm);
             }
 
             .card {
@@ -1106,12 +1092,13 @@
                 font-size: clamp(0.875rem, 4.5vw, var(--font-size-xl));
             }
 
-            .modal-overlay {
-                padding: var(--spacing-md);
+            .modal-dialog {
+                max-width: calc(100% - 2 * var(--spacing-md));
+                max-height: calc(100vh - 2 * var(--spacing-md));
+                max-height: calc(100dvh - 2 * var(--spacing-md));
             }
 
             .modal-inner {
-                max-height: calc(100vh - 2 * var(--spacing-md));
                 padding: var(--spacing-lg);
             }
 
@@ -1145,15 +1132,6 @@
 
             .brand-lockup {
                 gap: var(--spacing-sm);
-            }
-
-            .mio-header-avatar {
-                width: 48px;
-                height: 48px;
-            }
-
-            .subtitle {
-                font-size: var(--font-size-xs);
             }
         }
 
@@ -1200,6 +1178,30 @@
             }
         }
 
+        @media (forced-colors: active) {
+            .surface-panel,
+            .metric-card,
+            .overview-highlight,
+            .ui-badge {
+                border-color: CanvasText;
+            }
+
+            .ui-badge {
+                background: Canvas;
+                color: CanvasText;
+            }
+
+            .button--primary {
+                background: Highlight;
+                color: HighlightText;
+            }
+
+            .button:focus-visible,
+            .disclosure-summary:focus-visible {
+                outline-color: Highlight;
+            }
+        }
+
         /* ====== ACCESSIBILITY ====== */
         .sr-only {
             position: absolute;
@@ -1232,24 +1234,28 @@
         <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"></path><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2"></path></symbol>
     </svg>
 
-    <header>
+    <header class="site-header">
         <div class="container brand-lockup">
-            <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO mascot" class="mio-header-avatar mio-blink">
-            <div class="brand-copy">
-                <h1>GoGoMio</h1>
-            <p class="subtitle">Your camera stream, with MIO</p>
-            </div>
+            <span class="brand-name">GoGoMio</span>
         </div>
     </header>
 
     <main class="container">
+        <header class="page-header">
+            <div>
+                <h1 class="page-header__title" aria-describedby="page-description">Camera</h1>
+                <p class="page-header__description" id="page-description">View the live stream and check camera readiness.</p>
+            </div>
+        </header>
 
         <div class="main-grid">
             <section class="card surface-panel video-section" aria-labelledby="stream-title">
-                <h2 class="section-title" id="stream-title">
-                    <svg class="icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
-                    <span>Live stream</span>
-                </h2>
+                <div class="section-heading">
+                    <h2 class="section-title" id="stream-title">
+                        <svg class="icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
+                        <span>Live stream</span>
+                    </h2>
+                </div>
                 <div id="stream-container" class="stream-viewer">
                     <img id="stream-img" class="stream-image is-hidden" alt="Live camera stream">
                     <div id="stream-loading" class="stream-loading">
@@ -1262,38 +1268,43 @@
                                     <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="MIO is resting" class="mio-state-image mio-blink">
                                 </div>
                             </div>
-                            <p id="stream-placeholder-text" class="stream-placeholder__text">MIO's ready when you are.</p>
-                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Start the stream to see what's happening.</p>
+                            <p id="stream-placeholder-text" class="stream-placeholder__text">Stream is stopped</p>
+                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Start the stream to view the camera.</p>
                         </div>
                     </div>
                     <span id="feed-mode-badge" class="feed-mode-badge" hidden>Simulated feed</span>
                 </div>
                 <div class="stream-controls" role="group" aria-label="Stream controls">
-                    <button type="button" class="button button--primary" id="start-stream" aria-label="Start stream">
+                    <button type="button" class="button button--primary" id="start-stream">
                         <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
                         <span>Start stream</span>
                     </button>
-                    <button type="button" class="button button--secondary" id="stop-stream" aria-label="Stop stream" disabled>
+                    <button type="button" class="button button--secondary" id="stop-stream" disabled>
                         <svg class="icon" aria-hidden="true"><use href="#icon-stop"></use></svg>
                         <span>Stop stream</span>
                     </button>
                 </div>
                 <div class="stream-status" role="status" aria-live="polite">
-                    <span class="status-indicator status-indicator--neutral" id="status-indicator" aria-hidden="true"></span>
-                    <span id="status-text">Ready</span>
+                    <span>Stream</span>
+                    <span class="ui-badge ui-badge--neutral" id="stream-status-badge">
+                        <span class="ui-badge__dot" aria-hidden="true"></span>
+                        <span class="ui-badge__label" id="status-text">Stream stopped</span>
+                    </span>
                 </div>
             </section>
 
             <section class="card surface-panel controls-section" aria-labelledby="status-title">
-                <h2 class="section-title" id="status-title">
-                    <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
-                    <span>Camera status</span>
-                </h2>
-
-                <div class="overview-summary">
-                    <p class="overview-state" id="overview-state">Ready to start</p>
-                    <p class="overview-description" id="overview-description">Start the stream to see live camera performance.</p>
+                <div class="section-heading">
+                    <h2 class="section-title" id="status-title">
+                        <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+                        <span>Camera status</span>
+                    </h2>
+                    <span class="ui-badge ui-badge--info" id="camera-status-badge" role="status" aria-live="polite" aria-atomic="true">
+                        <span class="ui-badge__dot" aria-hidden="true"></span>
+                        <span class="ui-badge__label" id="camera-status-text">Checking camera…</span>
+                    </span>
                 </div>
+                <p class="camera-status-guidance" id="camera-status-guidance" hidden></p>
 
                 <div class="overview-highlight" role="group" aria-label="Current frame rate">
                     <div class="metric-card__label">Current frame rate</div>
@@ -1337,16 +1348,15 @@
 
     <footer class="site-footer">
         <div class="container footer-content">
-            <img src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true" class="footer-mascot">
             <p>GoGoMio · Raspberry Pi camera streaming</p>
         </div>
     </footer>
 
     <!-- Diagnostics Modal -->
-    <div id="diagnostics-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
+    <dialog id="diagnostics-modal" class="modal-dialog" aria-labelledby="diagnostics-title">
         <div class="modal-inner surface-panel">
             <div class="modal-header">
-                <h2 id="diagnostics-title" class="modal-title">System diagnostics</h2>
+                <h2 id="diagnostics-title" class="modal-title">Diagnostics</h2>
                 <button type="button" id="diagnostics-close" class="button button--icon" aria-label="Close diagnostics">
                     <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
                 </button>
@@ -1356,8 +1366,8 @@
                 <!-- Diagnostics will be populated here -->
             </div>
         </div>
-    </div>
+    </dialog>
 
-    <script src="/static/app.js?v=879b3677b2f8b77d3dae8b828264b6e5b0c6e49ef5a1ee247fa975f8beaf66dc"></script>
+    <script src="/static/app.js?v=e2f97b72369b1e6dd473d5d1b2423f4e6e99d75fe32de67739170ac2581a297d"></script>
 </body>
 </html>
