@@ -8,7 +8,7 @@ import {
     formatStreamConnections,
     getFrameRateTone,
     getHealthTone,
-    getCameraOverviewPresentation,
+    getCameraReadinessPresentation,
     getStreamControlPresentation,
     getStreamStatusPresentation,
 } from "./dashboard-presentation";
@@ -41,60 +41,75 @@ test("an unavailable frame age is described without exposing its negative sentin
 });
 
 test("stream states have consistent labels and semantic tones", () => {
-    assert.deepEqual(getStreamStatusPresentation("ready"), { label: "Ready", tone: "neutral" });
+    assert.deepEqual(getStreamStatusPresentation("ready"), { label: "Stream stopped", tone: "neutral" });
     assert.deepEqual(getStreamStatusPresentation("connecting"), { label: "Connecting…", tone: "warning" });
     assert.deepEqual(getStreamStatusPresentation("live"), { label: "Live", tone: "success" });
     assert.deepEqual(getStreamStatusPresentation("reconnecting"), { label: "Reconnecting…", tone: "warning" });
-    assert.deepEqual(getStreamStatusPresentation("unavailable"), { label: "Unavailable", tone: "error" });
+    assert.deepEqual(getStreamStatusPresentation("unavailable"), { label: "Stream unavailable", tone: "error" });
 });
 
-test("camera overview gives users next-step context for each stream state", () => {
-    assert.deepEqual(getCameraOverviewPresentation("ready"), {
-        title: "Ready to start",
-        description: "Start the stream to see live camera performance.",
+test("camera readiness has distinct copy and tones for checking, ready, starting, and unavailable", () => {
+    assert.deepEqual(getCameraReadinessPresentation("checking"), {
+        label: "Checking camera…",
+        tone: "info",
+        guidance: "",
     });
-    assert.deepEqual(getCameraOverviewPresentation("connecting"), {
-        title: "Connecting to camera",
-        description: "Live camera performance will appear when frames arrive.",
+    assert.deepEqual(getCameraReadinessPresentation("ready"), {
+        label: "Camera ready",
+        tone: "success",
+        guidance: "",
     });
-    assert.deepEqual(getCameraOverviewPresentation("live"), {
-        title: "Streaming live",
-        description: "The frame rate is shown here. Open camera details for the rest.",
+    assert.deepEqual(getCameraReadinessPresentation("initializing"), {
+        label: "Camera starting",
+        tone: "warning",
+        guidance: "The camera is still starting. Try again in a moment.",
     });
-    assert.deepEqual(getCameraOverviewPresentation("reconnecting"), {
-        title: "Reconnecting",
-        description: "The stream paused. GoGoMio is trying to restore it.",
+    assert.deepEqual(getCameraReadinessPresentation("unavailable"), {
+        label: "Camera unavailable",
+        tone: "error",
+        guidance: "Check the camera connection, then try the stream again.",
     });
-    assert.deepEqual(getCameraOverviewPresentation("unavailable"), {
-        title: "Stream unavailable",
-        description: "Check the camera connection, then try again.",
+    assert.deepEqual(getCameraReadinessPresentation("unknown"), {
+        label: "Camera status unknown",
+        tone: "warning",
+        guidance: "Could not check camera status. Check your connection to GoGoMio.",
     });
 });
 
 test("only the action relevant to the current stream state is shown", () => {
     assert.deepEqual(getStreamControlPresentation("ready"), {
         startHidden: false,
+        startLabel: "Start stream",
         stopHidden: true,
+        stopLabel: "Stop stream",
         stopPrimary: false,
     });
     assert.deepEqual(getStreamControlPresentation("connecting"), {
         startHidden: true,
+        startLabel: "Start stream",
         stopHidden: false,
-        stopPrimary: true,
+        stopLabel: "Cancel connection",
+        stopPrimary: false,
     });
     assert.deepEqual(getStreamControlPresentation("live"), {
         startHidden: true,
+        startLabel: "Start stream",
         stopHidden: false,
+        stopLabel: "Stop stream",
         stopPrimary: true,
     });
     assert.deepEqual(getStreamControlPresentation("reconnecting"), {
         startHidden: true,
+        startLabel: "Start stream",
         stopHidden: false,
+        stopLabel: "Stop stream",
         stopPrimary: true,
     });
     assert.deepEqual(getStreamControlPresentation("unavailable"), {
         startHidden: false,
+        startLabel: "Retry stream",
         stopHidden: true,
+        stopLabel: "Stop stream",
         stopPrimary: false,
     });
 });

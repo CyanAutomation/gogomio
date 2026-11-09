@@ -1,56 +1,57 @@
 export type StreamState = "ready" | "connecting" | "live" | "reconnecting" | "unavailable";
 export type StatusTone = "neutral" | "warning" | "success" | "error";
 export type MetricTone = "neutral" | "success" | "warning" | "error";
+export type CameraReadinessState = "checking" | "ready" | "initializing" | "unavailable" | "unknown";
 
 export interface StreamStatusPresentation {
     label: string;
     tone: StatusTone;
 }
 
-export interface CameraOverviewPresentation {
-    title: string;
-    description: string;
-}
-
 export interface StreamControlPresentation {
     startHidden: boolean;
+    startLabel: string;
     stopHidden: boolean;
+    stopLabel: string;
     stopPrimary: boolean;
 }
 
+export interface CameraReadinessPresentation {
+    label: string;
+    tone: "info" | MetricTone;
+    guidance: string;
+}
+
 const streamStatuses: Record<StreamState, StreamStatusPresentation> = {
-    ready: { label: "Ready", tone: "neutral" },
+    ready: { label: "Stream stopped", tone: "neutral" },
     connecting: { label: "Connecting…", tone: "warning" },
     live: { label: "Live", tone: "success" },
     reconnecting: { label: "Reconnecting…", tone: "warning" },
-    unavailable: { label: "Unavailable", tone: "error" },
+    unavailable: { label: "Stream unavailable", tone: "error" },
 };
 
 export function getStreamStatusPresentation(state: StreamState): StreamStatusPresentation {
     return streamStatuses[state];
 }
 
-export function getCameraOverviewPresentation(state: StreamState): CameraOverviewPresentation {
-    const presentations: Record<StreamState, CameraOverviewPresentation> = {
-        ready: {
-            title: "Ready to start",
-            description: "Start the stream to see live camera performance.",
-        },
-        connecting: {
-            title: "Connecting to camera",
-            description: "Live camera performance will appear when frames arrive.",
-        },
-        live: {
-            title: "Streaming live",
-            description: "The frame rate is shown here. Open camera details for the rest.",
-        },
-        reconnecting: {
-            title: "Reconnecting",
-            description: "The stream paused. GoGoMio is trying to restore it.",
+export function getCameraReadinessPresentation(state: CameraReadinessState): CameraReadinessPresentation {
+    const presentations: Record<CameraReadinessState, CameraReadinessPresentation> = {
+        checking: { label: "Checking camera…", tone: "info", guidance: "" },
+        ready: { label: "Camera ready", tone: "success", guidance: "" },
+        initializing: {
+            label: "Camera starting",
+            tone: "warning",
+            guidance: "The camera is still starting. Try again in a moment.",
         },
         unavailable: {
-            title: "Stream unavailable",
-            description: "Check the camera connection, then try again.",
+            label: "Camera unavailable",
+            tone: "error",
+            guidance: "Check the camera connection, then try the stream again.",
+        },
+        unknown: {
+            label: "Camera status unknown",
+            tone: "warning",
+            guidance: "Could not check camera status. Check your connection to GoGoMio.",
         },
     };
 
@@ -61,8 +62,10 @@ export function getStreamControlPresentation(state: StreamState): StreamControlP
     const active = state === "connecting" || state === "live" || state === "reconnecting";
     return {
         startHidden: active,
+        startLabel: state === "unavailable" ? "Retry stream" : "Start stream",
         stopHidden: !active,
-        stopPrimary: active,
+        stopLabel: state === "connecting" ? "Cancel connection" : "Stop stream",
+        stopPrimary: state === "live" || state === "reconnecting",
     };
 }
 

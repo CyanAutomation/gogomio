@@ -1,56 +1,17 @@
-const FOCUSABLE_SELECTOR = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+export type NativeDialog = Pick<HTMLDialogElement, "open" | "showModal" | "close">;
+export type InitialDialogFocus = Pick<HTMLElement, "focus">;
 
-export type ReturnFocusTarget = Element & { focus(): void };
-
-function focusableElements(modal: HTMLElement): HTMLElement[] {
-    return Array.from(modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-        .filter((element) => {
-            const control = element as HTMLElement & { disabled?: boolean };
-            return !control.disabled && !element.hidden && element.tabIndex >= 0;
-        });
+/** Opens a native modal and moves focus to the action most useful for its content. */
+export function openNativeDialog(dialog: NativeDialog, initialFocus?: InitialDialogFocus): boolean {
+    if (dialog.open) return false;
+    dialog.showModal();
+    initialFocus?.focus();
+    return true;
 }
 
-export function rememberReturnFocus(documentRef: Document): ReturnFocusTarget | null {
-    const activeElement = documentRef.activeElement;
-    if (activeElement && "focus" in activeElement && typeof activeElement.focus === "function") {
-        return activeElement as ReturnFocusTarget;
-    }
-    return null;
-}
-
-export function restoreReturnFocus(element: ReturnFocusTarget | null): void {
-    if (element && element.isConnected) {
-        element.focus();
-    }
-}
-
-export function handleKeydown(
-    event: KeyboardEvent,
-    modal: HTMLElement,
-    closeModal: () => void,
-    documentRef: Document,
-): void {
-    if (modal.hidden) return;
-
-    if (event.key === "Escape") {
-        event.preventDefault();
-        closeModal();
-        return;
-    }
-
-    if (event.key !== "Tab") return;
-
-    const focusable = focusableElements(modal);
-    if (focusable.length === 0) {
-        event.preventDefault();
-        return;
-    }
-
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
-    const focusIsOutsideDialog = !modal.contains(documentRef.activeElement);
-    if (focusIsOutsideDialog || (event.shiftKey ? documentRef.activeElement === first : documentRef.activeElement === last)) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-    }
+/** Closes an open native modal; browser behavior restores focus to its invoker. */
+export function closeNativeDialog(dialog: NativeDialog, returnValue?: string): boolean {
+    if (!dialog.open) return false;
+    dialog.close(returnValue);
+    return true;
 }
