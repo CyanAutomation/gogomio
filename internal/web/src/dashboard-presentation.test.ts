@@ -8,6 +8,7 @@ import {
     formatStreamConnections,
     getFrameRateTone,
     getHealthTone,
+    getCameraReadinessState,
     getCameraReadinessPresentation,
     getStreamMascotPresentation,
     getStreamControlPresentation,
@@ -103,6 +104,14 @@ test("camera readiness has distinct copy and tones for checking, ready, starting
         tone: "warning",
         guidance: "Could not check camera status. Check your connection to GoGoMio.",
     });
+});
+
+test("camera readiness treats non-success responses as unavailable regardless of the body status", () => {
+    assert.equal(getCameraReadinessState(false, "initializing"), "unavailable");
+    assert.equal(getCameraReadinessState(false, "ready"), "unavailable");
+    assert.equal(getCameraReadinessState(true, "initializing"), "initializing");
+    assert.equal(getCameraReadinessState(true, "ready"), "ready");
+    assert.equal(getCameraReadinessState(true, "unexpected"), "unavailable");
 });
 
 test("only the action relevant to the current stream state is shown", () => {

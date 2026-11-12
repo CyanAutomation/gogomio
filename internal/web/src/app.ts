@@ -5,6 +5,7 @@ import {
     formatFrameRate,
     formatResolution,
     formatStreamConnections,
+    getCameraReadinessState,
     getCameraReadinessPresentation,
     getFrameRateTone,
     getHealthTone,
@@ -325,14 +326,10 @@ class StreamController {
         if (this.cameraReadinessPromise) return this.cameraReadinessPromise;
         this.cameraReadinessPromise = requestCameraReadiness()
             .then(async response => {
-                const data = await response.json() as CameraReadinessResponse;
-                if (response.ok && data.status === "ready") {
-                    this.updateCameraReadiness("ready");
-                } else if (data.status === "initializing") {
-                    this.updateCameraReadiness("initializing");
-                } else {
-                    this.updateCameraReadiness("unavailable");
-                }
+                const data = response.ok
+                    ? await response.json() as CameraReadinessResponse
+                    : undefined;
+                this.updateCameraReadiness(getCameraReadinessState(response.ok, data?.status));
             })
             .catch(() => this.updateCameraReadiness("unknown"))
             .finally(() => {

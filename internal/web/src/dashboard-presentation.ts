@@ -96,6 +96,15 @@ export function getCameraReadinessPresentation(state: CameraReadinessState): Cam
     return presentations[state];
 }
 
+export function getCameraReadinessState(
+    responseOk: boolean,
+    status: string | undefined,
+): "ready" | "initializing" | "unavailable" {
+    if (!responseOk) return "unavailable";
+    if (status === "ready" || status === "initializing") return status;
+    return "unavailable";
+}
+
 export function getStreamControlPresentation(state: StreamState): StreamControlPresentation {
     const active = state === "connecting" || state === "live" || state === "reconnecting";
     return {

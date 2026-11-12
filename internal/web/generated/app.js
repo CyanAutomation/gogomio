@@ -90,6 +90,11 @@
     };
     return presentations[state];
   }
+  function getCameraReadinessState(responseOk, status) {
+    if (!responseOk) return "unavailable";
+    if (status === "ready" || status === "initializing") return status;
+    return "unavailable";
+  }
   function getStreamControlPresentation(state) {
     const active = state === "connecting" || state === "live" || state === "reconnecting";
     return {
@@ -459,14 +464,8 @@
     loadCameraReadiness() {
       if (this.cameraReadinessPromise) return this.cameraReadinessPromise;
       this.cameraReadinessPromise = requestCameraReadiness().then(async (response) => {
-        const data = await response.json();
-        if (response.ok && data.status === "ready") {
-          this.updateCameraReadiness("ready");
-        } else if (data.status === "initializing") {
-          this.updateCameraReadiness("initializing");
-        } else {
-          this.updateCameraReadiness("unavailable");
-        }
+        const data = response.ok ? await response.json() : void 0;
+        this.updateCameraReadiness(getCameraReadinessState(response.ok, data?.status));
       }).catch(() => this.updateCameraReadiness("unknown")).finally(() => {
         this.cameraReadinessPromise = null;
       });
