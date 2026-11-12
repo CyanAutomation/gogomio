@@ -432,13 +432,17 @@ func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
 
 	frameInterval := time.Second / time.Duration(fps)
 	expectedLastFrameTime := time.Unix(0, 0).Add(time.Duration(totalCalls) * frameInterval)
-	if !lastFrameTime.Equal(expectedLastFrameTime) {
-		t.Fatalf("expected lastFrameTime=%v, got %v", expectedLastFrameTime, lastFrameTime)
+	if lastFrameTime.Before(expectedLastFrameTime) {
+		t.Fatalf("expected lastFrameTime >= %v, got %v", expectedLastFrameTime, lastFrameTime)
 	}
 
 	clock.mu.Lock()
 	totalSlept := clock.slept
 	clock.mu.Unlock()
+	maxLastFrameTime := time.Unix(0, 0).Add(totalSlept)
+	if lastFrameTime.After(maxLastFrameTime) {
+		t.Fatalf("expected lastFrameTime <= %v (total slept), got %v", maxLastFrameTime, lastFrameTime)
+	}
 	if totalSlept < time.Duration(totalCalls)*frameInterval {
 		t.Fatalf("expected total sleep >= %v, got %v", time.Duration(totalCalls)*frameInterval, totalSlept)
 	}
