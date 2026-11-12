@@ -1,4 +1,7 @@
-export type StreamState = "ready" | "connecting" | "live" | "reconnecting" | "unavailable";
+import { MIO_SPRITES } from "./mio-assets.generated";
+
+export type StreamState = "ready" | "connecting" | "live" | "reconnecting" | "unavailable" | "capacity";
+export type MioPose = "idle" | "sleeping" | "curious" | "concerned" | "happy" | "worried" | "angry" | "looking";
 export type StatusTone = "neutral" | "warning" | "success" | "error";
 export type MetricTone = "neutral" | "success" | "warning" | "error";
 export type CameraReadinessState = "checking" | "ready" | "initializing" | "unavailable" | "unknown";
@@ -11,7 +14,7 @@ export interface StreamStatusPresentation {
 export interface StreamMascotPresentation {
     src: string;
     alt: string;
-    animationClass: "mio-blink" | "mio-pulse" | "mio-float";
+    animationClass: "mio-pulse" | "mio-float";
 }
 
 export interface StreamControlPresentation {
@@ -28,48 +31,128 @@ export interface CameraReadinessPresentation {
     guidance: string;
 }
 
+export const MIO_SLEEP_AFTER_MS = 2 * 60 * 1000;
+
 const streamStatuses: Record<StreamState, StreamStatusPresentation> = {
     ready: { label: "Ready", tone: "neutral" },
     connecting: { label: "Connecting…", tone: "warning" },
     live: { label: "Live", tone: "success" },
     reconnecting: { label: "Reconnecting…", tone: "warning" },
-    unavailable: { label: "Stream unavailable", tone: "error" },
+    unavailable: { label: "Unavailable", tone: "error" },
+    capacity: { label: "At capacity", tone: "warning" },
 };
 
 export function getStreamStatusPresentation(state: StreamState): StreamStatusPresentation {
     return streamStatuses[state];
 }
 
-const streamMascots: Record<StreamState, StreamMascotPresentation> = {
-    ready: {
-        src: "/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b",
-        alt: "MIO is ready",
-        animationClass: "mio-float",
-    },
-    connecting: {
-        src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
-        alt: "MIO is curious",
-        animationClass: "mio-pulse",
-    },
-    live: {
-        src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
-        alt: "MIO is happily watching",
-        animationClass: "mio-float",
-    },
-    reconnecting: {
-        src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
-        alt: "MIO is concerned",
-        animationClass: "mio-pulse",
-    },
-    unavailable: {
-        src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
-        alt: "MIO is worried",
-        animationClass: "mio-float",
-    },
+export function getStreamDescription(state: StreamState, retryCount = 1, maxRetries = 3): string {
+    switch (state) {
+        case "ready": return "MIO's ready when you are.";
+        case "connecting": return "MIO is warming things up…";
+        case "live": return "MIO is happily watching your stream.";
+        case "reconnecting": return `MIO is reconnecting (${Math.max(1, retryCount)} of ${maxRetries})…`;
+        case "unavailable": return "MIO couldn't reconnect. Check the camera connection, then try again.";
+        case "capacity": return "MIO's at capacity right now. Try again when another stream is free.";
+    }
+}
+
+const mioPoses: Record<MioPose, StreamMascotPresentation> = {
+    idle: { src: MIO_SPRITES.idle, alt: "MIO is ready", animationClass: "mio-float" },
+    sleeping: { src: MIO_SPRITES.sleeping, alt: "MIO is sleeping", animationClass: "mio-float" },
+    curious: { src: MIO_SPRITES.curious, alt: "MIO is curious", animationClass: "mio-pulse" },
+    concerned: { src: MIO_SPRITES.concerned, alt: "MIO is concerned", animationClass: "mio-pulse" },
+    happy: { src: MIO_SPRITES.happy, alt: "MIO is happily watching", animationClass: "mio-float" },
+    worried: { src: MIO_SPRITES.worried, alt: "MIO is worried", animationClass: "mio-float" },
+    angry: { src: MIO_SPRITES.angry, alt: "MIO is looking out for stream capacity", animationClass: "mio-float" },
+    looking: { src: MIO_SPRITES.looking, alt: "MIO is scanning", animationClass: "mio-float" },
 };
 
+const streamPoses: Record<StreamState, MioPose> = {
+    ready: "idle",
+    connecting: "curious",
+    live: "happy",
+    reconnecting: "concerned",
+    unavailable: "worried",
+    capacity: "angry",
+};
+
+export function getMioPosePresentation(pose: MioPose): StreamMascotPresentation {
+    return mioPoses[pose];
+}
+
 export function getStreamMascotPresentation(state: StreamState): StreamMascotPresentation {
-    return streamMascots[state];
+    return getMioPosePresentation(streamPoses[state]);
+}
+
+export function getCompanionPoseForFrameRateTone(tone: MetricTone): "happy" | "concerned" | "worried" {
+    if (tone === "success") return "happy";
+    if (tone === "error") return "worried";
+    return "concerned";
+}
+
+export class ConsecutivePollHysteresis<T> {
+    private candidate: T | null = null;
+    private consecutiveCount = 0;
+    private currentValue: T;
+
+    constructor(initialValue: T, private readonly minimumConsecutive = 2) {
+        if (!Number.isInteger(minimumConsecutive) || minimumConsecutive < 1) {
+            throw new RangeError("minimumConsecutive must be a positive integer");
+        }
+        this.currentValue = initialValue;
+    }
+
+    get value(): T {
+        return this.currentValue;
+    }
+
+    update(nextValue: T): T {
+        if (nextValue === this.currentValue) {
+            this.candidate = null;
+            this.consecutiveCount = 0;
+            return this.currentValue;
+        }
+
+        if (nextValue === this.candidate) {
+            this.consecutiveCount += 1;
+        } else {
+            this.candidate = nextValue;
+            this.consecutiveCount = 1;
+        }
+
+        if (this.consecutiveCount >= this.minimumConsecutive) {
+            this.currentValue = nextValue;
+            this.candidate = null;
+            this.consecutiveCount = 0;
+        }
+
+        return this.currentValue;
+    }
+
+    reset(value: T): void {
+        this.currentValue = value;
+        this.candidate = null;
+        this.consecutiveCount = 0;
+    }
+}
+
+export function isMioSleepDue(idleSince: number, now: number): boolean {
+    return Number.isFinite(idleSince) && Number.isFinite(now) && now - idleSince >= MIO_SLEEP_AFTER_MS;
+}
+
+export function isCapacitySignal(
+    activeConnections: number,
+    maximumConnections: number,
+    isStreaming: boolean,
+    responseStatus = 0,
+): boolean {
+    if (responseStatus === 429) return true;
+    return !isStreaming
+        && Number.isFinite(activeConnections)
+        && Number.isFinite(maximumConnections)
+        && maximumConnections > 0
+        && activeConnections >= maximumConnections;
 }
 
 export function getCameraReadinessPresentation(state: CameraReadinessState): CameraReadinessPresentation {
@@ -109,7 +192,7 @@ export function getStreamControlPresentation(state: StreamState): StreamControlP
     const active = state === "connecting" || state === "live" || state === "reconnecting";
     return {
         startHidden: active,
-        startLabel: state === "unavailable" ? "Retry stream" : "Start stream",
+        startLabel: state === "unavailable" ? "Retry stream" : state === "capacity" ? "Try again" : "Start stream",
         stopHidden: !active,
         stopLabel: state === "connecting" ? "Cancel connection" : "Stop stream",
         stopPrimary: state === "live" || state === "reconnecting",

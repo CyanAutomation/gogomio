@@ -1,18 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { MIO_SPRITES } from "./mio-assets.generated";
 import {
+    ConsecutivePollHysteresis,
+    MIO_SLEEP_AFTER_MS,
     formatFrameAge,
     formatFrameRate,
     formatResolution,
     formatStreamConnections,
     getFrameRateTone,
+    getCompanionPoseForFrameRateTone,
     getHealthTone,
     getCameraReadinessState,
     getCameraReadinessPresentation,
     getStreamMascotPresentation,
     getStreamControlPresentation,
     getStreamStatusPresentation,
+    getStreamDescription,
+    isCapacitySignal,
+    isMioSleepDue,
 } from "./dashboard-presentation";
 
 test("frame rate shows the measured rate with a unit and handles missing data", () => {
@@ -47,35 +54,46 @@ test("stream states have consistent labels and semantic tones", () => {
     assert.deepEqual(getStreamStatusPresentation("connecting"), { label: "Connecting…", tone: "warning" });
     assert.deepEqual(getStreamStatusPresentation("live"), { label: "Live", tone: "success" });
     assert.deepEqual(getStreamStatusPresentation("reconnecting"), { label: "Reconnecting…", tone: "warning" });
-    assert.deepEqual(getStreamStatusPresentation("unavailable"), { label: "Stream unavailable", tone: "error" });
+    assert.deepEqual(getStreamStatusPresentation("unavailable"), { label: "Unavailable", tone: "error" });
+    assert.deepEqual(getStreamStatusPresentation("capacity"), { label: "At capacity", tone: "warning" });
 });
 
 test("MIO uses a friendly pose for every stream state", () => {
     assert.deepEqual(getStreamMascotPresentation("ready"), {
-        src: "/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b",
+        src: MIO_SPRITES.idle,
         alt: "MIO is ready",
         animationClass: "mio-float",
     });
     assert.deepEqual(getStreamMascotPresentation("connecting"), {
-        src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
+        src: MIO_SPRITES.curious,
         alt: "MIO is curious",
         animationClass: "mio-pulse",
     });
     assert.deepEqual(getStreamMascotPresentation("live"), {
-        src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
+        src: MIO_SPRITES.happy,
         alt: "MIO is happily watching",
         animationClass: "mio-float",
     });
     assert.deepEqual(getStreamMascotPresentation("reconnecting"), {
-        src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
+        src: MIO_SPRITES.concerned,
         alt: "MIO is concerned",
         animationClass: "mio-pulse",
     });
     assert.deepEqual(getStreamMascotPresentation("unavailable"), {
-        src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
+        src: MIO_SPRITES.worried,
         alt: "MIO is worried",
         animationClass: "mio-float",
     });
+    assert.equal(getStreamMascotPresentation("capacity").src.split("?")[0], "/static/mio/mio_pose_angry.png");
+});
+
+test("stream descriptions follow the current state in MIO's voice", () => {
+    assert.equal(getStreamDescription("ready"), "MIO's ready when you are.");
+    assert.equal(getStreamDescription("connecting"), "MIO is warming things up…");
+    assert.equal(getStreamDescription("live"), "MIO is happily watching your stream.");
+    assert.equal(getStreamDescription("reconnecting"), "MIO is reconnecting (1 of 3)…");
+    assert.equal(getStreamDescription("unavailable"), "MIO couldn't reconnect. Check the camera connection, then try again.");
+    assert.equal(getStreamDescription("capacity"), "MIO's at capacity right now. Try again when another stream is free.");
 });
 
 test("camera readiness has distinct copy and tones for checking, ready, starting, and unavailable", () => {
@@ -150,6 +168,13 @@ test("only the action relevant to the current stream state is shown", () => {
         stopLabel: "Stop stream",
         stopPrimary: false,
     });
+    assert.deepEqual(getStreamControlPresentation("capacity"), {
+        startHidden: false,
+        startLabel: "Try again",
+        stopHidden: true,
+        stopLabel: "Stop stream",
+        stopPrimary: false,
+    });
 });
 
 test("frame rate color is neutral while idle and compares live rate to target", () => {
@@ -159,6 +184,38 @@ test("frame rate color is neutral while idle and compares live rate to target", 
     assert.equal(getFrameRateTone(5, 24, true), "error");
     assert.equal(getFrameRateTone(10, 0, true), "neutral");
     assert.equal(getFrameRateTone(10, Number.NaN, true), "neutral");
+});
+
+test("live frame-rate tones map to kind companion poses", () => {
+    assert.equal(getCompanionPoseForFrameRateTone("success"), "happy");
+    assert.equal(getCompanionPoseForFrameRateTone("warning"), "concerned");
+    assert.equal(getCompanionPoseForFrameRateTone("error"), "worried");
+});
+
+test("pose changes require two consecutive polls and ignore a returned candidate", () => {
+    const hysteresis = new ConsecutivePollHysteresis("happy", 2);
+
+    assert.equal(hysteresis.update("concerned"), "happy");
+    assert.equal(hysteresis.update("happy"), "happy");
+    assert.equal(hysteresis.update("concerned"), "happy");
+    assert.equal(hysteresis.update("concerned"), "concerned");
+    assert.equal(hysteresis.update("worried"), "concerned");
+    assert.equal(hysteresis.update("worried"), "worried");
+});
+
+test("MIO sleeps only after the named idle timeout", () => {
+    assert.equal(MIO_SLEEP_AFTER_MS, 120_000);
+    assert.equal(isMioSleepDue(10_000, 10_000 + MIO_SLEEP_AFTER_MS - 1), false);
+    assert.equal(isMioSleepDue(10_000, 10_000 + MIO_SLEEP_AFTER_MS), true);
+    assert.equal(isMioSleepDue(Number.NaN, 200_000), false);
+});
+
+test("capacity comes from a full server limit while idle or an HTTP 429", () => {
+    assert.equal(isCapacitySignal(2, 2, false), true);
+    assert.equal(isCapacitySignal(1, 2, false), false);
+    assert.equal(isCapacitySignal(2, 2, true), false);
+    assert.equal(isCapacitySignal(0, 2, false, 429), true);
+    assert.equal(isCapacitySignal(0, 2, false, 503), false);
 });
 
 test("health presentation distinguishes idle, stale, failure, and healthy states", () => {

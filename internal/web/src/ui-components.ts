@@ -5,7 +5,7 @@ export type IconName = "alert" | "camera" | "chart" | "clock" | "close" | "grid"
 export type MetricRowIcon = Exclude<IconName, "close" | "play" | "settings" | "stop">;
 export type MetricRowTone = "neutral" | "error";
 export type NoticeTone = Exclude<BadgeTone, "neutral">;
-export type MascotAvatarSize = "brand" | "status" | "footer" | "state";
+export type MascotAvatarSize = "brand" | "footer" | "placeholder" | "viewer" | "fps";
 
 export interface StatusBadgeView {
     root: Pick<HTMLElement, "className">;

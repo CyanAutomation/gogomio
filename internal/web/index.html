@@ -4,7 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoGoMio | Camera dashboard</title>
+    <link rel="preload" href="/static/fonts/quicksand-latin-wght-normal.woff2?v=2add7d60b1cd2ab84c9967e23d5ec08eb3fc9635c46855b17d59404dec6b410e" as="font" type="font/woff2" crossorigin>
     <style>
+        @font-face {
+            font-family: "Quicksand";
+            src: url("/static/fonts/quicksand-latin-wght-normal.woff2?v=2add7d60b1cd2ab84c9967e23d5ec08eb3fc9635c46855b17d59404dec6b410e") format("woff2");
+            font-style: normal;
+            font-weight: 300 700;
+            font-display: swap;
+        }
+
         /* ====== DESIGN SYSTEM ====== */
         :root {
             color-scheme: light;
@@ -14,7 +23,10 @@
             --color-brand-secondary: #3C7DC4;
             --color-brand-ink: #0F1A2B;
             --color-action-background: #5FA8D3;
-            --color-action-hover-background: #A7D3E8;
+            --color-action-hover-background: #3778BB;
+            --color-action-hover-foreground: #ffffff;
+            --color-action-active-background: #2A5F8A;
+            --color-action-active-foreground: #ffffff;
             --color-action-foreground: #0F1A2B;
             --color-primary: #2A5F8A;
             --color-primary-dark: #214A6B;
@@ -33,6 +45,8 @@
             --color-warning: #f59e0b;
             --color-warning-light: #fef3c7;
             --color-warning-dark: #78350f;
+            --color-decoration: #e786a1;
+            --color-card-edge: #9bcbe2;
 
             /* Info Message Colors */
             --color-info: #5FA8D3;
@@ -61,7 +75,7 @@
             --spacing-3xl: 32px;
             
             /* Typography */
-            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --font-family: ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Quicksand", system-ui, sans-serif;
             --font-size-xs: 12px;
             --font-size-sm: 14px;
             --font-size-base: 16px;
@@ -71,16 +85,16 @@
             --font-size-3xl: 32px;
             
             /* Shadows */
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
-            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-            --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);
-            --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.15);
+            --shadow-sm: 0 2px 6px rgba(42, 95, 138, 0.08);
+            --shadow-md: 0 6px 16px rgba(42, 95, 138, 0.1);
+            --shadow-lg: 0 12px 26px rgba(42, 95, 138, 0.14);
+            --shadow-xl: 0 20px 36px rgba(42, 95, 138, 0.15);
+            --shadow-2xl: 0 28px 52px rgba(42, 95, 138, 0.18);
             
             /* Border Radius */
-            --radius-sm: 8px;
-            --radius-md: 12px;
-            --radius-lg: 18px;
+            --radius-sm: 12px;
+            --radius-md: 18px;
+            --radius-lg: 26px;
             
             /* Transitions */
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -95,7 +109,10 @@
                 --color-brand-secondary: #8ccbeb;
                 --color-brand-ink: #102b3b;
                 --color-action-background: #A7D3E8;
-                --color-action-hover-background: #D1EDFC;
+                --color-action-hover-background: #6DAED0;
+                --color-action-hover-foreground: #102b3b;
+                --color-action-active-background: #5FA8D3;
+                --color-action-active-foreground: #102b3b;
                 --color-action-foreground: #102b3b;
                 --color-primary: #8ccbeb;
                 --color-primary-dark: #6daed0;
@@ -114,6 +131,8 @@
                 --color-warning: #e6b75c;
                 --color-warning-light: #3d321b;
                 --color-warning-dark: #ffe2a6;
+                --color-decoration: #ffb7cc;
+                --color-card-edge: #416c84;
                 --color-info: #8ccbeb;
                 --color-info-light: #203b4b;
                 --color-info-dark: #d1edfc;
@@ -125,11 +144,11 @@
                 --color-surface: #1d3748;
                 --color-surface-hover: #26465a;
                 --color-focus-ring: rgba(141, 204, 235, 0.6);
-                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-                --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.24);
-                --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.3);
-                --shadow-xl: 0 20px 32px rgba(0, 0, 0, 0.32);
-                --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.38);
+                --shadow-sm: 0 2px 6px rgba(140, 203, 235, 0.08);
+                --shadow-md: 0 6px 16px rgba(140, 203, 235, 0.1);
+                --shadow-lg: 0 12px 26px rgba(140, 203, 235, 0.12);
+                --shadow-xl: 0 20px 36px rgba(140, 203, 235, 0.14);
+                --shadow-2xl: 0 28px 52px rgba(140, 203, 235, 0.16);
             }
         }
 
@@ -168,7 +187,6 @@
             position: relative;
             overflow: hidden;
             flex-shrink: 0;
-            border-bottom: 1px solid var(--color-primary-light);
             background: linear-gradient(112deg, var(--color-brand-accent) 0%, var(--color-primary-light) 100%);
             color: var(--color-brand-ink);
         }
@@ -177,13 +195,27 @@
             content: "";
             position: absolute;
             inset: 0 0 0 auto;
-            width: min(36vw, 360px);
-            opacity: 0.44;
+            width: min(50vw, 640px);
+            height: 100%;
+            opacity: 0.58;
             background-image:
-                radial-gradient(circle, rgba(255, 255, 255, 0.8) 0 4px, transparent 5px),
-                radial-gradient(circle, rgba(255, 255, 255, 0.65) 0 7px, transparent 8px);
-            background-size: 48px 38px, 82px 64px;
-            background-position: 5px 5px, 30px 18px;
+                radial-gradient(circle, rgba(255, 255, 255, 0.9) 0 4px, transparent 5px),
+                radial-gradient(circle, rgba(255, 255, 255, 0.72) 0 7px, transparent 8px),
+                radial-gradient(circle, var(--color-decoration) 0 3px, transparent 4px);
+            background-size: 48px 38px, 82px 64px, 116px 78px;
+            background-position: 5px 5px, 30px 18px, 64px 36px;
+            pointer-events: none;
+        }
+
+        .header-wave {
+            position: absolute;
+            z-index: 2;
+            right: 0;
+            bottom: -1px;
+            left: 0;
+            width: 100%;
+            height: 14px;
+            color: var(--color-bg);
             pointer-events: none;
         }
 
@@ -200,8 +232,8 @@
         }
 
         .brand-lockup {
-            min-height: 72px;
-            padding-block: var(--spacing-sm);
+            min-height: 66px;
+            padding-block: var(--spacing-xs) var(--spacing-sm);
         }
 
         .mio-avatar {
@@ -235,26 +267,8 @@
             font-weight: 550;
         }
 
-        .page-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: var(--spacing-2xl);
-            margin-bottom: var(--spacing-2xl);
-        }
-
-        .page-header__title {
+        .brand-name {
             margin: 0;
-            color: var(--color-text);
-            font-size: var(--font-size-3xl);
-            font-weight: 700;
-            letter-spacing: -0.02em;
-        }
-
-        .page-header__description {
-            margin-top: var(--spacing-xs);
-            color: var(--color-text-secondary);
-            font-size: var(--font-size-sm);
         }
 
         .section-heading {
@@ -345,16 +359,27 @@
             display: grid;
             grid-template-columns: 1fr;
             gap: var(--spacing-2xl);
-            margin-bottom: var(--spacing-3xl);
+            margin-top: var(--spacing-xl);
+            margin-bottom: var(--spacing-xl);
         }
 
         .main-grid > * {
             min-width: 0;
         }
 
-        @media (min-width: 1280px) {
+        @media (min-width: 1024px) {
             .main-grid {
-                grid-template-columns: 2.5fr 1fr;
+                grid-template-columns: minmax(0, 2.3fr) minmax(280px, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) and (max-width: 1279px) {
+            .controls-section .section-heading {
+                flex-wrap: wrap;
+            }
+
+            .controls-section .section-heading > .ui-badge {
+                margin-left: auto;
             }
         }
 
@@ -367,7 +392,7 @@
         }
 
         .card {
-            border-top: 4px solid var(--color-brand-accent);
+            border-top: 3px solid var(--color-card-edge);
             padding: var(--spacing-2xl);
             display: flex;
             flex-direction: column;
@@ -411,11 +436,75 @@
         }
 
         .stream-placeholder {
+            position: relative;
+            z-index: 1;
+            width: 100%;
             padding: var(--spacing-lg);
         }
 
         .stream-placeholder__pose {
+            position: relative;
+            width: clamp(120px, 18vw, 200px);
+            height: clamp(120px, 18vw, 200px);
+            margin-inline: auto;
             margin-bottom: var(--spacing-lg);
+        }
+
+        .stream-placeholder__bubbles {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .stream-placeholder__bubbles span {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.48);
+            border-radius: 50%;
+            animation: bubbleFloat 8s ease-in-out infinite;
+        }
+
+        .stream-placeholder__bubbles span:nth-child(1) {
+            top: 20%;
+            left: 2%;
+            width: 16px;
+            height: 16px;
+        }
+
+        .stream-placeholder__bubbles span:nth-child(2) {
+            top: 48%;
+            right: 0;
+            animation-delay: -2.8s;
+        }
+
+        .stream-placeholder__bubbles span:nth-child(3) {
+            bottom: 3%;
+            left: 16%;
+            width: 9px;
+            height: 9px;
+            animation-delay: -5s;
+        }
+
+        .mio-avatar--placeholder {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 10px 14px rgba(6, 28, 46, 0.24));
+        }
+
+        .stream-sleep-z {
+            position: absolute;
+            z-index: 2;
+            top: 5%;
+            right: -5%;
+            color: var(--color-decoration);
+            font-size: var(--font-size-xl);
+            font-weight: 800;
+            text-shadow: 0 1px 6px rgba(6, 28, 46, 0.28);
+            animation: mioFloat 3.2s ease-in-out infinite;
         }
 
         .stream-placeholder__text {
@@ -431,12 +520,37 @@
             font-size: var(--font-size-sm);
         }
 
-        .stream-spinner {
-            display: none;
-        }
-
         .is-hidden {
             display: none !important;
+        }
+
+        #stream-companion {
+            position: absolute;
+            z-index: 3;
+            right: var(--spacing-md);
+            bottom: var(--spacing-md);
+            width: 68px;
+            height: 68px;
+            object-fit: contain;
+            pointer-events: none;
+            filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.32));
+        }
+
+        .stream-live-sparkle {
+            position: absolute;
+            z-index: 2;
+            top: 14%;
+            right: 18%;
+            color: var(--color-decoration);
+            font-size: clamp(28px, 5vw, 52px);
+            line-height: 1;
+            opacity: 0;
+            pointer-events: none;
+            text-shadow: 0 2px 10px rgba(6, 28, 46, 0.35);
+        }
+
+        .stream-live-sparkle.is-sparkling {
+            animation: liveSparkle 760ms ease-out both;
         }
 
         .feed-mode-badge {
@@ -484,137 +598,7 @@
             min-width: 0;
         }
 
-        /* ====== FORM CONTROLS ====== */
-        .form-group {
-            margin-bottom: var(--spacing-xl);
-        }
-
-        label {
-            display: block;
-            margin-bottom: var(--spacing-sm);
-            font-weight: 600;
-            color: var(--color-text);
-            font-size: var(--font-size-sm);
-            text-transform: none;
-            letter-spacing: normal;
-        }
-
-        .form-group > div:first-child {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--spacing-sm);
-        }
-
-        .form-group > div:first-child label {
-            margin-bottom: 0;
-        }
-
-        input[type="text"],
-        input[type="number"],
-        input[type="range"],
-        input[type="color"] {
-            width: 100%;
-            padding: var(--spacing-md);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-base);
-            transition: all var(--transition-fast);
-            font-family: var(--font-family);
-            background: var(--color-surface);
-        }
-
-        input[type="text"],
-        input[type="number"],
-        input[type="color"] {
-            background: var(--color-bg);
-        }
-
-        input[type="text"]:hover,
-        input[type="number"]:hover,
-        input[type="range"]:hover {
-            border-color: var(--color-primary-light);
-        }
-
-        input[type="text"]:focus,
-        input[type="number"]:focus,
-        input[type="color"]:focus {
-            outline: none;
-            border-color: var(--color-primary);
-            box-shadow: 0 0 0 3px rgba(95, 168, 211, 0.15), inset 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-
-        input[type="range"] {
-            padding: 0;
-            height: 8px;
-            cursor: pointer;
-            appearance: none;
-            background: linear-gradient(to right, #e2e8f0 0%, #e2e8f0 100%);
-            border: 1px solid var(--color-border);
-            margin-top: var(--spacing-md);
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: var(--color-primary);
-            cursor: pointer;
-            box-shadow: var(--shadow-md);
-            transition: all var(--transition-fast);
-            border: 2px solid white;
-        }
-
-        input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.15);
-            box-shadow: 0 4px 12px rgba(95, 168, 211, 0.4);
-        }
-
-        input[type="range"]::-webkit-slider-thumb:active {
-            transform: scale(1.1);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: var(--color-primary);
-            cursor: pointer;
-            box-shadow: var(--shadow-md);
-            border: 2px solid white;
-            transition: all var(--transition-fast);
-        }
-
-        input[type="range"]::-moz-range-thumb:hover {
-            transform: scale(1.15);
-            box-shadow: 0 4px 12px rgba(95, 168, 211, 0.4);
-        }
-
-        input[type="range"]::-moz-range-track {
-            background: transparent;
-            border: none;
-        }
-
-        .range-value {
-            display: inline-block;
-            background: var(--color-primary);
-            color: white;
-            padding: var(--spacing-xs) var(--spacing-md);
-            border-radius: var(--radius-sm);
-            font-size: var(--font-size-xs);
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
-        }
-
         /* ====== BUTTONS ====== */
-        .button-group {
-            display: flex;
-            gap: var(--spacing-md);
-            margin: var(--spacing-xl) 0;
-        }
-
         .button {
             min-height: 44px;
             padding: var(--spacing-md) var(--spacing-xl);
@@ -623,7 +607,7 @@
             font-size: var(--font-size-base);
             font-weight: 600;
             cursor: pointer;
-            transition: all var(--transition-base);
+            transition: transform var(--transition-base), opacity var(--transition-base);
             font-family: var(--font-family);
             display: inline-flex;
             align-items: center;
@@ -640,13 +624,14 @@
 
         .button--primary:hover:not(:disabled) {
             background: var(--color-action-hover-background);
+            color: var(--color-action-hover-foreground);
             transform: translateY(-2px) scale(1.015);
-            box-shadow: 0 5px 14px rgba(42, 95, 138, 0.24);
         }
 
         .button--primary:active:not(:disabled) {
+            background: var(--color-action-active-background);
+            color: var(--color-action-active-foreground);
             transform: translateY(0);
-            box-shadow: var(--shadow-sm);
         }
 
         .button--secondary {
@@ -710,13 +695,16 @@
             border-radius: var(--radius-lg);
             text-align: center;
             border: 1px solid var(--color-metric-border);
-            transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+            transition: transform var(--transition-base), opacity var(--transition-base);
         }
 
         .metric-card:hover {
             transform: translateY(-2px);
             border-color: var(--color-brand-accent);
-            box-shadow: var(--shadow-sm);
+        }
+
+        .metric-card--wide {
+            grid-column: 1 / -1;
         }
 
         .metric-card__label {
@@ -767,6 +755,21 @@
             font-size: var(--font-size-2xl);
         }
 
+        .overview-highlight__idle {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            min-height: 56px;
+            color: var(--color-text-accent);
+            font-weight: 650;
+        }
+
+        .mio-avatar--fps {
+            width: 52px;
+            height: 52px;
+            flex: 0 0 auto;
+        }
+
         .overview-details,
         .diagnostics-details {
             border-top: 1px solid var(--color-border);
@@ -788,7 +791,6 @@
             font-size: var(--font-size-sm);
             font-weight: 600;
             list-style: none;
-            transition: color var(--transition-fast);
         }
 
         .disclosure-summary:hover {
@@ -804,7 +806,6 @@
             color: var(--color-text-secondary);
             font-size: var(--font-size-lg);
             line-height: 1;
-            transition: transform var(--transition-fast);
         }
 
         details[open] > .disclosure-summary::after {
@@ -854,17 +855,14 @@
             color: var(--color-info-dark);
         }
 
-        /* The reserved tray keeps notifications from covering dashboard content or shifting it. */
-        .snackbar-region {
-            min-height: 88px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: var(--spacing-sm) 0;
-        }
-
         .snackbar {
-            width: min(100%, 560px);
+            position: absolute;
+            z-index: 4;
+            right: var(--spacing-md);
+            bottom: var(--spacing-md);
+            left: var(--spacing-md);
+            width: min(calc(100% - 2 * var(--spacing-md)), 560px);
+            margin-inline: auto;
             display: flex;
             align-items: center;
             gap: var(--spacing-lg);
@@ -873,7 +871,7 @@
             opacity: 0;
             visibility: hidden;
             transform: translateY(14px);
-            transition: opacity var(--transition-base), transform var(--transition-base), visibility 0s linear var(--transition-base);
+            transition: opacity var(--transition-base), transform var(--transition-base);
         }
 
         .snackbar.is-visible {
@@ -913,25 +911,6 @@
             outline-offset: 2px;
         }
 
-        .message {
-            margin-bottom: var(--spacing-lg);
-            display: none;
-            animation: slideDown var(--transition-fast) ease;
-            font-weight: 500;
-            font-size: var(--font-size-sm);
-            line-height: 1.6;
-        }
-
-        .message.show {
-            display: block;
-            animation: slideDown var(--transition-base) ease;
-        }
-
-        @keyframes slideDown {
-            from { opacity: 0; transform: translateY(-15px); max-height: 0; }
-            to { opacity: 1; transform: translateY(0); max-height: 500px; }
-        }
-
         /* ====== FOOTER ====== */
         .site-footer {
             text-align: center;
@@ -951,20 +930,10 @@
         .mio-avatar--footer {
             width: 36px;
             height: 36px;
+            animation: none;
         }
 
         /* ====== MIO MASCOT ====== */
-        .mio-avatar--state {
-            width: 120px;
-            height: 120px;
-        }
-
-        .mio-avatar--status {
-            width: 36px;
-            height: 36px;
-            margin: -3px 0;
-        }
-
         @keyframes mioFloat {
             0%, 100% { transform: translateY(0px); }
             50%       { transform: translateY(-4px); }
@@ -979,20 +948,20 @@
 
         .mio-pulse { animation: mioPulse 1.5s ease-in-out infinite; }
 
-        @keyframes mioBlink {
-            0%, 88%, 100% { opacity: 1; }
-            92%            { opacity: 0.1; }
+        @keyframes bubbleFloat {
+            0%, 100% { opacity: 0.35; transform: translateY(5px); }
+            50% { opacity: 0.82; transform: translateY(-9px); }
         }
 
-        .mio-blink { animation: mioFloat 3s ease-in-out infinite, mioBlink 5s 1s ease-in-out infinite; }
+        @keyframes liveSparkle {
+            0% { opacity: 0; transform: scale(0.45) rotate(-16deg); }
+            38% { opacity: 1; transform: scale(1) rotate(7deg); }
+            100% { opacity: 0; transform: scale(1.24) rotate(20deg); }
+        }
 
         @keyframes statusPulse {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.72; transform: scale(1.18); }
-        }
-
-        #stream-idle {
-            display: block;
         }
 
         /* ====== DIALOG COMPONENT ====== */
@@ -1157,12 +1126,8 @@
                 padding: var(--spacing-2xl);
             }
 
-            .page-header {
-                margin-bottom: var(--spacing-xl);
-            }
-
-            .page-header__title {
-                font-size: var(--font-size-2xl);
+            .brand-name {
+                font-size: var(--font-size-base);
             }
 
             .section-heading {
@@ -1180,9 +1145,14 @@
                 font-size: var(--font-size-lg);
             }
 
-            .mio-avatar--status {
-                width: 30px;
-                height: 30px;
+            .stream-placeholder__pose {
+                width: clamp(96px, 28vw, 144px);
+                height: clamp(96px, 28vw, 144px);
+            }
+
+            #stream-companion {
+                width: 44px;
+                height: 44px;
             }
 
             .stream-controls {
@@ -1232,10 +1202,6 @@
                 flex-wrap: wrap;
             }
 
-            .snackbar-region {
-                min-height: 80px;
-            }
-
             .snackbar {
                 gap: var(--spacing-sm);
                 padding: var(--spacing-md);
@@ -1270,7 +1236,7 @@
                 margin-bottom: var(--spacing-sm);
             }
 
-            .stream-placeholder__pose .mio-avatar--state {
+            .stream-placeholder__pose {
                 width: 88px;
                 height: 88px;
             }
@@ -1302,6 +1268,17 @@
                 animation-iteration-count: 1 !important;
                 transition-duration: 0.01ms !important;
             }
+
+            .stream-placeholder__bubbles,
+            #stream-live-sparkle {
+                display: none !important;
+            }
+
+            #stream-companion,
+            .stream-sleep-z {
+                animation: none !important;
+                transform: none !important;
+            }
         }
 
         @media (forced-colors: active) {
@@ -1325,6 +1302,14 @@
             .button:focus-visible,
             .disclosure-summary:focus-visible {
                 outline-color: Highlight;
+            }
+
+            .site-header::after,
+            .stream-placeholder__bubbles,
+            #stream-companion,
+            #stream-live-sparkle,
+            #stream-sleep-z {
+                display: none !important;
             }
         }
 
@@ -1362,22 +1347,18 @@
 
     <header class="site-header">
         <div class="container brand-lockup">
-            <img class="mio-avatar mio-avatar--brand mio-float" src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO mascot">
+            <img id="header-mio" class="mio-avatar mio-avatar--brand mio-float" data-mio-pose="idle" width="48" height="48" alt="MIO mascot">
             <div class="brand-copy">
-                <span class="brand-name">GoGoMio</span>
-                <span class="brand-tagline">Your camera stream, with MIO</span>
+                <h1 class="brand-name">GoGoMio</h1>
+                <p class="brand-tagline" id="page-description">MIO's ready when you are.</p>
             </div>
         </div>
+        <svg class="header-wave" aria-hidden="true" focusable="false" viewBox="0 0 1440 28" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M0 14c120 0 120 12 240 12s120-12 240-12 120 12 240 12 120-12 240-12 120 12 240 12 120-12 240-12v16H0z"/>
+        </svg>
     </header>
 
     <main class="container">
-        <header class="page-header">
-            <div>
-                <h1 class="page-header__title" aria-describedby="page-description">Camera</h1>
-                <p class="page-header__description" id="page-description">MIO is ready to help you keep an eye on things.</p>
-            </div>
-        </header>
-
         <div class="main-grid">
             <section class="card surface-panel video-section" aria-labelledby="stream-title">
                 <div class="section-heading">
@@ -1387,22 +1368,29 @@
                     </h2>
                 </div>
                 <div id="stream-container" class="stream-viewer">
-                    <img id="stream-img" class="stream-image is-hidden" alt="Live camera stream">
+                    <img id="stream-img" class="stream-image is-hidden" width="640" height="480" alt="Live camera stream">
                     <div id="stream-loading" class="stream-loading">
                         <div class="stream-placeholder">
-                            <div class="stream-placeholder__pose">
-                                <div id="stream-spinner" class="stream-spinner is-hidden">
-                                    <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f" alt="MIO is thinking" class="mio-avatar mio-avatar--state mio-pulse">
+                            <div class="stream-placeholder__pose" aria-hidden="true">
+                                <div class="stream-placeholder__bubbles" aria-hidden="true">
+                                    <span></span><span></span><span></span>
                                 </div>
-                                <div id="stream-idle">
-                                    <img id="stream-idle-image" src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO is ready" class="mio-avatar mio-avatar--state mio-float">
-                                </div>
+                                <img id="stream-placeholder-mio" class="mio-avatar mio-avatar--placeholder mio-float" data-mio-pose="idle" width="200" height="200" alt="" aria-hidden="true">
+                                <span id="stream-sleep-z" class="stream-sleep-z" hidden aria-hidden="true">z</span>
                             </div>
                             <p id="stream-placeholder-text" class="stream-placeholder__text">MIO's ready when you are.</p>
                             <p id="stream-placeholder-desc" class="stream-placeholder__description">Start the stream to see what's happening.</p>
                         </div>
                     </div>
+                    <img id="stream-companion" class="mio-avatar mio-avatar--viewer mio-float" data-mio-pose="happy" width="68" height="68" alt="" aria-hidden="true" hidden>
+                    <span id="stream-live-sparkle" class="stream-live-sparkle" aria-hidden="true">✦</span>
                     <span id="feed-mode-badge" class="feed-mode-badge" hidden>Simulated feed</span>
+                    <div id="snackbar" class="snackbar notice">
+                        <p id="snackbar-text" class="snackbar__text" role="status" aria-live="polite" aria-atomic="true"></p>
+                        <button type="button" id="snackbar-dismiss" class="snackbar__dismiss" aria-label="Dismiss notification">
+                            <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="stream-controls" role="group" aria-label="Stream controls">
                     <button type="button" class="button button--primary" id="start-stream">
@@ -1417,7 +1405,6 @@
                 <div class="stream-status" role="status" aria-live="polite">
                     <span>Stream</span>
                     <span class="ui-badge ui-badge--neutral" id="stream-status-badge">
-                        <img id="stream-status-mascot" class="mio-avatar mio-avatar--status mio-float" src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true">
                         <span class="ui-badge__dot" aria-hidden="true"></span>
                         <span class="ui-badge__label" id="status-text">Ready</span>
                     </span>
@@ -1439,7 +1426,11 @@
 
                 <div class="overview-highlight" role="group" aria-label="Current frame rate">
                     <div class="metric-card__label">Current frame rate</div>
-                    <div class="metric-card__value" id="stat-fps">--</div>
+                    <div class="overview-highlight__idle" id="stat-fps-idle">
+                        <img id="fps-idle-mio" class="mio-avatar mio-avatar--fps" data-mio-pose="sleeping" width="52" height="52" alt="" aria-hidden="true">
+                        <span>Start the stream to see fps</span>
+                    </div>
+                    <div class="metric-card__value" id="stat-fps" hidden></div>
                 </div>
 
                 <details class="overview-details" open>
@@ -1453,7 +1444,7 @@
                             <div class="metric-card__label">JPEG quality</div>
                             <div class="metric-card__value" id="stat-quality">--</div>
                         </div>
-                        <div class="metric-card">
+                        <div class="metric-card metric-card--wide">
                             <div class="metric-card__label">Active streams</div>
                             <div class="metric-card__value" id="stat-connections">--</div>
                         </div>
@@ -1467,19 +1458,11 @@
             </section>
         </div>
 
-        <div class="snackbar-region">
-            <div id="snackbar" class="snackbar notice">
-                <p id="snackbar-text" class="snackbar__text" role="status" aria-live="polite" aria-atomic="true"></p>
-                <button type="button" id="snackbar-dismiss" class="snackbar__dismiss" aria-label="Dismiss notification">
-                    <svg class="icon" aria-hidden="true"><use href="#icon-close"></use></svg>
-                </button>
-            </div>
-        </div>
     </main>
 
     <footer class="site-footer">
         <div class="container footer-content">
-            <img class="mio-avatar mio-avatar--footer" src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true">
+            <img id="footer-mio" class="mio-avatar mio-avatar--footer" data-mio-pose="idle" width="36" height="36" alt="" aria-hidden="true">
             <p>GoGoMio · Raspberry Pi camera streaming</p>
         </div>
     </footer>
@@ -1500,6 +1483,6 @@
         </div>
     </dialog>
 
-    <script src="/static/app.js?v=427ea72952e5fcca9fe40aa79897604301f8812372ca6e6b5969a6adc1d26e51"></script>
+    <script src="/static/app.js?v=20df5f09621da1099662947c0358d63dd8d8d3a8c977dee67dadeac3df0bce9f"></script>
 </body>
 </html>
