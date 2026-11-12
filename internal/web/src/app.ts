@@ -156,9 +156,9 @@ class StreamController {
         getElement<HTMLButtonElement>("snackbar-dismiss").addEventListener("click", () => this.snackbar.dismiss());
         this.poseByState = {
             idle: {
-                src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
-                alt: "MIO is resting",
-                animationClass: "mio-blink",
+                src: "/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b",
+                alt: "MIO is ready",
+                animationClass: "mio-float",
             },
             loading: {
                 src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
