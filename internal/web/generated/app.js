@@ -27,46 +27,115 @@
     return fetcher("/v1/api/stream/stop", { method: "POST" });
   }
 
+  // internal/web/src/mio-assets.generated.ts
+  var MIO_SPRITES = {
+    angry: "/static/mio/mio_pose_angry.png?v=d88bd3c560f5baab73d16afae28d5da29d29ad72ef83671c0266baf517e4858e",
+    concerned: "/static/mio/mio_pose_concerned.png?v=c283432edb43252534ab0d04c598b170d2807eceec3f1904380e87a6b567b70f",
+    curious: "/static/mio/mio_pose_curious.png?v=a7b931161a9eedd5a759320d647ef0086deb2dfc36739b10d5a4c98267993245",
+    happy: "/static/mio/mio_pose_happy.png?v=78ac07e44e305c898bef397e3c29e09fd2cde607af7f3d5ec51315792b5b42e6",
+    idle: "/static/mio/mio_pose_idle.png?v=7bd01eb64fed16093f87887065805f47e3b3253c7f8567b5e5ff22101007ca9f",
+    looking: "/static/mio/mio_pose_looking.png?v=8e73798b1692de8a45a19c6c52cac8279b497c7e55f6129fec49cfcb305ba70e",
+    sleeping: "/static/mio/mio_pose_sleeping.png?v=8a3a7094a658c0cc67844347d51b5158d3f94f381204b4d8bee1c5f78af4cf27",
+    worried: "/static/mio/mio_pose_worried.png?v=30c3693ae69272cba7ce477a42ca085ed6483d55f17a919f31b73c83023fc125"
+  };
+
   // internal/web/src/dashboard-presentation.ts
+  var MIO_SLEEP_AFTER_MS = 2 * 60 * 1e3;
   var streamStatuses = {
     ready: { label: "Ready", tone: "neutral" },
     connecting: { label: "Connecting\u2026", tone: "warning" },
     live: { label: "Live", tone: "success" },
     reconnecting: { label: "Reconnecting\u2026", tone: "warning" },
-    unavailable: { label: "Stream unavailable", tone: "error" }
+    unavailable: { label: "Unavailable", tone: "error" },
+    capacity: { label: "At capacity", tone: "warning" }
   };
   function getStreamStatusPresentation(state) {
     return streamStatuses[state];
   }
-  var streamMascots = {
-    ready: {
-      src: "/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b",
-      alt: "MIO is ready",
-      animationClass: "mio-float"
-    },
-    connecting: {
-      src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
-      alt: "MIO is curious",
-      animationClass: "mio-pulse"
-    },
-    live: {
-      src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
-      alt: "MIO is happily watching",
-      animationClass: "mio-float"
-    },
-    reconnecting: {
-      src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
-      alt: "MIO is concerned",
-      animationClass: "mio-pulse"
-    },
-    unavailable: {
-      src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
-      alt: "MIO is worried",
-      animationClass: "mio-float"
+  function getStreamDescription(state, retryCount = 1, maxRetries = 3) {
+    switch (state) {
+      case "ready":
+        return "MIO's ready when you are.";
+      case "connecting":
+        return "MIO is warming things up\u2026";
+      case "live":
+        return "MIO is happily watching your stream.";
+      case "reconnecting":
+        return `MIO is reconnecting (${Math.max(1, retryCount)} of ${maxRetries})\u2026`;
+      case "unavailable":
+        return "MIO couldn't reconnect. Check the camera connection, then try again.";
+      case "capacity":
+        return "MIO's at capacity right now. Try again when another stream is free.";
+    }
+  }
+  var mioPoses = {
+    idle: { src: MIO_SPRITES.idle, alt: "MIO is ready", animationClass: "mio-float" },
+    sleeping: { src: MIO_SPRITES.sleeping, alt: "MIO is sleeping", animationClass: "mio-float" },
+    curious: { src: MIO_SPRITES.curious, alt: "MIO is curious", animationClass: "mio-pulse" },
+    concerned: { src: MIO_SPRITES.concerned, alt: "MIO is concerned", animationClass: "mio-pulse" },
+    happy: { src: MIO_SPRITES.happy, alt: "MIO is happily watching", animationClass: "mio-float" },
+    worried: { src: MIO_SPRITES.worried, alt: "MIO is worried", animationClass: "mio-float" },
+    angry: { src: MIO_SPRITES.angry, alt: "MIO is looking out for stream capacity", animationClass: "mio-float" },
+    looking: { src: MIO_SPRITES.looking, alt: "MIO is scanning", animationClass: "mio-float" }
+  };
+  function getMioPosePresentation(pose) {
+    return mioPoses[pose];
+  }
+  function getCompanionPoseForFrameRateTone(tone) {
+    switch (tone) {
+      case "success":
+      case "neutral":
+        return "happy";
+      case "warning":
+        return "concerned";
+      case "error":
+        return "worried";
+    }
+  }
+  var ConsecutivePollHysteresis = class {
+    constructor(initialValue, minimumConsecutive = 2) {
+      this.minimumConsecutive = minimumConsecutive;
+      this.candidate = null;
+      this.consecutiveCount = 0;
+      if (!Number.isInteger(minimumConsecutive) || minimumConsecutive < 1) {
+        throw new RangeError("minimumConsecutive must be a positive integer");
+      }
+      this.currentValue = initialValue;
+    }
+    get value() {
+      return this.currentValue;
+    }
+    update(nextValue) {
+      if (nextValue === this.currentValue) {
+        this.candidate = null;
+        this.consecutiveCount = 0;
+        return this.currentValue;
+      }
+      if (nextValue === this.candidate) {
+        this.consecutiveCount += 1;
+      } else {
+        this.candidate = nextValue;
+        this.consecutiveCount = 1;
+      }
+      if (this.consecutiveCount >= this.minimumConsecutive) {
+        this.currentValue = nextValue;
+        this.candidate = null;
+        this.consecutiveCount = 0;
+      }
+      return this.currentValue;
+    }
+    reset(value) {
+      this.currentValue = value;
+      this.candidate = null;
+      this.consecutiveCount = 0;
     }
   };
-  function getStreamMascotPresentation(state) {
-    return streamMascots[state];
+  function isMioSleepDue(idleSince, now) {
+    return Number.isFinite(idleSince) && Number.isFinite(now) && now - idleSince >= MIO_SLEEP_AFTER_MS;
+  }
+  function isCapacitySignal(activeConnections, maximumConnections, isStreaming, responseStatus = 0) {
+    if (responseStatus === 429) return true;
+    return !isStreaming && Number.isFinite(activeConnections) && Number.isFinite(maximumConnections) && maximumConnections > 0 && activeConnections >= maximumConnections;
   }
   function getCameraReadinessPresentation(state) {
     const presentations = {
@@ -99,7 +168,7 @@
     const active = state === "connecting" || state === "live" || state === "reconnecting";
     return {
       startHidden: active,
-      startLabel: state === "unavailable" ? "Retry stream" : "Start stream",
+      startLabel: state === "unavailable" ? "Retry stream" : state === "capacity" ? "Try again" : "Start stream",
       stopHidden: !active,
       stopLabel: state === "connecting" ? "Cancel connection" : "Stop stream",
       stopPrimary: state === "live" || state === "reconnecting"
@@ -272,7 +341,7 @@
   }
   var StreamController = class {
     constructor() {
-      this.isStreaming = false;
+      this.streaming = false;
       this.streamState = "ready";
       this.statsInterval = null;
       this.cameraReadinessInterval = null;
@@ -283,18 +352,27 @@
       this.cameraConfigPromise = null;
       this.streamRetryCount = 0;
       this.maxStreamRetries = 3;
-      this.poseResetTimer = null;
+      this.sleepTimer = null;
+      this.idleSince = Date.now();
+      this.placeholderPose = "idle";
+      this.viewerPoseHysteresis = new ConsecutivePollHysteresis("happy", 2);
+      this.preloadedSprites = [];
       this.imageElement = getElement("stream-img");
       this.loadingElement = getElement("stream-loading");
       this.placeholderText = getElement("stream-placeholder-text");
       this.placeholderDesc = getElement("stream-placeholder-desc");
-      this.spinnerElement = getElement("stream-spinner");
-      this.idleElement = getElement("stream-idle");
-      this.spinnerImage = getElement("stream-spinner-image");
-      this.idleImage = getElement("stream-idle-image");
+      this.placeholderImage = getElement("stream-placeholder-mio");
+      this.sleepDecoration = getElement("stream-sleep-z");
+      this.headerMascot = getElement("header-mio");
+      this.footerMascot = getElement("footer-mio");
+      this.viewerMascot = getElement("stream-companion");
+      this.liveSparkle = getElement("stream-live-sparkle");
+      this.pageDescription = getElement("page-description");
+      this.fpsValue = getElement("stat-fps");
+      this.fpsIdle = getElement("stat-fps-idle");
+      this.fpsMascot = getElement("fps-idle-mio");
       this.streamStatusBadge = getElement("stream-status-badge");
       this.statusText = getElement("status-text");
-      this.streamStatusMascot = getElement("stream-status-mascot");
       this.cameraStatusBadge = getElement("camera-status-badge");
       this.cameraStatusText = getElement("camera-status-text");
       this.cameraStatusGuidance = getElement("camera-status-guidance");
@@ -320,97 +398,90 @@
         }
       });
       getElement("snackbar-dismiss").addEventListener("click", () => this.snackbar.dismiss());
-      this.poseByState = {
-        idle: {
-          src: "/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b",
-          alt: "MIO is ready",
-          animationClass: "mio-float"
-        },
-        loading: {
-          src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
-          alt: "MIO is curious",
-          animationClass: "mio-pulse"
-        },
-        success: {
-          src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
-          alt: "MIO is happy",
-          animationClass: "mio-float"
-        },
-        warning: {
-          src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
-          alt: "MIO is concerned",
-          animationClass: "mio-pulse"
-        },
-        running: {
-          src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
-          alt: "MIO is attentive",
-          animationClass: "mio-pulse"
-        },
-        error: {
-          src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
-          alt: "MIO is worried",
-          animationClass: "mio-pulse"
-        },
-        looking: {
-          src: "/static/mio/mio_pose_looking.png?v=004b22d5f48e070762791074142e83cd84314f158005aa5ebf35a5cf64ff9ea6",
-          alt: "MIO is scanning",
-          animationClass: "mio-float"
-        }
-      };
+      const readyPose = getMioPosePresentation("idle");
+      updateMascotImage(this.headerMascot, readyPose, "brand");
+      updateMascotImage(this.footerMascot, readyPose, "footer", true);
+      updateMascotImage(this.fpsMascot, getMioPosePresentation("sleeping"), "fps", true);
+      this.setPlaceholderPose("idle");
       this.updateStatus("ready");
+      this.updateFPSVisibility();
       this.updateCameraReadiness("checking");
       this.initializeStream();
       this.attachEventListeners();
       this.loadCameraReadiness();
       this.startCameraReadinessPolling();
       this.loadStats();
+      this.scheduleInactivitySleep();
+      this.preloadSpritesAfterFirstPaint();
     }
-    getPoseForState(state) {
-      return this.poseByState[state] || this.poseByState.idle;
+    get isStreaming() {
+      return this.streaming;
     }
-    applyPoseToImage(imageElement, state) {
-      const pose = this.getPoseForState(state);
-      imageElement.src = pose.src;
-      imageElement.alt = pose.alt;
-      imageElement.className = `mio-avatar mio-avatar--state ${pose.animationClass}`;
+    preloadSpritesAfterFirstPaint() {
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => {
+          for (const pose of ["idle", "sleeping", "curious", "concerned", "happy", "worried", "angry", "looking"]) {
+            const image = new Image();
+            image.decoding = "async";
+            image.src = getMioPosePresentation(pose).src;
+            this.preloadedSprites.push(image);
+          }
+        }, 200);
+      });
     }
-    setLoadingPose(state = "loading") {
-      this.applyPoseToImage(this.spinnerImage, state);
-      this.spinnerElement.classList.remove("is-hidden");
-      this.idleElement.classList.add("is-hidden");
+    setPlaceholderPose(pose) {
+      this.placeholderPose = pose;
+      updateMascotImage(this.placeholderImage, getMioPosePresentation(pose), "placeholder", true);
+      this.sleepDecoration.hidden = pose !== "sleeping";
+      this.loadingElement.classList.toggle("is-sleeping", pose === "sleeping");
     }
-    setIdlePose(state = "idle") {
-      this.applyPoseToImage(this.idleImage, state);
-      this.spinnerElement.classList.add("is-hidden");
-      this.idleElement.classList.remove("is-hidden");
+    setViewerPose(pose) {
+      updateMascotImage(this.viewerMascot, getMioPosePresentation(pose), "viewer", true);
     }
-    clearPoseResetTimer() {
-      if (this.poseResetTimer !== null) {
-        window.clearTimeout(this.poseResetTimer);
-        this.poseResetTimer = null;
+    setViewerPoseFromTone(tone) {
+      const nextPose = getCompanionPoseForFrameRateTone(tone);
+      this.setViewerPose(this.viewerPoseHysteresis.update(nextPose));
+    }
+    clearInactivityTimer() {
+      if (this.sleepTimer === null) return;
+      window.clearTimeout(this.sleepTimer);
+      this.sleepTimer = null;
+    }
+    scheduleInactivitySleep() {
+      this.clearInactivityTimer();
+      if (this.streaming || this.streamState !== "ready") return;
+      this.idleSince = Date.now();
+      this.sleepTimer = window.setTimeout(() => {
+        this.sleepTimer = null;
+        if (this.streamState !== "ready" || this.streaming || getElement("diagnostics-modal").open || !isMioSleepDue(this.idleSince, Date.now())) return;
+        this.setPlaceholderPose("sleeping");
+        this.placeholderText.textContent = "MIO's taking a little rest.";
+        this.placeholderDesc.textContent = "Start the stream whenever you're ready.";
+      }, MIO_SLEEP_AFTER_MS);
+    }
+    handleUserActivity() {
+      if (this.streamState !== "ready") return;
+      if (this.placeholderPose === "sleeping") {
+        this.setPlaceholderPose("idle");
+        this.placeholderText.textContent = "MIO's ready when you are.";
+        this.placeholderDesc.textContent = "Start the stream to see what's happening.";
       }
-    }
-    schedulePoseResetToIdle(delayMs = 2200) {
-      this.clearPoseResetTimer();
-      this.poseResetTimer = window.setTimeout(() => {
-        const diagnosticsModal = getElement("diagnostics-modal");
-        const diagnosticsOpen = diagnosticsModal.open;
-        if (!this.isStreaming && !diagnosticsOpen) {
-          this.setIdlePose("idle");
-        }
-        this.poseResetTimer = null;
-      }, delayMs);
+      this.scheduleInactivitySleep();
     }
     initializeStream() {
       this.imageElement.onload = () => {
         if (!this.imageElement.getAttribute("src")) return;
-        this.isStreaming = true;
+        this.streaming = true;
         this.streamRetryCount = 0;
+        this.clearInactivityTimer();
         this.loadingElement.classList.add("is-hidden");
         this.imageElement.classList.remove("is-hidden");
-        this.setIdlePose("success");
-        this.idleElement.classList.add("is-hidden");
-        this.schedulePoseResetToIdle();
+        this.setPlaceholderPose("happy");
+        this.viewerPoseHysteresis.reset("happy");
+        this.setViewerPose("happy");
+        this.viewerMascot.hidden = false;
+        getElement("stream-container").classList.add("is-stream-live");
+        this.playLiveSparkleOnce();
         this.updateStatus("live");
         this.updateStreamControls();
         if (!document.hidden) {
@@ -419,35 +490,61 @@
         }
       };
       this.imageElement.onerror = () => {
-        if (!this.imageElement.getAttribute("src")) return;
-        this.isStreaming = false;
+        const source = this.imageElement.getAttribute("src");
+        if (!source) return;
+        const responseStatus = getImageResponseStatus(source);
+        this.streaming = false;
         this.imageElement.removeAttribute("src");
         this.loadingElement.classList.remove("is-hidden");
         this.imageElement.classList.add("is-hidden");
-        this.setIdlePose("warning");
+        this.viewerMascot.hidden = true;
+        getElement("stream-container").classList.remove("is-stream-live");
+        this.liveSparkle.classList.remove("is-sparkling");
+        if (isCapacitySignal(0, 0, false, responseStatus)) {
+          this.showCapacityState();
+          this.stopStatsPolling();
+          return;
+        }
         const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
         if (nextRetryCount !== null) {
           this.streamRetryCount = nextRetryCount;
           this.placeholderText.textContent = "MIO lost the stream for a moment.";
-          this.placeholderDesc.textContent = `MIO is reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`;
+          this.placeholderDesc.textContent = getStreamDescription("reconnecting", this.streamRetryCount, this.maxStreamRetries);
+          this.setPlaceholderPose("concerned");
           this.updateStatus("reconnecting");
-          this.setLoadingPose("warning");
           const scheduledRetryCount = nextRetryCount;
           window.setTimeout(() => {
-            if (shouldRunStreamRetry(this.isStreaming, scheduledRetryCount, this.streamRetryCount)) {
+            if (shouldRunStreamRetry(this.streaming, scheduledRetryCount, this.streamRetryCount)) {
               this.imageElement.src = "/stream.mjpg?t=" + Date.now();
             }
           }, 2e3);
         } else {
           this.placeholderText.textContent = "MIO couldn't reconnect.";
           this.placeholderDesc.textContent = "Check the camera connection, then try again.";
-          this.setLoadingPose("error");
+          this.setPlaceholderPose("worried");
           this.updateStatus("unavailable");
         }
         this.updateStreamControls();
+        this.updateFPSVisibility();
         this.stopStatsPolling();
       };
       this.updateStreamControls();
+    }
+    playLiveSparkleOnce() {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      this.liveSparkle.classList.remove("is-sparkling");
+      void this.liveSparkle.offsetWidth;
+      this.liveSparkle.classList.add("is-sparkling");
+    }
+    showCapacityState() {
+      this.streaming = false;
+      this.streamRetryCount = 0;
+      this.placeholderText.textContent = "MIO's at capacity right now.";
+      this.placeholderDesc.textContent = "Try again when another stream is free.";
+      this.setPlaceholderPose("angry");
+      this.updateStatus("capacity");
+      this.updateStreamControls();
+      this.updateFPSVisibility();
     }
     updateStatus(state) {
       this.streamState = state;
@@ -457,7 +554,18 @@
         presentation.label,
         presentation.tone
       );
-      updateMascotImage(this.streamStatusMascot, getStreamMascotPresentation(state), "status", true);
+      this.pageDescription.textContent = getStreamDescription(state, Math.max(1, this.streamRetryCount), this.maxStreamRetries);
+      this.updateFPSVisibility();
+      if (state !== "ready") this.clearInactivityTimer();
+    }
+    restorePoseAfterDiagnostics() {
+      if (this.streaming) return;
+      if (this.streamState === "capacity") this.setPlaceholderPose("angry");
+      else if (this.streamState === "unavailable") this.setPlaceholderPose("worried");
+      else if (this.streamState === "reconnecting") this.setPlaceholderPose("concerned");
+      else if (this.streamState === "connecting") this.setPlaceholderPose("curious");
+      else if (this.placeholderPose !== "sleeping") this.setPlaceholderPose("idle");
+      this.scheduleInactivitySleep();
     }
     updateCameraReadiness(state) {
       if (this.cameraReadiness === state) return;
@@ -497,17 +605,25 @@
       window.clearInterval(this.cameraReadinessInterval);
       this.cameraReadinessInterval = null;
     }
+    beginDiagnostics() {
+      if (!this.streaming) this.setPlaceholderPose("looking");
+    }
+    endDiagnostics() {
+      this.restorePoseAfterDiagnostics();
+    }
     attachEventListeners() {
       this.startButton.addEventListener("click", () => this.startStream());
       this.stopButton.addEventListener("click", () => this.stopStream());
+      document.addEventListener("pointerdown", () => this.handleUserActivity());
+      document.addEventListener("keydown", () => this.handleUserActivity());
     }
     startStream() {
-      if (this.isStreaming) return;
+      if (this.streaming) return;
+      this.clearInactivityTimer();
       this.placeholderText.textContent = "MIO is warming things up\u2026";
       this.placeholderDesc.textContent = "Your camera stream should be ready in a moment.";
       this.loadingElement.classList.remove("is-hidden");
-      this.setLoadingPose("loading");
-      this.clearPoseResetTimer();
+      this.setPlaceholderPose("curious");
       this.imageElement.classList.add("is-hidden");
       this.updateStatus("connecting");
       this.updateStreamControls();
@@ -517,17 +633,20 @@
     stopStream() {
       requestStopStream().then(() => this.loadStats()).catch((err) => console.error("Stop stream error:", err));
       this.imageElement.removeAttribute("src");
-      this.isStreaming = false;
+      this.streaming = false;
       this.streamRetryCount = 0;
       this.imageElement.classList.add("is-hidden");
       this.loadingElement.classList.remove("is-hidden");
-      this.setIdlePose("idle");
-      this.clearPoseResetTimer();
+      this.viewerMascot.hidden = true;
+      getElement("stream-container").classList.remove("is-stream-live");
+      this.liveSparkle.classList.remove("is-sparkling");
+      this.setPlaceholderPose("idle");
       this.placeholderText.textContent = "MIO's ready when you are.";
       this.placeholderDesc.textContent = "Start the stream to see what's happening.";
       this.updateStatus("ready");
       this.updateStreamControls();
       this.stopStatsPolling();
+      this.scheduleInactivitySleep();
       this.snackbar.show("Stream stopped.", "success");
     }
     updateStreamControls() {
@@ -546,7 +665,7 @@
     }
     startStatsPolling() {
       if (this.statsInterval !== null) return;
-      this.statsInterval = startDashboardPoller(!document.hidden, this.isStreaming, 2e3, () => {
+      this.statsInterval = startDashboardPoller(!document.hidden, this.streaming, 2e3, () => {
         this.loadStats();
       });
     }
@@ -564,26 +683,40 @@
         if (!metricsResponse.ok) throw new Error("Failed to load live camera metrics");
         const metrics = await metricsResponse.json();
         const aspectRatio = resolutionToAspectRatio(config.resolution);
-        if (aspectRatio) {
-          getElement("stream-container").style.aspectRatio = aspectRatio;
-        }
+        if (aspectRatio) getElement("stream-container").style.aspectRatio = aspectRatio;
         getElement("feed-mode-badge").hidden = config.mock_camera !== true;
         const fps = Number(metrics.fps_current);
         const targetFps = config.target_fps ?? Number.NaN;
-        const fpsEl = getElement("stat-fps");
-        fpsEl.textContent = this.streamState === "live" ? formatFrameRate(fps) : "--";
-        fpsEl.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
-        const fpsTone = getFrameRateTone(fps, targetFps, this.streamState === "live");
-        if (fpsTone !== "neutral") fpsEl.classList.add(`metric-card__value--${fpsTone}`);
+        this.fpsValue.textContent = this.streaming ? formatFrameRate(fps) : "";
+        this.fpsValue.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
+        const fpsTone = getFrameRateTone(fps, targetFps, this.streaming);
+        if (fpsTone !== "neutral") this.fpsValue.classList.add(`metric-card__value--${fpsTone}`);
+        if (this.streaming) this.setViewerPoseFromTone(fpsTone);
+        this.updateFPSVisibility();
         getElement("stat-resolution").textContent = formatResolution(config.resolution);
         getElement("stat-quality").textContent = (config.jpeg_quality || "--") + "%";
         getElement("stat-connections").textContent = formatStreamConnections(
           metrics.stream_connections,
           config.max_stream_connections
         );
+        if (isCapacitySignal(metrics.stream_connections, config.max_stream_connections, this.streaming) && this.streamState === "ready") {
+          this.showCapacityState();
+        } else if (this.streamState === "capacity" && !isCapacitySignal(metrics.stream_connections, config.max_stream_connections, this.streaming)) {
+          this.updateStatus("ready");
+          this.setPlaceholderPose("idle");
+          this.placeholderText.textContent = "MIO's ready when you are.";
+          this.placeholderDesc.textContent = "Start the stream to see what's happening.";
+          this.updateStreamControls();
+          this.scheduleInactivitySleep();
+        }
       } catch (error) {
         console.error("Error loading stats:", error);
       }
+    }
+    updateFPSVisibility() {
+      const live = this.streamState === "live";
+      this.fpsValue.hidden = !live;
+      this.fpsIdle.hidden = live;
     }
     loadCameraConfig() {
       if (this.cameraConfig && Date.now() < this.cameraConfigExpiresAt) {
@@ -602,6 +735,11 @@
       return this.cameraConfigPromise;
     }
   };
+  function getImageResponseStatus(source) {
+    const absoluteSource = new URL(source, window.location.href).href;
+    const entries = performance.getEntriesByName(absoluteSource, "resource");
+    return entries[entries.length - 1]?.responseStatus ?? 0;
+  }
   var diagnosticsRefreshInterval = null;
   function getStreamController() {
     return window.streamController || null;
@@ -609,23 +747,27 @@
   function setCompanionPoseFromDiagnostics(data) {
     const controller = getStreamController();
     if (!controller || controller.isStreaming) return;
+    if (isCapacitySignal(data.stream_connections, data.max_stream_connections, false)) {
+      controller.showCapacityState();
+      return;
+    }
     if (!data.camera_ready && (data.capture_failures_consecutive || 0) > 3) {
-      controller.setIdlePose("error");
+      controller.setPlaceholderPose("worried");
       return;
     }
     if (!data.camera_ready || (data.error_rate_percent || 0) > 20 || (data.capture_failures_consecutive || 0) > 0) {
-      controller.setIdlePose("warning");
+      controller.setPlaceholderPose("concerned");
       return;
     }
     if ((data.stream_connections || 0) > 0) {
-      controller.setIdlePose("running");
+      controller.setPlaceholderPose("curious");
       return;
     }
     if ((data.error_rate_percent || 0) > 5) {
-      controller.setIdlePose("warning");
+      controller.setPlaceholderPose("concerned");
       return;
     }
-    controller.setIdlePose("success");
+    controller.setPlaceholderPose("happy");
   }
   function openDiagnosticsModal() {
     const modal = getElement("diagnostics-modal");
@@ -633,7 +775,7 @@
     if (!openNativeDialog(modal, closeButton)) return;
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
-      controller.setLoadingPose("looking");
+      controller.beginDiagnostics();
     }
     startDiagnosticsPolling();
   }
@@ -645,7 +787,7 @@
     stopDiagnosticsPolling();
     const controller = getStreamController();
     if (controller && !controller.isStreaming) {
-      controller.setIdlePose("idle");
+      controller.endDiagnostics();
     }
   }
   function startDiagnosticsPolling() {
@@ -738,10 +880,10 @@
       console.error("Diagnostics request failed:", error);
       const controller = getStreamController();
       if (controller && !controller.isStreaming) {
-        controller.setIdlePose("warning");
+        controller.setPlaceholderPose("concerned");
       }
       const content = getElement("diagnostics-content");
-      content.innerHTML = `<div class="notice notice--error message show" role="alert">MIO couldn't load diagnostics just now. Please try again in a moment.</div>`;
+      content.innerHTML = `<div class="notice notice--error" role="alert">MIO couldn't load diagnostics just now. Please try again in a moment.</div>`;
     });
   }
   function formatUptime(seconds) {

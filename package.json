@@ -7,7 +7,7 @@
     "node": ">=26 <27"
   },
   "scripts": {
-    "build:web": "mkdir -p internal/web/generated && esbuild internal/web/src/app.ts --bundle --format=iife --target=es2020 --outfile=internal/web/generated/app.js && tsx scripts/version_web_assets.ts",
+    "build:web": "tsx scripts/generate_mio_assets.ts && mkdir -p internal/web/generated && esbuild internal/web/src/app.ts --bundle --format=iife --target=es2020 --outfile=internal/web/generated/app.js && tsx scripts/version_web_assets.ts",
     "typecheck:web": "tsc --noEmit",
     "test:web": "tsx --test internal/web/src/*.test.ts",
     "check:web": "npm run typecheck:web && npm run test:web && npm run verify:web",

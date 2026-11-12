@@ -52,11 +52,18 @@ test("primary action text stays readable in light and dark mode", () => {
     const hoverRule = html.match(/\.button--primary:hover:not\(:disabled\)\s*\{([^}]+)\}/);
     if (!hoverRule?.[1]) throw new Error("expected a primary button hover rule");
     assert.match(hoverRule[1], /background:\s*var\(--color-action-hover-background\)/);
+    const activeRule = html.match(/\.button--primary:active:not\(:disabled\)\s*\{([^}]+)\}/);
+    if (!activeRule?.[1]) throw new Error("expected a primary button active rule");
+    assert.match(activeRule[1], /background:\s*var\(--color-action-active-background\)/);
 
     for (const theme of [lightTheme, darkTheme]) {
-        for (const background of ["color-action-background", "color-action-hover-background"]) {
+        for (const [background, foreground] of [
+            ["color-action-background", "color-action-foreground"],
+            ["color-action-hover-background", "color-action-hover-foreground"],
+            ["color-action-active-background", "color-action-active-foreground"],
+        ]) {
             assert.ok(
-                contrastRatio(token(theme, "color-action-foreground"), token(theme, background)) >= 4.5,
+                contrastRatio(token(theme, foreground!), token(theme, background!)) >= 4.5,
                 `primary action foreground must have WCAG AA contrast against --${background}`,
             );
         }
@@ -69,12 +76,21 @@ test("primary action text stays readable in light and dark mode", () => {
     }
 });
 
-test("MIO stays visible in the header and beside the live stream status", () => {
-    assert.match(html, /<img[^>]*class="mio-avatar mio-avatar--brand mio-float"[^>]*src="[^"]*mio_pose_idle\.png/);
-    assert.match(html, /<img[^>]*id="stream-idle-image"[^>]*src="[^"]*mio_pose_idle\.png/);
-    assert.match(html, /<img[^>]*id="stream-status-mascot"[^>]*class="mio-avatar mio-avatar--status mio-float"[^>]*src="[^"]*mio_pose_idle\.png[^>]*aria-hidden="true"/);
+test("MIO stays in the header and viewer with accessible decorative companions", () => {
+    assert.match(html, /<img[^>]*id="header-mio"[^>]*data-mio-pose="idle"[^>]*width="48" height="48"/);
+    assert.match(html, /<img[^>]*id="stream-placeholder-mio"[^>]*data-mio-pose="idle"[^>]*width="200" height="200" alt="" aria-hidden="true"/);
+    assert.match(html, /<img[^>]*id="stream-companion"[^>]*width="68" height="68" alt="" aria-hidden="true" hidden/);
+    assert.doesNotMatch(html, /id="stream-status-mascot"/);
     assert.match(html, /MIO's ready when you are\./);
     assert.match(app, /MIO is warming things up/);
+    assert.match(html, /id="page-description"/);
+    assert.equal((html.match(/<h1\b/g) ?? []).length, 1);
+});
+
+test("the idle frame-rate tile gives a readable next step and a decorative sleeping MIO", () => {
+    assert.match(html, /id="stat-fps-idle"/);
+    assert.match(html, /Start the stream to see fps/);
+    assert.match(html, /id="fps-idle-mio"[^>]*data-mio-pose="sleeping"[^>]*alt="" aria-hidden="true"/);
 });
 
 test("camera details are expanded on first load so key metrics stay visible", () => {
@@ -83,6 +99,7 @@ test("camera details are expanded on first load so key metrics stay visible", ()
     assert.match(details[1], /id="stat-resolution"/);
     assert.match(details[1], /id="stat-quality"/);
     assert.match(details[1], /id="stat-connections"/);
+    assert.match(details[1], /<div class="metric-card metric-card--wide">[\s\S]*id="stat-connections"/);
 });
 
 test("brand header keeps its intrinsic height inside the flex page shell", () => {
@@ -98,7 +115,7 @@ test("section titles stay together beside their status badges", () => {
 });
 
 test("every state mascot pose is backed by a bundled MIO asset", () => {
-    const states: StreamState[] = ["ready", "connecting", "live", "reconnecting", "unavailable"];
+    const states: StreamState[] = ["ready", "connecting", "live", "reconnecting", "unavailable", "capacity"];
     for (const state of states) {
         const pose = getStreamMascotPresentation(state);
         const filename = pose.src.split("?")[0]!.replace("/static/mio/", "");

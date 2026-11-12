@@ -37,7 +37,10 @@ func TestDashboardRootServesInteractivePage(t *testing.T) {
 		`id="stream-img"`,
 		`id="start-stream"`,
 		`id="stop-stream"`,
-		`<h1 class="page-header__title" aria-describedby="page-description">Camera</h1>`,
+		`<h1 class="brand-name">GoGoMio</h1>`,
+		`id="page-description"`,
+		`id="stream-placeholder-mio"`,
+		`id="stream-companion"`,
 		`id="camera-status-badge"`,
 		`id="stream-status-badge"`,
 		`id="diagnostics-btn"`,
@@ -49,6 +52,17 @@ func TestDashboardRootServesInteractivePage(t *testing.T) {
 		if !strings.Contains(body, hook) {
 			t.Errorf("missing runtime hook %q in root HTML", hook)
 		}
+	}
+	for _, landmark := range []struct {
+		tag  string
+		want int
+	}{{tag: "<header", want: 1}, {tag: "<main", want: 1}, {tag: "<footer", want: 1}} {
+		if got := strings.Count(body, landmark.tag); got != landmark.want {
+			t.Errorf("%s landmark count: got %d, want %d", landmark.tag, got, landmark.want)
+		}
+	}
+	if got := strings.Count(body, "<h1"); got != 1 {
+		t.Errorf("h1 count: got %d, want 1", got)
 	}
 
 	if strings.Contains(body, "<script>") {
@@ -68,7 +82,10 @@ func TestDashboardUsesSemanticThemesAndReusableStatusPrimitives(t *testing.T) {
 		`.ui-badge--warning`,
 		`.ui-badge--error`,
 		`aria-live="polite" aria-atomic="true"`,
-		`<h1 class="page-header__title" aria-describedby="page-description">Camera</h1>`,
+		`<h1 class="brand-name">GoGoMio</h1>`,
+		`@font-face`,
+		`.header-wave`,
+		`@media (min-width: 1024px)`,
 		`@media (forced-colors: active)`,
 		`min-height: 44px;`,
 	} {
@@ -97,12 +114,17 @@ func TestDashboardResponsiveLayoutContracts(t *testing.T) {
 	if mobilePadding >= desktopPadding {
 		t.Errorf("small-screen container padding = %gpx, want less than desktop %gpx", mobilePadding, desktopPadding)
 	}
-	desktopTitle := cssRuleBody(t, css, ".page-header__title")
-	mobileTitle := cssRuleBody(t, mobileStyles, ".page-header__title")
+	desktopTitle := cssRuleBody(t, css, ".brand-name")
+	mobileTitle := cssRuleBody(t, mobileStyles, ".brand-name")
 	desktopFontSize := cssLengthPixels(t, css, cssPropertyValue(t, desktopTitle, "font-size"))
 	mobileFontSize := cssLengthPixels(t, css, cssPropertyValue(t, mobileTitle, "font-size"))
 	if mobileFontSize >= desktopFontSize {
 		t.Errorf("small-screen page title font size = %gpx, want less than desktop %gpx", mobileFontSize, desktopFontSize)
+	}
+	desktopLayout := cssBlockBody(t, css, "@media (min-width: 1024px)")
+	gridLayout := cssRuleBody(t, desktopLayout, ".main-grid")
+	if !strings.Contains(cssPropertyValue(t, gridLayout, "grid-template-columns"), "minmax(280px, 1fr)") {
+		t.Error("two-column layout must leave the status panel at least 280px wide")
 	}
 
 	reducedMotionStyles := cssBlockBody(t, css, "@media (prefers-reduced-motion: reduce)")
@@ -259,6 +281,7 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 		fs   fs.ReadFileFS
 	}{
 		{url: "/static/app.js", file: "generated/app.js", fs: webFS},
+		{url: "/static/fonts/quicksand-latin-wght-normal.woff2", file: "fonts/quicksand-latin-wght-normal.woff2", fs: fontFS},
 		{url: "/static/mio/mio_pose_idle.png", file: "mio/mio_pose_idle.png", fs: mioFS},
 		{url: "/static/mio/mio_pose_sleeping.png", file: "mio/mio_pose_sleeping.png", fs: mioFS},
 		{url: "/static/mio/mio_pose_curious.png", file: "mio/mio_pose_curious.png", fs: mioFS},
@@ -280,6 +303,28 @@ func TestWebUIUsesContentVersionedAssetURLs(t *testing.T) {
 		if !bytes.Contains(ui, []byte(want)) {
 			t.Errorf("web UI does not reference content-versioned URL %q", want)
 		}
+	}
+}
+
+func TestSelfHostedFontIsServedWithImmutableCaching(t *testing.T) {
+	router := http.NewServeMux()
+	RegisterStaticFiles(router)
+
+	req, _ := http.NewRequest("GET", "/static/fonts/quicksand-latin-wght-normal.woff2?v=test", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code: got %d, want 200", w.Code)
+	}
+	if got := w.Header().Get("Content-Type"); got != "font/woff2" {
+		t.Errorf("Content-Type: got %q, want font/woff2", got)
+	}
+	if got := w.Header().Get("Cache-Control"); got != immutableCacheControl {
+		t.Errorf("Cache-Control: got %q, want %q", got, immutableCacheControl)
+	}
+	if w.Body.Len() == 0 {
+		t.Fatal("font response body is empty")
 	}
 }
 

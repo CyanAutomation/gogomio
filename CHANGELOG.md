@@ -8,7 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Reactive in-viewer MIO companion, idle sleep pose, capacity guidance, and a local OFL-licensed Quicksand font
+
 ### Changed
+
+- Unify dashboard pose selection, improve the responsive shell and status layout, and move snackbars over the viewer
+- Optimize bundled MIO sprites and update stream copy, including the “Unavailable” status label
 
 - Serve a simple HTML API reference at `/docs/` and OpenAPI 3.0.3 specifications at `/openapi.json` and `/openapi.yaml`; remove the former spec routes
 
