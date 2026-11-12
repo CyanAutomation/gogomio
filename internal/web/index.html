@@ -9,11 +9,21 @@
         :root {
             color-scheme: light;
 
-            /* Semantic color tokens */
+            /* MIO's ocean palette and accessible action colors */
+            --color-brand-accent: #5FA8D3;
+            --color-brand-secondary: #3C7DC4;
+            --color-brand-ink: #0F1A2B;
+            --color-action-background: #5FA8D3;
+            --color-action-hover-background: #A7D3E8;
+            --color-action-foreground: #0F1A2B;
             --color-primary: #2A5F8A;
             --color-primary-dark: #214A6B;
             --color-primary-light: #A7D3E8;
             --color-text-accent: #2A5F8A;
+            --color-metric-surface: #e8f2f8;
+            --color-metric-border: #c8dfec;
+            --color-stream-placeholder-text: #e6f4fb;
+            --color-stream-placeholder-muted: #c6dfed;
             --color-success: #10b981;
             --color-success-light: #d1fae5;
             --color-success-dark: #065f46;
@@ -30,16 +40,16 @@
             --color-info-dark: var(--color-primary);
 
             /* Neutral Colors */
-            --color-bg: #f3f6f9;
-            --color-bg-secondary: #edf2f6;
-            --color-border: #d7e0e8;
+            --color-bg: #f0f7fc;
+            --color-bg-secondary: #e8f2f8;
+            --color-border: #d3e3ed;
             --color-text: #172330;
             --color-text-secondary: #506274;
             
             /* Surfaces */
             --color-surface: #ffffff;
-            --color-surface-hover: #f6f8fa;
-            --color-focus-ring: rgba(42, 95, 138, 0.35);
+            --color-surface-hover: #f5fbff;
+            --color-focus-ring: rgba(60, 125, 196, 0.45);
             
             /* Spacing */
             --spacing-xs: 4px;
@@ -68,9 +78,9 @@
             --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.15);
             
             /* Border Radius */
-            --radius-sm: 6px;
-            --radius-md: 10px;
-            --radius-lg: 14px;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 18px;
             
             /* Transitions */
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -81,10 +91,20 @@
         @media (prefers-color-scheme: dark) {
             :root {
                 color-scheme: dark;
-                --color-primary: #24638f;
-                --color-primary-dark: #1f5277;
-                --color-primary-light: #7db7d8;
-                --color-text-accent: #8ccbeb;
+                --color-brand-accent: #5FA8D3;
+                --color-brand-secondary: #8ccbeb;
+                --color-brand-ink: #102b3b;
+                --color-action-background: #A7D3E8;
+                --color-action-hover-background: #D1EDFC;
+                --color-action-foreground: #102b3b;
+                --color-primary: #8ccbeb;
+                --color-primary-dark: #6daed0;
+                --color-primary-light: #A7D3E8;
+                --color-text-accent: #A7D3E8;
+                --color-metric-surface: #223f52;
+                --color-metric-border: #3a6177;
+                --color-stream-placeholder-text: #e6f4fb;
+                --color-stream-placeholder-muted: #c6dfed;
                 --color-success: #55c99a;
                 --color-success-light: #17382c;
                 --color-success-dark: #a9ebce;
@@ -94,16 +114,16 @@
                 --color-warning: #e6b75c;
                 --color-warning-light: #3d321b;
                 --color-warning-dark: #ffe2a6;
-                --color-info: #79bce0;
-                --color-info-light: #1c3445;
-                --color-info-dark: #c0e6fb;
-                --color-bg: #101820;
-                --color-bg-secondary: #192631;
-                --color-border: #354654;
-                --color-text: #e8f0f6;
-                --color-text-secondary: #bdcbd6;
-                --color-surface: #17232e;
-                --color-surface-hover: #21313e;
+                --color-info: #8ccbeb;
+                --color-info-light: #203b4b;
+                --color-info-dark: #d1edfc;
+                --color-bg: #142b3b;
+                --color-bg-secondary: #1b394b;
+                --color-border: #31576b;
+                --color-text: #f1f8fc;
+                --color-text-secondary: #bfd6e3;
+                --color-surface: #1d3748;
+                --color-surface-hover: #26465a;
                 --color-focus-ring: rgba(141, 204, 235, 0.6);
                 --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
                 --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.24);
@@ -125,7 +145,7 @@
 
         body {
             font-family: var(--font-family);
-            background: var(--color-bg);
+            background: linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-secondary) 100%);
             color: var(--color-text);
             font-size: var(--font-size-base);
             line-height: 1.5;
@@ -145,8 +165,30 @@
 
         /* ====== REUSABLE PAGE AND SURFACE PRIMITIVES ====== */
         .site-header {
-            border-bottom: 1px solid var(--color-border);
-            background: var(--color-surface);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid var(--color-primary-light);
+            background: linear-gradient(112deg, var(--color-brand-accent) 0%, var(--color-primary-light) 100%);
+            color: var(--color-brand-ink);
+        }
+
+        .site-header::after {
+            content: "";
+            position: absolute;
+            inset: 0 0 0 auto;
+            width: min(36vw, 360px);
+            opacity: 0.44;
+            background-image:
+                radial-gradient(circle, rgba(255, 255, 255, 0.8) 0 4px, transparent 5px),
+                radial-gradient(circle, rgba(255, 255, 255, 0.65) 0 7px, transparent 8px);
+            background-size: 48px 38px, 82px 64px;
+            background-position: 5px 5px, 30px 18px;
+            pointer-events: none;
+        }
+
+        .site-header .container {
+            position: relative;
+            z-index: 1;
         }
 
         .brand-lockup,
@@ -157,15 +199,39 @@
         }
 
         .brand-lockup {
-            min-height: 56px;
+            min-height: 72px;
             padding-block: var(--spacing-sm);
         }
 
+        .mio-avatar {
+            display: block;
+            flex: 0 0 auto;
+            object-fit: contain;
+        }
+
+        .mio-avatar--brand {
+            width: 48px;
+            height: 48px;
+            filter: drop-shadow(0 2px 4px rgba(15, 26, 43, 0.18));
+        }
+
+        .brand-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
         .brand-name {
-            color: var(--color-text-secondary);
-            font-size: var(--font-size-sm);
+            color: var(--color-brand-ink);
+            font-size: var(--font-size-lg);
             font-weight: 700;
-            letter-spacing: 0.01em;
+            letter-spacing: 0.015em;
+        }
+
+        .brand-tagline {
+            color: var(--color-brand-ink);
+            font-size: var(--font-size-xs);
+            font-weight: 550;
         }
 
         .page-header {
@@ -210,6 +276,10 @@
             font-weight: 650;
         }
 
+        .section-title .icon {
+            color: var(--color-brand-secondary);
+        }
+
         .ui-badge {
             display: inline-flex;
             align-items: center;
@@ -219,8 +289,8 @@
             padding: 3px var(--spacing-md);
             border: 1px solid var(--color-border);
             border-radius: 999px;
-            background: var(--color-bg-secondary);
-            color: var(--color-text-secondary);
+            background: var(--color-info-light);
+            color: var(--color-info-dark);
             font-size: var(--font-size-xs);
             font-weight: 650;
             line-height: 1.35;
@@ -232,6 +302,16 @@
             flex: 0 0 auto;
             border-radius: 50%;
             background: currentColor;
+        }
+
+        .ui-badge--neutral {
+            border-color: var(--color-brand-accent);
+            background: var(--color-info-light);
+            color: var(--color-info-dark);
+        }
+
+        .ui-badge--warning .ui-badge__dot {
+            animation: statusPulse 2s ease-in-out infinite;
         }
 
         .ui-badge--success {
@@ -285,6 +365,7 @@
         }
 
         .card {
+            border-top: 4px solid var(--color-brand-accent);
             padding: var(--spacing-2xl);
             display: flex;
             flex-direction: column;
@@ -292,6 +373,7 @@
 
         .controls-section {
             align-self: start;
+            border-top-color: var(--color-primary-light);
         }
 
         /* ====== STREAM SECTION ====== */
@@ -300,7 +382,7 @@
             width: 100%;
             min-width: 0;
             aspect-ratio: 4 / 3;
-            background: linear-gradient(180deg, #1a3a4a 0%, #0d1e2b 100%);
+            background: linear-gradient(145deg, #1d4c65 0%, #102c40 100%);
             border-radius: var(--radius-md);
             overflow: hidden;
             display: flex;
@@ -336,14 +418,14 @@
 
         .stream-placeholder__text {
             margin: 0;
-            color: #dceaf1;
+            color: var(--color-stream-placeholder-text);
             font-size: var(--font-size-lg);
             font-weight: 500;
         }
 
         .stream-placeholder__description {
             margin: var(--spacing-md) 0 0;
-            color: #c4d7e1;
+            color: var(--color-stream-placeholder-muted);
             font-size: var(--font-size-sm);
         }
 
@@ -535,7 +617,7 @@
             min-height: 44px;
             padding: var(--spacing-md) var(--spacing-xl);
             border: none;
-            border-radius: var(--radius-sm);
+            border-radius: 999px;
             font-size: var(--font-size-base);
             font-weight: 600;
             cursor: pointer;
@@ -549,15 +631,15 @@
         }
 
         .button--primary {
-            background: var(--color-primary);
-            color: white;
+            background: var(--color-action-background);
+            color: var(--color-action-foreground);
             box-shadow: var(--shadow-md);
         }
 
         .button--primary:hover:not(:disabled) {
-            background: var(--color-primary-dark);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(42, 95, 138, 0.4);
+            background: var(--color-action-hover-background);
+            transform: translateY(-2px) scale(1.015);
+            box-shadow: 0 5px 14px rgba(42, 95, 138, 0.24);
         }
 
         .button--primary:active:not(:disabled) {
@@ -569,6 +651,7 @@
             background: var(--color-bg-secondary);
             color: var(--color-text);
             border: 1px solid var(--color-border);
+            border-radius: 999px;
         }
 
         .button--secondary:hover:not(:disabled) {
@@ -620,11 +703,18 @@
         }
 
         .metric-card {
-            background: var(--color-bg-secondary);
+            background: var(--color-metric-surface);
             padding: var(--spacing-lg);
-            border-radius: var(--radius-md);
+            border-radius: var(--radius-lg);
             text-align: center;
-            border: 1px solid var(--color-border);
+            border: 1px solid var(--color-metric-border);
+            transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--color-brand-accent);
+            box-shadow: var(--shadow-sm);
         }
 
         .metric-card__label {
@@ -661,9 +751,9 @@
 
         .overview-highlight {
             padding: var(--spacing-lg);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-md);
-            background: var(--color-bg-secondary);
+            border: 1px solid var(--color-brand-accent);
+            border-radius: var(--radius-lg);
+            background: linear-gradient(135deg, var(--color-info-light) 0%, var(--color-bg-secondary) 100%);
             text-align: left;
         }
 
@@ -696,6 +786,11 @@
             font-size: var(--font-size-sm);
             font-weight: 600;
             list-style: none;
+            transition: color var(--transition-fast);
+        }
+
+        .disclosure-summary:hover {
+            color: var(--color-brand-secondary);
         }
 
         .disclosure-summary::-webkit-details-marker {
@@ -851,11 +946,21 @@
             padding-block: var(--spacing-sm);
         }
 
+        .mio-avatar--footer {
+            width: 36px;
+            height: 36px;
+        }
+
         /* ====== MIO MASCOT ====== */
-        .mio-state-image {
+        .mio-avatar--state {
             width: 120px;
             height: 120px;
-            object-fit: contain;
+        }
+
+        .mio-avatar--status {
+            width: 36px;
+            height: 36px;
+            margin: -3px 0;
         }
 
         @keyframes mioFloat {
@@ -878,6 +983,11 @@
         }
 
         .mio-blink { animation: mioFloat 3s ease-in-out infinite, mioBlink 5s 1s ease-in-out infinite; }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.72; transform: scale(1.18); }
+        }
 
         #stream-idle {
             display: block;
@@ -1068,6 +1178,11 @@
                 font-size: var(--font-size-lg);
             }
 
+            .mio-avatar--status {
+                width: 30px;
+                height: 30px;
+            }
+
             .stream-controls {
                 gap: var(--spacing-sm);
             }
@@ -1133,6 +1248,15 @@
             .brand-lockup {
                 gap: var(--spacing-sm);
             }
+
+            .mio-avatar--brand {
+                width: 42px;
+                height: 42px;
+            }
+
+            .brand-tagline {
+                font-size: 11px;
+            }
         }
 
         @media (max-width: 360px) {
@@ -1144,7 +1268,7 @@
                 margin-bottom: var(--spacing-sm);
             }
 
-            .stream-placeholder__pose .mio-state-image {
+            .stream-placeholder__pose .mio-avatar--state {
                 width: 88px;
                 height: 88px;
             }
@@ -1236,7 +1360,11 @@
 
     <header class="site-header">
         <div class="container brand-lockup">
-            <span class="brand-name">GoGoMio</span>
+            <img class="mio-avatar mio-avatar--brand mio-float" src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="MIO mascot">
+            <div class="brand-copy">
+                <span class="brand-name">GoGoMio</span>
+                <span class="brand-tagline">Your camera stream, with MIO</span>
+            </div>
         </div>
     </header>
 
@@ -1244,7 +1372,7 @@
         <header class="page-header">
             <div>
                 <h1 class="page-header__title" aria-describedby="page-description">Camera</h1>
-                <p class="page-header__description" id="page-description">View the live stream and check camera readiness.</p>
+                <p class="page-header__description" id="page-description">MIO is ready to help you keep an eye on things.</p>
             </div>
         </header>
 
@@ -1262,14 +1390,14 @@
                         <div class="stream-placeholder">
                             <div class="stream-placeholder__pose">
                                 <div id="stream-spinner" class="stream-spinner is-hidden">
-                                    <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f" alt="MIO is thinking" class="mio-state-image mio-pulse">
+                                    <img id="stream-spinner-image" src="/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f" alt="MIO is thinking" class="mio-avatar mio-avatar--state mio-pulse">
                                 </div>
                                 <div id="stream-idle">
-                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="MIO is resting" class="mio-state-image mio-blink">
+                                    <img id="stream-idle-image" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="MIO is resting" class="mio-avatar mio-avatar--state mio-blink">
                                 </div>
                             </div>
-                            <p id="stream-placeholder-text" class="stream-placeholder__text">Stream is stopped</p>
-                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Start the stream to view the camera.</p>
+                            <p id="stream-placeholder-text" class="stream-placeholder__text">MIO's ready when you are.</p>
+                            <p id="stream-placeholder-desc" class="stream-placeholder__description">Start the stream to see what's happening.</p>
                         </div>
                     </div>
                     <span id="feed-mode-badge" class="feed-mode-badge" hidden>Simulated feed</span>
@@ -1287,8 +1415,9 @@
                 <div class="stream-status" role="status" aria-live="polite">
                     <span>Stream</span>
                     <span class="ui-badge ui-badge--neutral" id="stream-status-badge">
+                        <img id="stream-status-mascot" class="mio-avatar mio-avatar--status mio-blink" src="/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66" alt="" aria-hidden="true">
                         <span class="ui-badge__dot" aria-hidden="true"></span>
-                        <span class="ui-badge__label" id="status-text">Stream stopped</span>
+                        <span class="ui-badge__label" id="status-text">Ready</span>
                     </span>
                 </div>
             </section>
@@ -1348,6 +1477,7 @@
 
     <footer class="site-footer">
         <div class="container footer-content">
+            <img class="mio-avatar mio-avatar--footer" src="/static/mio/mio_pose_idle.png?v=fa5479ac7c65b12baf9cc84043969af4b75b8fd7a99a92b30e29d6961b016c6b" alt="" aria-hidden="true">
             <p>GoGoMio · Raspberry Pi camera streaming</p>
         </div>
     </footer>
@@ -1368,6 +1498,6 @@
         </div>
     </dialog>
 
-    <script src="/static/app.js?v=e2f97b72369b1e6dd473d5d1b2423f4e6e99d75fe32de67739170ac2581a297d"></script>
+    <script src="/static/app.js?v=bf5066f22ea9c0584244a580cac213a6f3825e7d57748461f203f2dc2dd19298"></script>
 </body>
 </html>

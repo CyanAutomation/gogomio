@@ -29,7 +29,7 @@
 
   // internal/web/src/dashboard-presentation.ts
   var streamStatuses = {
-    ready: { label: "Stream stopped", tone: "neutral" },
+    ready: { label: "Ready", tone: "neutral" },
     connecting: { label: "Connecting\u2026", tone: "warning" },
     live: { label: "Live", tone: "success" },
     reconnecting: { label: "Reconnecting\u2026", tone: "warning" },
@@ -37,6 +37,36 @@
   };
   function getStreamStatusPresentation(state) {
     return streamStatuses[state];
+  }
+  var streamMascots = {
+    ready: {
+      src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
+      alt: "MIO is resting",
+      animationClass: "mio-blink"
+    },
+    connecting: {
+      src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
+      alt: "MIO is curious",
+      animationClass: "mio-pulse"
+    },
+    live: {
+      src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
+      alt: "MIO is happily watching",
+      animationClass: "mio-float"
+    },
+    reconnecting: {
+      src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
+      alt: "MIO is concerned",
+      animationClass: "mio-pulse"
+    },
+    unavailable: {
+      src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
+      alt: "MIO is worried",
+      animationClass: "mio-float"
+    }
+  };
+  function getStreamMascotPresentation(state) {
+    return streamMascots[state];
   }
   function getCameraReadinessPresentation(state) {
     const presentations = {
@@ -188,6 +218,11 @@
     view.root.className = `ui-badge ui-badge--${tone}`;
     if (view.label.textContent !== label) view.label.textContent = label;
   }
+  function updateMascotImage(image, presentation, size, decorative = false) {
+    image.src = presentation.src;
+    image.alt = decorative ? "" : presentation.alt;
+    image.className = `mio-avatar mio-avatar--${size} ${presentation.animationClass}`;
+  }
   function renderStatusBadge(label, tone) {
     return `<span class="ui-badge ui-badge--${tone}"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">${escapeHTML(label)}</span></span>`;
   }
@@ -244,6 +279,7 @@
       this.idleImage = getElement("stream-idle-image");
       this.streamStatusBadge = getElement("stream-status-badge");
       this.statusText = getElement("status-text");
+      this.streamStatusMascot = getElement("stream-status-mascot");
       this.cameraStatusBadge = getElement("camera-status-badge");
       this.cameraStatusText = getElement("camera-status-text");
       this.cameraStatusGuidance = getElement("camera-status-guidance");
@@ -296,8 +332,8 @@
           animationClass: "mio-pulse"
         },
         error: {
-          src: "/static/mio/mio_pose_angry.png?v=45102660b30cef3f208fd7d2663fc9064f421c69dc0a165837c9c52408acc52b",
-          alt: "MIO is distressed",
+          src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
+          alt: "MIO is worried",
           animationClass: "mio-pulse"
         },
         looking: {
@@ -321,7 +357,7 @@
       const pose = this.getPoseForState(state);
       imageElement.src = pose.src;
       imageElement.alt = pose.alt;
-      imageElement.className = `mio-state-image ${pose.animationClass}`;
+      imageElement.className = `mio-avatar mio-avatar--state ${pose.animationClass}`;
     }
     setLoadingPose(state = "loading") {
       this.applyPoseToImage(this.spinnerImage, state);
@@ -377,10 +413,10 @@
         const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
         if (nextRetryCount !== null) {
           this.streamRetryCount = nextRetryCount;
-          this.placeholderText.textContent = "Stream interrupted";
-          this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`;
+          this.placeholderText.textContent = "MIO lost the stream for a moment.";
+          this.placeholderDesc.textContent = `MIO is reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})\u2026`;
           this.updateStatus("reconnecting");
-          this.setLoadingPose("running");
+          this.setLoadingPose("warning");
           const scheduledRetryCount = nextRetryCount;
           window.setTimeout(() => {
             if (shouldRunStreamRetry(this.isStreaming, scheduledRetryCount, this.streamRetryCount)) {
@@ -388,8 +424,9 @@
             }
           }, 2e3);
         } else {
-          this.placeholderText.textContent = "Stream unavailable";
-          this.placeholderDesc.textContent = "Check the camera connection, then retry the stream.";
+          this.placeholderText.textContent = "MIO couldn't reconnect.";
+          this.placeholderDesc.textContent = "Check the camera connection, then try again.";
+          this.setLoadingPose("error");
           this.updateStatus("unavailable");
         }
         this.updateStreamControls();
@@ -405,6 +442,7 @@
         presentation.label,
         presentation.tone
       );
+      updateMascotImage(this.streamStatusMascot, getStreamMascotPresentation(state), "status", true);
     }
     updateCameraReadiness(state) {
       if (this.cameraReadiness === state) return;
@@ -456,8 +494,8 @@
     }
     startStream() {
       if (this.isStreaming) return;
-      this.placeholderText.textContent = "Connecting to camera\u2026";
-      this.placeholderDesc.textContent = "The live view will appear when the first frame arrives.";
+      this.placeholderText.textContent = "MIO is warming things up\u2026";
+      this.placeholderDesc.textContent = "Your camera stream should be ready in a moment.";
       this.loadingElement.classList.remove("is-hidden");
       this.setLoadingPose("loading");
       this.clearPoseResetTimer();
@@ -476,8 +514,8 @@
       this.loadingElement.classList.remove("is-hidden");
       this.setIdlePose("idle");
       this.clearPoseResetTimer();
-      this.placeholderText.textContent = "Stream is stopped";
-      this.placeholderDesc.textContent = "Start the stream to view the camera.";
+      this.placeholderText.textContent = "MIO's ready when you are.";
+      this.placeholderDesc.textContent = "Start the stream to see what's happening.";
       this.updateStatus("ready");
       this.updateStreamControls();
       this.stopStatsPolling();
