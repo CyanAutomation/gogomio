@@ -76,6 +76,18 @@ test("MIO stays visible in the header and beside the live stream status", () => 
     assert.match(app, /MIO is warming things up/);
 });
 
+test("brand header keeps its intrinsic height inside the flex page shell", () => {
+    const siteHeader = html.match(/\.site-header\s*\{([^}]+)\}/);
+    assert.ok(siteHeader?.[1], "expected a branded site header rule");
+    assert.match(siteHeader[1], /flex-shrink:\s*0/);
+});
+
+test("section titles stay together beside their status badges", () => {
+    const sectionTitle = html.match(/\.section-title\s*\{([^}]+)\}/);
+    assert.ok(sectionTitle?.[1], "expected a shared section title rule");
+    assert.match(sectionTitle[1], /white-space:\s*nowrap/);
+});
+
 test("every state mascot pose is backed by a bundled MIO asset", () => {
     const states: StreamState[] = ["ready", "connecting", "live", "reconnecting", "unavailable"];
     for (const state of states) {

@@ -20,10 +20,12 @@ import { nextStreamRetryCount, shouldRunStreamRetry } from "./stream-retry";
 import { startDashboardPoller } from "./polling";
 import { SnackbarController, type SnackbarTone } from "./snackbar";
 import {
-    escapeHTML,
+    renderIcon,
     renderMetricCard,
     renderMetricRow,
-    renderStatusBadge,
+    renderNotice,
+    renderSectionHeading,
+    renderStatusMetricCard,
     updateMascotImage,
     updateStatusBadge,
     type MetricRowIcon,
@@ -31,7 +33,6 @@ import {
 } from "./ui-components";
 
 type PoseState = "idle" | "loading" | "success" | "warning" | "running" | "error" | "looking";
-type IconName = "alert" | "camera" | "chart" | "clock" | "close" | "grid" | "image" | "info" | "link" | "play" | "quality" | "refresh" | "settings" | "stop";
 
 interface Pose {
     src: string;
@@ -79,8 +80,6 @@ function getElement<T extends HTMLElement = HTMLElement>(id: string): T {
     if (!element) throw new Error(`Required dashboard element #${id} was not found`);
     return element as T;
 }
-
-const iconMarkup = (name: IconName): string => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
 
 function diagnosticMetric(label: string, value: unknown, icon: MetricRowIcon, tone: MetricRowTone = "neutral"): string {
     return renderMetricRow(label, value, icon, tone);
@@ -600,14 +599,8 @@ function fetchDiagnostics(): void {
             const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
             const cameraTone = data.camera_ready ? "success" : "error";
             const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
-            const cameraCard = `<div class="metric-card metric-card--status">
-                <div class="metric-card__label">Camera</div>
-                ${renderStatusBadge(cameraStatus, cameraTone)}
-            </div>`;
-            const healthCard = `<div class="metric-card metric-card--status">
-                <div class="metric-card__label">System health</div>
-                ${renderStatusBadge(data.health_status || "Unknown", healthTone)}
-            </div>`;
+            const cameraCard = renderStatusMetricCard("Camera", cameraStatus, cameraTone);
+            const healthCard = renderStatusMetricCard("System health", data.health_status || "Unknown", healthTone);
             const totalFailures = Number(data.capture_failures_total || 0);
             const noticeTone = healthTone === "neutral" ? "info" : healthTone;
             const existingDetails = content.querySelector<HTMLDetailsElement>(".diagnostics-details");
@@ -615,15 +608,13 @@ function fetchDiagnostics(): void {
             const detailsHadFocus = existingDetails?.contains(document.activeElement) ?? false;
 
             content.innerHTML = `
+                ${renderSectionHeading("Camera health", "camera")}
                 <div class="diagnostic-summary-grid">
                     ${cameraCard}
                     ${healthCard}
                 </div>
 
-                <div class="notice notice--${noticeTone} diagnostic-notice">
-                    <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System status</strong>
-                    <p>${escapeHTML(data.message || "No status details right now.")}</p>
-                </div>
+                ${renderNotice(noticeTone, "System status", data.message || "No status details right now.", noticeTone === "error" ? "alert" : "info")}
 
                 <details class="diagnostics-details">
                     <summary class="disclosure-summary">Detailed metrics</summary>
@@ -644,7 +635,7 @@ function fetchDiagnostics(): void {
                     </div>
                 </details>
 
-                <div class="refresh-indicator">${iconMarkup("refresh")}<span>Refreshes every 3 seconds</span></div>
+                <div class="refresh-indicator">${renderIcon("refresh")}<span>Refreshes every 3 seconds</span></div>
             `;
 
             const updatedDetails = content.querySelector<HTMLDetailsElement>(".diagnostics-details");
