@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderMetricCard, renderMetricRow, renderStatusBadge, updateStatusBadge, type StatusBadgeView } from "./ui-components";
+import { getStreamMascotPresentation } from "./dashboard-presentation";
+import { renderMetricCard, renderMetricRow, renderStatusBadge, updateMascotImage, updateStatusBadge, type StatusBadgeView } from "./ui-components";
 
 test("status badge rendering escapes its label and marks its decorative dot", () => {
     assert.equal(
@@ -36,6 +37,16 @@ test("unchanged status badges do not rewrite their live-region label", () => {
     updateStatusBadge(view, "Camera ready", "success");
 
     assert.equal(writes, 0);
+});
+
+test("MIO avatar component updates its pose and uses a reusable size variant", () => {
+    const image = { src: "", alt: "old description", className: "old-avatar" };
+
+    updateMascotImage(image, getStreamMascotPresentation("live"), "status", true);
+
+    assert.equal(image.src, getStreamMascotPresentation("live").src);
+    assert.equal(image.alt, "");
+    assert.equal(image.className, "mio-avatar mio-avatar--status mio-float");
 });
 
 test("metric cards escape user-facing content and constrain tones", () => {
