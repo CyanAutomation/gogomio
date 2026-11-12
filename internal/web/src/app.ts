@@ -8,6 +8,7 @@ import {
     getCameraReadinessPresentation,
     getFrameRateTone,
     getHealthTone,
+    getStreamMascotPresentation,
     getStreamControlPresentation,
     getStreamStatusPresentation,
     type CameraReadinessState,
@@ -22,6 +23,7 @@ import {
     renderMetricCard,
     renderMetricRow,
     renderStatusBadge,
+    updateMascotImage,
     updateStatusBadge,
     type MetricRowIcon,
     type MetricRowTone,
@@ -94,6 +96,7 @@ class StreamController {
     private readonly idleImage: HTMLImageElement;
     private readonly streamStatusBadge: HTMLElement;
     private readonly statusText: HTMLElement;
+    private readonly streamStatusMascot: HTMLImageElement;
     private readonly cameraStatusBadge: HTMLElement;
     private readonly cameraStatusText: HTMLElement;
     private readonly cameraStatusGuidance: HTMLElement;
@@ -125,6 +128,7 @@ class StreamController {
         this.idleImage = getElement<HTMLImageElement>("stream-idle-image");
         this.streamStatusBadge = getElement("stream-status-badge");
         this.statusText = getElement("status-text");
+        this.streamStatusMascot = getElement<HTMLImageElement>("stream-status-mascot");
         this.cameraStatusBadge = getElement("camera-status-badge");
         this.cameraStatusText = getElement("camera-status-text");
         this.cameraStatusGuidance = getElement("camera-status-guidance");
@@ -177,8 +181,8 @@ class StreamController {
                 animationClass: "mio-pulse",
             },
             error: {
-                src: "/static/mio/mio_pose_angry.png?v=45102660b30cef3f208fd7d2663fc9064f421c69dc0a165837c9c52408acc52b",
-                alt: "MIO is distressed",
+                src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
+                alt: "MIO is worried",
                 animationClass: "mio-pulse",
             },
             looking: {
@@ -205,7 +209,7 @@ class StreamController {
         const pose = this.getPoseForState(state);
         imageElement.src = pose.src;
         imageElement.alt = pose.alt;
-        imageElement.className = `mio-state-image ${pose.animationClass}`;
+        imageElement.className = `mio-avatar mio-avatar--state ${pose.animationClass}`;
     }
 
     setLoadingPose(state: PoseState = "loading"): void {
@@ -270,10 +274,10 @@ class StreamController {
             const nextRetryCount = nextStreamRetryCount(this.streamRetryCount, this.maxStreamRetries);
             if (nextRetryCount !== null) {
                 this.streamRetryCount = nextRetryCount;
-                this.placeholderText.textContent = "Stream interrupted";
-                this.placeholderDesc.textContent = `Reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})…`;
+                this.placeholderText.textContent = "MIO lost the stream for a moment.";
+                this.placeholderDesc.textContent = `MIO is reconnecting (${this.streamRetryCount} of ${this.maxStreamRetries})…`;
                 this.updateStatus("reconnecting");
-                this.setLoadingPose("running");
+                this.setLoadingPose("warning");
                 const scheduledRetryCount = nextRetryCount;
                 window.setTimeout(() => {
                     if (shouldRunStreamRetry(this.isStreaming, scheduledRetryCount, this.streamRetryCount)) {
@@ -281,8 +285,9 @@ class StreamController {
                     }
                 }, 2000);
             } else {
-                this.placeholderText.textContent = "Stream unavailable";
-                this.placeholderDesc.textContent = "Check the camera connection, then retry the stream.";
+                this.placeholderText.textContent = "MIO couldn't reconnect.";
+                this.placeholderDesc.textContent = "Check the camera connection, then try again.";
+                this.setLoadingPose("error");
                 this.updateStatus("unavailable");
             }
 
@@ -300,6 +305,7 @@ class StreamController {
             presentation.label,
             presentation.tone,
         );
+        updateMascotImage(this.streamStatusMascot, getStreamMascotPresentation(state), "status", true);
     }
 
     updateCameraReadiness(state: CameraReadinessState): void {
@@ -359,8 +365,8 @@ class StreamController {
     startStream(): void {
         if (this.isStreaming) return;
 
-        this.placeholderText.textContent = "Connecting to camera…";
-        this.placeholderDesc.textContent = "The live view will appear when the first frame arrives.";
+        this.placeholderText.textContent = "MIO is warming things up…";
+        this.placeholderDesc.textContent = "Your camera stream should be ready in a moment.";
         this.loadingElement.classList.remove("is-hidden");
         this.setLoadingPose("loading");
         this.clearPoseResetTimer();
@@ -387,8 +393,8 @@ class StreamController {
         this.loadingElement.classList.remove("is-hidden");
         this.setIdlePose("idle");
         this.clearPoseResetTimer();
-        this.placeholderText.textContent = "Stream is stopped";
-        this.placeholderDesc.textContent = "Start the stream to view the camera.";
+        this.placeholderText.textContent = "MIO's ready when you are.";
+        this.placeholderDesc.textContent = "Start the stream to see what's happening.";
         this.updateStatus("ready");
         this.updateStreamControls();
         this.stopStatsPolling();

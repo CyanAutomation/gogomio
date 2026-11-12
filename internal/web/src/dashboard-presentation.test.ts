@@ -9,6 +9,7 @@ import {
     getFrameRateTone,
     getHealthTone,
     getCameraReadinessPresentation,
+    getStreamMascotPresentation,
     getStreamControlPresentation,
     getStreamStatusPresentation,
 } from "./dashboard-presentation";
@@ -41,11 +42,39 @@ test("an unavailable frame age is described without exposing its negative sentin
 });
 
 test("stream states have consistent labels and semantic tones", () => {
-    assert.deepEqual(getStreamStatusPresentation("ready"), { label: "Stream stopped", tone: "neutral" });
+    assert.deepEqual(getStreamStatusPresentation("ready"), { label: "Ready", tone: "neutral" });
     assert.deepEqual(getStreamStatusPresentation("connecting"), { label: "Connecting…", tone: "warning" });
     assert.deepEqual(getStreamStatusPresentation("live"), { label: "Live", tone: "success" });
     assert.deepEqual(getStreamStatusPresentation("reconnecting"), { label: "Reconnecting…", tone: "warning" });
     assert.deepEqual(getStreamStatusPresentation("unavailable"), { label: "Stream unavailable", tone: "error" });
+});
+
+test("MIO uses a friendly pose for every stream state", () => {
+    assert.deepEqual(getStreamMascotPresentation("ready"), {
+        src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
+        alt: "MIO is resting",
+        animationClass: "mio-blink",
+    });
+    assert.deepEqual(getStreamMascotPresentation("connecting"), {
+        src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
+        alt: "MIO is curious",
+        animationClass: "mio-pulse",
+    });
+    assert.deepEqual(getStreamMascotPresentation("live"), {
+        src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
+        alt: "MIO is happily watching",
+        animationClass: "mio-float",
+    });
+    assert.deepEqual(getStreamMascotPresentation("reconnecting"), {
+        src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
+        alt: "MIO is concerned",
+        animationClass: "mio-pulse",
+    });
+    assert.deepEqual(getStreamMascotPresentation("unavailable"), {
+        src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
+        alt: "MIO is worried",
+        animationClass: "mio-float",
+    });
 });
 
 test("camera readiness has distinct copy and tones for checking, ready, starting, and unavailable", () => {

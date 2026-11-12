@@ -1,18 +1,37 @@
-import type { MetricTone, StatusTone } from "./dashboard-presentation";
+import type { MetricTone, StatusTone, StreamMascotPresentation } from "./dashboard-presentation";
 
 export type BadgeTone = StatusTone | "info";
 export type MetricRowIcon = "alert" | "camera" | "chart" | "clock" | "grid" | "image" | "link" | "quality";
 export type MetricRowTone = "neutral" | "error";
+export type MascotAvatarSize = "brand" | "status" | "footer" | "state";
 
 export interface StatusBadgeView {
     root: Pick<HTMLElement, "className">;
     label: Pick<HTMLElement, "textContent">;
 }
 
+export interface MascotImageView {
+    src: string;
+    alt: string;
+    className: string;
+}
+
 /** Updates a reusable status badge without rewriting an unchanged live-region label. */
 export function updateStatusBadge(view: StatusBadgeView, label: string, tone: BadgeTone): void {
     view.root.className = `ui-badge ui-badge--${tone}`;
     if (view.label.textContent !== label) view.label.textContent = label;
+}
+
+/** Updates a shared MIO avatar while keeping its size and motion as reusable variants. */
+export function updateMascotImage(
+    image: MascotImageView,
+    presentation: StreamMascotPresentation,
+    size: MascotAvatarSize,
+    decorative = false,
+): void {
+    image.src = presentation.src;
+    image.alt = decorative ? "" : presentation.alt;
+    image.className = `mio-avatar mio-avatar--${size} ${presentation.animationClass}`;
 }
 
 /** Renders the shared status badge used in dynamically-built diagnostics cards. */

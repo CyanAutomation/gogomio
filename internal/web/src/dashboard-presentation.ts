@@ -8,6 +8,12 @@ export interface StreamStatusPresentation {
     tone: StatusTone;
 }
 
+export interface StreamMascotPresentation {
+    src: string;
+    alt: string;
+    animationClass: "mio-blink" | "mio-pulse" | "mio-float";
+}
+
 export interface StreamControlPresentation {
     startHidden: boolean;
     startLabel: string;
@@ -23,7 +29,7 @@ export interface CameraReadinessPresentation {
 }
 
 const streamStatuses: Record<StreamState, StreamStatusPresentation> = {
-    ready: { label: "Stream stopped", tone: "neutral" },
+    ready: { label: "Ready", tone: "neutral" },
     connecting: { label: "Connecting…", tone: "warning" },
     live: { label: "Live", tone: "success" },
     reconnecting: { label: "Reconnecting…", tone: "warning" },
@@ -32,6 +38,38 @@ const streamStatuses: Record<StreamState, StreamStatusPresentation> = {
 
 export function getStreamStatusPresentation(state: StreamState): StreamStatusPresentation {
     return streamStatuses[state];
+}
+
+const streamMascots: Record<StreamState, StreamMascotPresentation> = {
+    ready: {
+        src: "/static/mio/mio_pose_sleeping.png?v=f7f7212e2ebdf8a6438d93e7d3e4c8a2a7c02a3278d393ba13aad2a7fe040d66",
+        alt: "MIO is resting",
+        animationClass: "mio-blink",
+    },
+    connecting: {
+        src: "/static/mio/mio_pose_curious.png?v=acdd90f6293d65657beadd82466dcfa8a39ab308fc8add922925634cfa5b429f",
+        alt: "MIO is curious",
+        animationClass: "mio-pulse",
+    },
+    live: {
+        src: "/static/mio/mio_pose_happy.png?v=e2bf5184a25fad3fdd17320965ecc8bd022126f26379ae7df2a857c71ee265be",
+        alt: "MIO is happily watching",
+        animationClass: "mio-float",
+    },
+    reconnecting: {
+        src: "/static/mio/mio_pose_concerned.png?v=b28941a29aef2eebe3e74be347dfc9a6e208f61771ec72907e8e7700276f3b5c",
+        alt: "MIO is concerned",
+        animationClass: "mio-pulse",
+    },
+    unavailable: {
+        src: "/static/mio/mio_pose_worried.png?v=2c136a60a29ff48447aa0bd6484050e7af02efa87cbcab7279db3455215f92e4",
+        alt: "MIO is worried",
+        animationClass: "mio-float",
+    },
+};
+
+export function getStreamMascotPresentation(state: StreamState): StreamMascotPresentation {
+    return streamMascots[state];
 }
 
 export function getCameraReadinessPresentation(state: CameraReadinessState): CameraReadinessPresentation {
