@@ -219,6 +219,12 @@
   };
 
   // internal/web/src/ui-components.ts
+  function renderIcon(name) {
+    return `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
+  }
+  function renderSectionHeading(title, icon) {
+    return `<div class="section-heading"><h3 class="section-title">${renderIcon(icon)}<span>${escapeHTML(title)}</span></h3></div>`;
+  }
   function updateStatusBadge(view, label, tone) {
     view.root.className = `ui-badge ui-badge--${tone}`;
     if (view.label.textContent !== label) view.label.textContent = label;
@@ -231,13 +237,18 @@
   function renderStatusBadge(label, tone) {
     return `<span class="ui-badge ui-badge--${tone}"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">${escapeHTML(label)}</span></span>`;
   }
+  function renderStatusMetricCard(label, status, tone) {
+    return `<div class="metric-card metric-card--status"><div class="metric-card__label">${escapeHTML(label)}</div>${renderStatusBadge(status, tone)}</div>`;
+  }
+  function renderNotice(tone, title, message, icon) {
+    return `<div class="notice notice--${tone} diagnostic-notice"><strong>${renderIcon(icon)} ${escapeHTML(title)}</strong><p>${escapeHTML(message)}</p></div>`;
+  }
   function renderMetricCard(label, value, tone = "neutral") {
     return `<div class="metric-card"><div class="metric-card__label">${escapeHTML(label)}</div><div class="metric-card__value metric-card__value--${tone}">${escapeHTML(value)}</div></div>`;
   }
   function renderMetricRow(label, value, icon, tone = "neutral") {
-    const iconMarkup2 = `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${icon}"></use></svg>`;
     const toneClass = tone === "error" ? " metric-card__value--error" : "";
-    return `<div class="metric-row"><span class="metric-row__label">${iconMarkup2}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
+    return `<div class="metric-row"><span class="metric-row__label">${renderIcon(icon)}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
   }
   function escapeHTML(value) {
     const entities = {
@@ -256,7 +267,6 @@
     if (!element) throw new Error(`Required dashboard element #${id} was not found`);
     return element;
   }
-  var iconMarkup = (name) => `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
   function diagnosticMetric(label, value, icon, tone = "neutral") {
     return renderMetricRow(label, value, icon, tone);
   }
@@ -682,29 +692,21 @@
       const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
       const cameraTone = data.camera_ready ? "success" : "error";
       const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
-      const cameraCard = `<div class="metric-card metric-card--status">
-                <div class="metric-card__label">Camera</div>
-                ${renderStatusBadge(cameraStatus, cameraTone)}
-            </div>`;
-      const healthCard = `<div class="metric-card metric-card--status">
-                <div class="metric-card__label">System health</div>
-                ${renderStatusBadge(data.health_status || "Unknown", healthTone)}
-            </div>`;
+      const cameraCard = renderStatusMetricCard("Camera", cameraStatus, cameraTone);
+      const healthCard = renderStatusMetricCard("System health", data.health_status || "Unknown", healthTone);
       const totalFailures = Number(data.capture_failures_total || 0);
       const noticeTone = healthTone === "neutral" ? "info" : healthTone;
       const existingDetails = content.querySelector(".diagnostics-details");
       const detailsWereOpen = existingDetails?.open ?? false;
       const detailsHadFocus = existingDetails?.contains(document.activeElement) ?? false;
       content.innerHTML = `
+                ${renderSectionHeading("Camera health", "camera")}
                 <div class="diagnostic-summary-grid">
                     ${cameraCard}
                     ${healthCard}
                 </div>
 
-                <div class="notice notice--${noticeTone} diagnostic-notice">
-                    <strong>${iconMarkup(noticeTone === "error" ? "alert" : "info")} System status</strong>
-                    <p>${escapeHTML(data.message || "No status details right now.")}</p>
-                </div>
+                ${renderNotice(noticeTone, "System status", data.message || "No status details right now.", noticeTone === "error" ? "alert" : "info")}
 
                 <details class="diagnostics-details">
                     <summary class="disclosure-summary">Detailed metrics</summary>
@@ -725,7 +727,7 @@
                     </div>
                 </details>
 
-                <div class="refresh-indicator">${iconMarkup("refresh")}<span>Refreshes every 3 seconds</span></div>
+                <div class="refresh-indicator">${renderIcon("refresh")}<span>Refreshes every 3 seconds</span></div>
             `;
       const updatedDetails = content.querySelector(".diagnostics-details");
       if (updatedDetails) {
