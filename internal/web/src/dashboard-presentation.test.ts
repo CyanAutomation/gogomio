@@ -190,6 +190,7 @@ test("live frame-rate tones map to kind companion poses", () => {
     assert.equal(getCompanionPoseForFrameRateTone("success"), "happy");
     assert.equal(getCompanionPoseForFrameRateTone("warning"), "concerned");
     assert.equal(getCompanionPoseForFrameRateTone("error"), "worried");
+    assert.equal(getCompanionPoseForFrameRateTone("neutral"), "happy");
 });
 
 test("pose changes require two consecutive polls and ignore a returned candidate", () => {

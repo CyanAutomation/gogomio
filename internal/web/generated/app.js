@@ -82,9 +82,15 @@
     return mioPoses[pose];
   }
   function getCompanionPoseForFrameRateTone(tone) {
-    if (tone === "success") return "happy";
-    if (tone === "error") return "worried";
-    return "concerned";
+    switch (tone) {
+      case "success":
+      case "neutral":
+        return "happy";
+      case "warning":
+        return "concerned";
+      case "error":
+        return "worried";
+    }
   }
   var ConsecutivePollHysteresis = class {
     constructor(initialValue, minimumConsecutive = 2) {

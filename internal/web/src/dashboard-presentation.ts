@@ -86,9 +86,15 @@ export function getStreamMascotPresentation(state: StreamState): StreamMascotPre
 }
 
 export function getCompanionPoseForFrameRateTone(tone: MetricTone): "happy" | "concerned" | "worried" {
-    if (tone === "success") return "happy";
-    if (tone === "error") return "worried";
-    return "concerned";
+    switch (tone) {
+        case "success":
+        case "neutral":
+            return "happy";
+        case "warning":
+            return "concerned";
+        case "error":
+            return "worried";
+    }
 }
 
 export class ConsecutivePollHysteresis<T> {
