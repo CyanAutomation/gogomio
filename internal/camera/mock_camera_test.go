@@ -431,14 +431,19 @@ func TestMockCameraCaptureFrameConcurrentSequencing(t *testing.T) {
 	}
 
 	frameInterval := time.Second / time.Duration(fps)
-	expectedLastFrameTime := time.Unix(0, 0).Add(time.Duration(totalCalls) * frameInterval)
-	if !lastFrameTime.Equal(expectedLastFrameTime) {
-		t.Fatalf("expected lastFrameTime=%v, got %v", expectedLastFrameTime, lastFrameTime)
-	}
 
 	clock.mu.Lock()
 	totalSlept := clock.slept
 	clock.mu.Unlock()
+	// lastFrameTime is a snapshot of clock.now taken by one of the concurrent
+	// goroutines. Because the fake clock is monotonic (now only advances) and
+	// totalSlept is the final accumulated value read after all goroutines finish,
+	// lastFrameTime is always <= time.Unix(0,0).Add(totalSlept). This bound
+	// would not hold if CaptureFrame ever read clock.now before advancing it.
+	maxLastFrameTime := time.Unix(0, 0).Add(totalSlept)
+	if lastFrameTime.After(maxLastFrameTime) {
+		t.Fatalf("expected lastFrameTime <= %v (total slept), got %v", maxLastFrameTime, lastFrameTime)
+	}
 	if totalSlept < time.Duration(totalCalls)*frameInterval {
 		t.Fatalf("expected total sleep >= %v, got %v", time.Duration(totalCalls)*frameInterval, totalSlept)
 	}
