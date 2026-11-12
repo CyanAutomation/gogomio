@@ -63,7 +63,7 @@ Use CSS custom properties for palette values, spacing, radius, shadow, and motio
 
 Use the same state language in the viewer, status bar, controls, and diagnostics. Reserve red for a failed connection. Keep the primary action available in ready and unavailable states; allow stopping during connection, streaming, or reconnection.
 
-Keep the camera viewer dark enough for camera imagery. Use the bright palette around the viewer, in the idle screen, status companion, buttons, and metric surfaces.
+Keep the camera viewer dark enough for camera imagery. Use the bright palette around the viewer, in the idle screen, status companion, buttons, and metric surfaces. Show the camera detail tiles on first load so resolution, JPEG quality, and active streams are easy to scan; let users collapse the group when they want more space.
 
 ## Voice and copy
 

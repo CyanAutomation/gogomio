@@ -71,9 +71,18 @@ test("primary action text stays readable in light and dark mode", () => {
 
 test("MIO stays visible in the header and beside the live stream status", () => {
     assert.match(html, /<img[^>]*class="mio-avatar mio-avatar--brand mio-float"[^>]*src="[^"]*mio_pose_idle\.png/);
-    assert.match(html, /<img[^>]*id="stream-status-mascot"[^>]*class="mio-avatar mio-avatar--status mio-blink"[^>]*aria-hidden="true"/);
+    assert.match(html, /<img[^>]*id="stream-idle-image"[^>]*src="[^"]*mio_pose_idle\.png/);
+    assert.match(html, /<img[^>]*id="stream-status-mascot"[^>]*class="mio-avatar mio-avatar--status mio-float"[^>]*src="[^"]*mio_pose_idle\.png[^>]*aria-hidden="true"/);
     assert.match(html, /MIO's ready when you are\./);
     assert.match(app, /MIO is warming things up/);
+});
+
+test("camera details are expanded on first load so key metrics stay visible", () => {
+    const details = html.match(/<details class="overview-details" open>([\s\S]*?)<\/details>/);
+    assert.ok(details?.[1], "expected the camera detail tiles to be visible by default");
+    assert.match(details[1], /id="stat-resolution"/);
+    assert.match(details[1], /id="stat-quality"/);
+    assert.match(details[1], /id="stat-connections"/);
 });
 
 test("brand header keeps its intrinsic height inside the flex page shell", () => {
