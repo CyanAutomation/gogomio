@@ -18,6 +18,9 @@ var webFS embed.FS
 //go:embed mio
 var mioFS embed.FS
 
+//go:embed fonts
+var fontFS embed.FS
+
 const immutableCacheControl = "public, max-age=31536000, immutable"
 
 type successfulFileCacheWriter struct {
@@ -114,6 +117,29 @@ func RegisterStaticFiles(r *http.ServeMux) {
 		}
 
 		mioHandler.ServeHTTP(&successfulFileCacheWriter{
+			ResponseWriter:          w,
+			cacheSuccessfulResponse: cacheSuccessfulResponse,
+		}, req)
+	}))
+
+	fontSubFS, err := fs.Sub(fontFS, "fonts")
+	if err != nil {
+		log.Printf("Error creating font sub-filesystem: %v", err)
+		return
+	}
+	fontHandler := http.StripPrefix("/static/fonts/", http.FileServer(http.FS(fontSubFS)))
+	r.Handle("/static/fonts/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		name := strings.TrimPrefix(req.URL.Path, "/static/fonts/")
+		name = strings.TrimPrefix(path.Clean("/"+name), "/")
+		if strings.HasSuffix(name, ".woff2") {
+			w.Header().Set("Content-Type", "font/woff2")
+		}
+		cacheSuccessfulResponse := false
+		if info, statErr := fs.Stat(fontSubFS, name); statErr == nil && info != nil {
+			cacheSuccessfulResponse = !info.IsDir()
+		}
+
+		fontHandler.ServeHTTP(&successfulFileCacheWriter{
 			ResponseWriter:          w,
 			cacheSuccessfulResponse: cacheSuccessfulResponse,
 		}, req)

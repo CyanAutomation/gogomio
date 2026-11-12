@@ -53,11 +53,11 @@ test("unchanged status badges do not rewrite their live-region label", () => {
 test("MIO avatar component updates its pose and uses a reusable size variant", () => {
     const image = { src: "", alt: "old description", className: "old-avatar" };
 
-    updateMascotImage(image, getStreamMascotPresentation("live"), "status", true);
+    updateMascotImage(image, getStreamMascotPresentation("live"), "viewer", true);
 
     assert.equal(image.src, getStreamMascotPresentation("live").src);
     assert.equal(image.alt, "");
-    assert.equal(image.className, "mio-avatar mio-avatar--status mio-float");
+    assert.equal(image.className, "mio-avatar mio-avatar--viewer mio-float");
 });
 
 test("metric cards escape user-facing content and constrain tones", () => {
