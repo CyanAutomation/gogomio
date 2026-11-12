@@ -2,6 +2,8 @@
 
 The dashboard keeps the camera view first, makes camera health easy to scan, and treats MIO as a visible companion without obscuring operational details. The CSS custom properties in `internal/web/index.html` are the source of truth for visual tokens. Build new UI from the shared primitives and components below instead of adding one-off styles.
 
+HTML renderers and stateful view updates live in `internal/web/src/ui-components.ts`. Reuse its typed, escaped renderers when composing dynamic dashboard or diagnostics content; keep application data and state decisions in `app.ts` and `dashboard-presentation.ts`.
+
 ## Visual tokens
 
 ### Color
@@ -44,6 +46,8 @@ Use the character sheet's blues as visible brand colors, then pair them with dar
 | Notice | `.notice`, `.notice--success`, `.notice--warning`, `.notice--error`, `.notice--info` | Share tone styling for transient messages and diagnostic status. |
 | Stream state | `getStreamStatusPresentation()` and `getStreamMascotPresentation()` | Keep status language, semantic tone, and MIO pose aligned across all five stream states. |
 | Icon | SVG symbols in `.icon-library` | Reuse an existing symbol before adding a new one. Hide decorative icons from assistive technology. |
+
+`ui-components.ts` exposes `renderIcon()`, `renderSectionHeading()`, `renderStatusBadge()`, `renderStatusMetricCard()`, `renderMetricCard()`, `renderMetricRow()`, and `renderNotice()`. These components compose the CSS primitives above, escape text content, and constrain icon and tone variants to their shared types. Add a renderer when repeated markup needs one consistent accessible treatment; keep one-off content in its owning page.
 
 Use CSS custom properties for palette values, spacing, radius, shadow, and motion. Prefer a modifier on a shared component when a state or size needs variation. Keep decorative bubbles and mascot motion out of forced-colors mode and respect reduced-motion preferences.
 
