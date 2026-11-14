@@ -54,7 +54,7 @@ class WorkflowContractTests(unittest.TestCase):
         for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(workflow=name):
                 text = workflow(name)
-                expected_pins = 1 if name == "code-coverage-test.yml" else 2
+                expected_pins = 2
                 self.assertEqual(text.count("node-version-file: .nvmrc"), expected_pins)
                 self.assertNotRegex(text, r"(?m)^\s+node-version:")
 
@@ -252,7 +252,7 @@ class WorkflowContractTests(unittest.TestCase):
         for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(node_workflow=name):
                 self.assertIn("actions/setup-node@", workflow(name))
-                expected_pins = 1 if name == "code-coverage-test.yml" else 2
+                expected_pins = 2
                 self.assertEqual(
                     workflow(name).count("node-version-file: .nvmrc"), expected_pins
                 )
@@ -293,6 +293,20 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(
             publish_build.index("docker/setup-qemu-action"),
             publish_build.index("docker/setup-buildx-action"),
+        )
+
+    def test_pr_container_builds_and_verifies_web_assets_before_docker_build(self):
+        container = workflow_job(workflow("code-coverage-test.yml"), "container")
+        node = workflow_step(container, "Set up Node.js")
+        web_build = workflow_step(container, "Build and verify embedded web UI")
+
+        self.assertIn("node-version-file: .nvmrc", node)
+        self.assertIn("npm ci", web_build)
+        self.assertIn("npm run build:web", web_build)
+        self.assertIn("npm run check:web", web_build)
+        self.assertLess(
+            container.index("Build and verify embedded web UI"),
+            container.index("Build production image for both architectures"),
         )
 
     def test_dependency_and_go_vulnerability_checks_run_in_pull_request_ci(self):
