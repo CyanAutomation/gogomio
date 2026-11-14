@@ -272,6 +272,46 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("actionlint", lint)
 
+    def test_pull_requests_build_both_docker_platforms_and_smoke_test_amd64(self):
+        text = workflow("code-coverage-test.yml")
+        container = workflow_job(text, "container")
+
+        self.assertIn("if: github.event_name == 'pull_request'", container)
+        self.assertRegex(container, r"uses: docker/setup-qemu-action@[0-9a-f]{40}")
+        self.assertLess(
+            container.index("docker/setup-qemu-action"),
+            container.index("docker/setup-buildx-action"),
+        )
+        self.assertIn("platforms: linux/amd64,linux/arm64", container)
+        self.assertIn("push: false", container)
+        self.assertIn("load: true", container)
+        self.assertIn("docker run", container)
+        self.assertIn("/ready", container)
+
+        publish_build = workflow_job(workflow(DOCKER_WORKFLOW), "build")
+        self.assertRegex(publish_build, r"uses: docker/setup-qemu-action@[0-9a-f]{40}")
+        self.assertLess(
+            publish_build.index("docker/setup-qemu-action"),
+            publish_build.index("docker/setup-buildx-action"),
+        )
+
+    def test_dependency_and_go_vulnerability_checks_run_in_pull_request_ci(self):
+        text = workflow("code-coverage-test.yml")
+        dependency_review = workflow_job(text, "dependency-review")
+
+        self.assertIn("if: github.event_name == 'pull_request'", dependency_review)
+        self.assertRegex(
+            dependency_review,
+            r"uses: actions/dependency-review-action@[0-9a-f]{40}",
+        )
+        self.assertIn("fail-on-severity: high", dependency_review)
+        self.assertIn("pull-requests: read", dependency_review)
+
+        govulncheck = workflow_step(text, "Check Go vulnerabilities")
+        self.assertIn("golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...", govulncheck)
+        staticcheck = workflow_step(text, "Run Staticcheck")
+        self.assertIn("honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...", staticcheck)
+
     def test_coverage_workflow_uses_executable_threshold_checker(self):
         step = workflow_step(workflow("code-coverage-test.yml"), "Enforce coverage threshold (≥75%)")
         self.assertIn("set -euo pipefail", step)
