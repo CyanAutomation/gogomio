@@ -121,8 +121,8 @@ class WorkflowContractTests(unittest.TestCase):
         cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
         go_mod = (ROOT / "go.mod").read_text()
 
-        module_go_version = "1.27.2"
-        docker_builder_go_version = "1.27.3"
+        module_go_version = "1.27.4"
+        docker_builder_go_version = "1.27.4"
         self.assertIn(
             f"FROM golang:{docker_builder_go_version}-alpine3.23 AS builder",
             dockerfile,

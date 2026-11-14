@@ -1,8 +1,8 @@
 # Dependency and Build Tooling Review
 
-**Date:** 2026-10-13
+**Date:** 2026-11-14
 **Project:** GoGoMio
-**Go module requirement:** Go 1.27.2
+**Go module requirement:** Go 1.27.4
 
 ## Go dependencies
 
@@ -20,8 +20,8 @@ These tools have distinct delivery or hardware roles and are not duplicated by t
 
 ## CI checks
 
-Normal CI checks use Go's built-in `go test`, `go vet`, and `gofmt`. The deployment workflows use runner-provided `jq` to process service responses. Dependency updates are not configured in Dependabot because the application module has no third-party Go packages; GitHub Actions updates remain enabled.
+Normal CI checks use Go's built-in `go test`, `go vet`, and `gofmt`, plus Staticcheck and `govulncheck` for static analysis and reachable vulnerability checks. Pull requests also run GitHub Dependency Review. The deployment workflows use runner-provided `jq` to process service responses. Dependency updates are not configured in Dependabot because the application module has no third-party Go packages; GitHub Actions updates remain enabled.
 
 ## Scope and maintenance
 
-This document records the dependency and tool inventory from repository manifests. It is not a live vulnerability scan. Keep this inventory current when adding a Go module, changing runtime camera backends, or changing build and release services. Evaluate the standard library and existing project code before adding a module.
+This document records the dependency and tool inventory from repository manifests; it is not a substitute for the scheduled and pull-request vulnerability checks. Keep this inventory current when adding a Go module, changing runtime camera backends, or changing build and release services. Evaluate the standard library and existing project code before adding a module.

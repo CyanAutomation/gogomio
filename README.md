@@ -53,7 +53,7 @@ For release history and unreleased changes, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Quick Start (Mock Camera, Go)
 
-Prerequisite: Go 1.27.2 or newer.
+Prerequisite: Go 1.27.4 or newer.
 
 ```bash
 # Start the server without Raspberry Pi hardware
@@ -585,7 +585,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 ## Dependencies
 
-- Go 1.27.2 or newer, as declared in `go.mod`
+- Go 1.27.4 or newer, as declared in `go.mod`
 - The Go application has no third-party Go module dependencies.
 - Runtime camera binaries (arm64 Raspberry Pi):
   - Preferred: `rpicam-vid` via `rpicam-apps`
@@ -596,7 +596,7 @@ curl http://YOUR_PI_IP:8000/snapshot.jpg -o image.jpg
 
 - **Published containers:** the multi-architecture build targets `linux/amd64` and `linux/arm64`; the mock Compose file deliberately pins `linux/amd64`. See the [build workflow](.github/workflows/build-docker.yml).
 - **Raspberry Pi CSI camera:** use 64-bit Raspberry Pi OS (arm64). The maintained [Pi build guide](docs/guides/RASPBERRY_PI_BUILD.md) covers Raspberry Pi 4 and 5.
-- **Source builds:** require Go 1.27.2 or newer; source runs in mock-camera mode need no camera hardware. CI runs the Go suite on Ubuntu, and the repository does not publish a broader native host-OS support matrix.
+- **Source builds:** require Go 1.27.4 or newer; source runs in mock-camera mode need no camera hardware. CI runs the Go suite on Ubuntu, and the repository does not publish a broader native host-OS support matrix.
 
 ## Release History
 
