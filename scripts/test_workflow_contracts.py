@@ -54,7 +54,7 @@ class WorkflowContractTests(unittest.TestCase):
         for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(workflow=name):
                 text = workflow(name)
-                expected_pins = 1 if name == "code-coverage-test.yml" else 2
+                expected_pins = 2
                 self.assertEqual(text.count("node-version-file: .nvmrc"), expected_pins)
                 self.assertNotRegex(text, r"(?m)^\s+node-version:")
 
@@ -121,8 +121,8 @@ class WorkflowContractTests(unittest.TestCase):
         cloudbuild = (ROOT / "cloudbuild.yaml").read_text()
         go_mod = (ROOT / "go.mod").read_text()
 
-        module_go_version = "1.27.2"
-        docker_builder_go_version = "1.27.3"
+        module_go_version = "1.27.4"
+        docker_builder_go_version = "1.27.4"
         self.assertIn(
             f"FROM golang:{docker_builder_go_version}-alpine3.23 AS builder",
             dockerfile,
@@ -252,7 +252,7 @@ class WorkflowContractTests(unittest.TestCase):
         for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
             with self.subTest(node_workflow=name):
                 self.assertIn("actions/setup-node@", workflow(name))
-                expected_pins = 1 if name == "code-coverage-test.yml" else 2
+                expected_pins = 2
                 self.assertEqual(
                     workflow(name).count("node-version-file: .nvmrc"), expected_pins
                 )
@@ -271,6 +271,60 @@ class WorkflowContractTests(unittest.TestCase):
             workflow("code-coverage-test.yml"), "Lint GitHub Actions workflows"
         )
         self.assertIn("actionlint", lint)
+
+    def test_pull_requests_build_both_docker_platforms_and_smoke_test_amd64(self):
+        text = workflow("code-coverage-test.yml")
+        container = workflow_job(text, "container")
+
+        self.assertIn("if: github.event_name == 'pull_request'", container)
+        self.assertRegex(container, r"uses: docker/setup-qemu-action@[0-9a-f]{40}")
+        self.assertLess(
+            container.index("docker/setup-qemu-action"),
+            container.index("docker/setup-buildx-action"),
+        )
+        self.assertIn("platforms: linux/amd64,linux/arm64", container)
+        self.assertIn("push: false", container)
+        self.assertIn("load: true", container)
+        self.assertIn("docker run", container)
+        self.assertIn("/ready", container)
+
+        publish_build = workflow_job(workflow(DOCKER_WORKFLOW), "build")
+        self.assertRegex(publish_build, r"uses: docker/setup-qemu-action@[0-9a-f]{40}")
+        self.assertLess(
+            publish_build.index("docker/setup-qemu-action"),
+            publish_build.index("docker/setup-buildx-action"),
+        )
+
+    def test_pr_container_builds_and_verifies_web_assets_before_docker_build(self):
+        container = workflow_job(workflow("code-coverage-test.yml"), "container")
+        node = workflow_step(container, "Set up Node.js")
+        web_build = workflow_step(container, "Build and verify embedded web UI")
+
+        self.assertIn("node-version-file: .nvmrc", node)
+        self.assertIn("npm ci", web_build)
+        self.assertIn("npm run build:web", web_build)
+        self.assertIn("npm run check:web", web_build)
+        self.assertLess(
+            container.index("Build and verify embedded web UI"),
+            container.index("Build production image for both architectures"),
+        )
+
+    def test_dependency_and_go_vulnerability_checks_run_in_pull_request_ci(self):
+        text = workflow("code-coverage-test.yml")
+        dependency_review = workflow_job(text, "dependency-review")
+
+        self.assertIn("if: github.event_name == 'pull_request'", dependency_review)
+        self.assertRegex(
+            dependency_review,
+            r"uses: actions/dependency-review-action@[0-9a-f]{40}",
+        )
+        self.assertIn("fail-on-severity: high", dependency_review)
+        self.assertIn("pull-requests: read", dependency_review)
+
+        govulncheck = workflow_step(text, "Check Go vulnerabilities")
+        self.assertIn("golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...", govulncheck)
+        staticcheck = workflow_step(text, "Run Staticcheck")
+        self.assertIn("honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...", staticcheck)
 
     def test_coverage_workflow_uses_executable_threshold_checker(self):
         step = workflow_step(workflow("code-coverage-test.yml"), "Enforce coverage threshold (≥75%)")
