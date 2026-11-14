@@ -163,6 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           container_name="gogomio-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          # shellcheck disable=SC2329
           cleanup() {
             status=$?
             if (( status != 0 )); then
