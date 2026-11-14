@@ -43,8 +43,8 @@ This project adheres to the Contributor Covenant. By participating, you are expe
 
 ### Prerequisites
 
-- **Go 1.27.2 or newer** — Install from [go.dev](https://go.dev/dl/). This is
-  the minimum declared in `go.mod`; the Docker builder and CI use Go 1.27.2.
+- **Go 1.27.4 or newer** — Install from [go.dev](https://go.dev/dl/). This is
+  the minimum declared in `go.mod`; the Docker builder and CI use Go 1.27.4.
 - **Node.js 26 and npm** — Required to type-check, test, and rebuild the embedded TypeScript web UI.
 - **Docker** — For multi-architecture builds and deployment testing
 - **Git** — For version control

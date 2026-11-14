@@ -406,10 +406,11 @@ __✅ Config separated from code__
 Config loaded from environment variables ([internal/config/config.go](../../internal/config/config.go)) and `.env` file, not hardcoded. Settings persisted to file ([internal/settings/settings.go](../../internal/settings/settings.go)) with OS-appropriate locking.
 
 __✅ Static checks present__
-CI runs `go vet ./...` and checks tracked Go files with `gofmt -l`.
+CI runs `go vet ./...`, Staticcheck, and `govulncheck`, and checks tracked Go
+files with `gofmt -l`.
 
 __✅ Type checking present__  
-Go is statically typed; all code type-safe by default. The module requires Go 1.27.2.
+Go is statically typed; all code type-safe by default. The module requires Go 1.27.4.
 
 __✅ No oversized files__  
 Largest files: [internal/api/handlers.go](../../internal/api/handlers.go) (~400 lines), [cmd/gogomio/main.go](../../cmd/gogomio/main.go) (~300 lines). All well under 1000-line threshold.

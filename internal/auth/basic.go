@@ -92,10 +92,10 @@ func ReadPasswordFile(path string) (string, error) {
 // NewBasicAuthenticator creates a verifier for one username and password.
 func NewBasicAuthenticator(username, password string) (*BasicAuthenticator, error) {
 	if username == "" || len(username) > 256 || strings.ContainsAny(username, ":\r\n\x00") {
-		return nil, fmt.Errorf("Basic Auth username is invalid")
+		return nil, fmt.Errorf("basic auth username is invalid")
 	}
 	if password == "" || len(password) > maxPasswordBytes || strings.ContainsAny(password, "\r\n\x00") {
-		return nil, fmt.Errorf("Basic Auth password is invalid")
+		return nil, fmt.Errorf("basic auth password is invalid")
 	}
 	return &BasicAuthenticator{
 		usernameDigest: sha256.Sum256([]byte(username)),

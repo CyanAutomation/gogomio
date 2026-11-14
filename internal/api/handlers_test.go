@@ -2337,13 +2337,6 @@ func waitForCondition(t *testing.T, timeout, interval time.Duration, condition f
 	t.Fatalf(format, args...)
 }
 
-func waitForStreamBoundaries(t *testing.T, w *countingStreamWriter, minCount int) {
-	t.Helper()
-	waitForCondition(t, testDuration(testConditionTimeout), testDuration(testConditionInterval), func() bool {
-		return w.BoundaryCount() >= minCount
-	}, "stream boundary count did not reach %d (got %d)", minCount, w.BoundaryCount())
-}
-
 func waitForDone(t *testing.T, done <-chan struct{}, timeout time.Duration, name string) {
 	t.Helper()
 	select {
