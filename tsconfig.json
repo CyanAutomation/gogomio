@@ -18,6 +18,7 @@
   "include": [
     "internal/web/src/**/*.ts",
     "scripts/check_web_assets.ts",
+    "scripts/generate_mio_assets.ts",
     "scripts/version_web_assets.ts"
   ]
 }

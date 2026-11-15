@@ -1,15 +1,5 @@
 "use strict";
 (() => {
-  // internal/web/src/aspect-ratio.ts
-  function resolutionToAspectRatio(resolution) {
-    if (!Array.isArray(resolution) || resolution.length < 2) return null;
-    const [width, height] = resolution;
-    if (typeof width !== "number" || typeof height !== "number" || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-      return null;
-    }
-    return `${width} / ${height}`;
-  }
-
   // internal/web/src/api.ts
   function requestCameraConfig(fetcher = fetch) {
     return fetcher("/v1/config/camera");
@@ -78,19 +68,20 @@
     angry: { src: MIO_SPRITES.angry, alt: "MIO is looking out for stream capacity", animationClass: "mio-float" },
     looking: { src: MIO_SPRITES.looking, alt: "MIO is scanning", animationClass: "mio-float" }
   };
+  var streamPoses = {
+    ready: "idle",
+    connecting: "curious",
+    live: "happy",
+    reconnecting: "concerned",
+    unavailable: "worried",
+    capacity: "angry"
+  };
   function getMioPosePresentation(pose) {
     return mioPoses[pose];
   }
-  function getCompanionPoseForFrameRateTone(tone) {
-    switch (tone) {
-      case "success":
-      case "neutral":
-        return "happy";
-      case "warning":
-        return "concerned";
-      case "error":
-        return "worried";
-    }
+  function getStreamMascotPresentation(state) {
+    const pose = streamPoses[state];
+    return { ...getMioPosePresentation(pose), pose };
   }
   var ConsecutivePollHysteresis = class {
     constructor(initialValue, minimumConsecutive = 2) {
@@ -101,9 +92,6 @@
         throw new RangeError("minimumConsecutive must be a positive integer");
       }
       this.currentValue = initialValue;
-    }
-    get value() {
-      return this.currentValue;
     }
     update(nextValue) {
       if (nextValue === this.currentValue) {
@@ -174,6 +162,8 @@
       stopPrimary: state === "live" || state === "reconnecting"
     };
   }
+
+  // internal/web/src/metrics-presentation.ts
   function formatFrameRate(frameRate) {
     return Number.isFinite(frameRate) && frameRate >= 0 ? `${frameRate.toFixed(1)} fps` : "--";
   }
@@ -183,6 +173,17 @@
     }
     const ratio = frameRate / targetFrameRate;
     return ratio >= 0.9 ? "success" : ratio >= 0.5 ? "warning" : "error";
+  }
+  function getCompanionPoseForFrameRateTone(tone) {
+    switch (tone) {
+      case "success":
+      case "neutral":
+        return "happy";
+      case "warning":
+        return "concerned";
+      case "error":
+        return "worried";
+    }
   }
   function getHealthTone(healthStatus, cameraReady, errorRate, consecutiveFailures) {
     if (!cameraReady || healthStatus === "Poor" || errorRate > 20) return "error";
@@ -206,6 +207,154 @@
   }
   function formatFrameAge(ageSeconds) {
     return typeof ageSeconds === "number" && Number.isFinite(ageSeconds) && ageSeconds >= 0 ? `${ageSeconds.toFixed(2)}s ago` : "No frames yet";
+  }
+
+  // internal/web/src/ui-components.ts
+  function renderIcon(name) {
+    return `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
+  }
+  function renderSectionHeading(title, icon) {
+    return `<div class="section-heading"><h3 class="section-title">${renderIcon(icon)}<span>${escapeHTML(title)}</span></h3></div>`;
+  }
+  function updateStatusBadge(view, label, tone) {
+    view.root.className = `ui-badge ui-badge--${tone}`;
+    if (view.label.textContent !== label) view.label.textContent = label;
+  }
+  function updateMascotImage(image, presentation, size, decorative = false) {
+    image.src = presentation.src;
+    image.alt = decorative ? "" : presentation.alt;
+    image.className = `mio-avatar mio-avatar--${size} ${presentation.animationClass}`;
+  }
+  function renderStatusBadge(label, tone) {
+    return `<span class="ui-badge ui-badge--${tone}"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">${escapeHTML(label)}</span></span>`;
+  }
+  function renderStatusMetricCard(label, status, tone) {
+    return `<div class="metric-card metric-card--status"><div class="metric-card__label">${escapeHTML(label)}</div>${renderStatusBadge(status, tone)}</div>`;
+  }
+  function renderNotice(tone, title, message, icon) {
+    return `<div class="notice notice--${tone} diagnostic-notice"><strong>${renderIcon(icon)} ${escapeHTML(title)}</strong><p>${escapeHTML(message)}</p></div>`;
+  }
+  function renderMetricCard(label, value, tone = "neutral") {
+    return `<div class="metric-card"><div class="metric-card__label">${escapeHTML(label)}</div><div class="metric-card__value metric-card__value--${tone}">${escapeHTML(value)}</div></div>`;
+  }
+  function renderMetricRow(label, value, icon, tone = "neutral") {
+    const toneClass = tone === "error" ? " metric-card__value--error" : "";
+    return `<div class="metric-row"><span class="metric-row__label">${renderIcon(icon)}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
+  }
+  function escapeHTML(value) {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    };
+    return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
+  }
+
+  // internal/web/src/diagnostics-presentation.ts
+  function getDiagnosticsCompanionPose(data) {
+    const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
+    const errorRate = Number(data.error_rate_percent || 0);
+    const connections = Number(data.stream_connections || 0);
+    if (isCapacitySignal(data.stream_connections, data.max_stream_connections, false)) return "capacity";
+    if (!data.camera_ready && consecutiveFailures > 3) return "worried";
+    if (!data.camera_ready || errorRate > 20 || consecutiveFailures > 0) return "concerned";
+    if (connections > 0) return "curious";
+    if (errorRate > 5) return "concerned";
+    return "happy";
+  }
+  function renderDiagnosticsContent(data) {
+    return `
+        ${renderSectionHeading("Camera health", "camera")}
+        ${renderDiagnosticsSummary(data)}
+        ${renderDiagnosticsDetails(data)}
+        <div class="refresh-indicator">${renderIcon("refresh")}<span>Refreshes every 3 seconds</span></div>
+    `;
+  }
+  function renderDiagnosticsSummary(data) {
+    const healthTone = getHealthTone(
+      data.health_status,
+      data.camera_ready,
+      Number(data.error_rate_percent || 0),
+      Number(data.capture_failures_consecutive || 0)
+    );
+    const cameraTone = data.camera_ready ? "success" : "error";
+    const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
+    const noticeTone = healthTone === "neutral" ? "info" : healthTone;
+    return `
+        <div class="diagnostic-summary-grid">
+            ${renderStatusMetricCard("Camera", cameraStatus, cameraTone)}
+            ${renderStatusMetricCard("System health", data.health_status || "Unknown", healthTone)}
+        </div>
+        ${renderNotice(noticeTone, "System status", data.message || "No status details right now.", noticeTone === "error" ? "alert" : "info")}
+    `;
+  }
+  function renderDiagnosticsDetails(data) {
+    const errorRate = Number(data.error_rate_percent || 0);
+    const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
+    const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
+    const quality = Number(data.jpeg_quality || 0);
+    const framesCaptured = Number(data.frames_captured || 0);
+    const connections = Number(data.stream_connections || 0);
+    const maximumConnections = Number(data.max_stream_connections || 0);
+    const totalFailures = Number(data.capture_failures_total || 0);
+    return `
+        <details class="diagnostics-details">
+            <summary class="disclosure-summary">Detailed metrics</summary>
+            <div class="diagnostics-secondary-grid">
+                ${renderMetricCard("Uptime", formatUptime(Number(data.uptime_seconds || 0)))}
+                ${renderMetricCard("Error rate", `${errorRate.toFixed(1)}%`, healthTone)}
+            </div>
+
+            <div class="diagnostic-metric-list">
+                ${renderMetricRow("Frame rate", formatFrameRate(Number(data.fps_current ?? Number.NaN)), "camera")}
+                ${renderMetricRow("Resolution", formatResolution(data.resolution), "grid")}
+                ${renderMetricRow("JPEG quality", `${quality}%`, "quality")}
+                ${renderMetricRow("Frames captured", framesCaptured.toLocaleString(), "image")}
+                ${renderMetricRow("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
+                ${renderMetricRow("Active streams", formatStreamConnections(connections, maximumConnections), "link")}
+                ${renderMetricRow("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "error" : "neutral")}
+                ${renderMetricRow("Total failures", totalFailures, "chart")}
+            </div>
+        </details>
+    `;
+  }
+  function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor(seconds % 86400 / 3600);
+    const mins = Math.floor(seconds % 3600 / 60);
+    const secs = seconds % 60;
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  }
+
+  // internal/web/src/aspect-ratio.ts
+  function resolutionToAspectRatio(resolution) {
+    if (!Array.isArray(resolution) || resolution.length < 2) return null;
+    const [width, height] = resolution;
+    if (typeof width !== "number" || typeof height !== "number" || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return null;
+    }
+    return `${width} / ${height}`;
+  }
+
+  // internal/web/src/live-metrics-presentation.ts
+  function getLiveMetricsPresentation(config, metrics, isStreaming) {
+    const fps = Number(metrics.fps_current);
+    const targetFps = config.target_fps ?? Number.NaN;
+    return {
+      aspectRatio: resolutionToAspectRatio(config.resolution),
+      feedModeHidden: config.mock_camera !== true,
+      fpsText: isStreaming ? formatFrameRate(fps) : "",
+      fpsTone: getFrameRateTone(fps, targetFps, isStreaming),
+      resolutionText: formatResolution(config.resolution),
+      qualityText: (config.jpeg_quality || "--") + "%",
+      connectionsText: formatStreamConnections(metrics.stream_connections, config.max_stream_connections),
+      capacitySignal: isCapacitySignal(metrics.stream_connections, config.max_stream_connections, isStreaming)
+    };
   }
 
   // internal/web/src/diagnostics-dialog.ts
@@ -287,57 +436,11 @@
     }
   };
 
-  // internal/web/src/ui-components.ts
-  function renderIcon(name) {
-    return `<svg class="icon icon--small" aria-hidden="true" focusable="false"><use href="#icon-${name}"></use></svg>`;
-  }
-  function renderSectionHeading(title, icon) {
-    return `<div class="section-heading"><h3 class="section-title">${renderIcon(icon)}<span>${escapeHTML(title)}</span></h3></div>`;
-  }
-  function updateStatusBadge(view, label, tone) {
-    view.root.className = `ui-badge ui-badge--${tone}`;
-    if (view.label.textContent !== label) view.label.textContent = label;
-  }
-  function updateMascotImage(image, presentation, size, decorative = false) {
-    image.src = presentation.src;
-    image.alt = decorative ? "" : presentation.alt;
-    image.className = `mio-avatar mio-avatar--${size} ${presentation.animationClass}`;
-  }
-  function renderStatusBadge(label, tone) {
-    return `<span class="ui-badge ui-badge--${tone}"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">${escapeHTML(label)}</span></span>`;
-  }
-  function renderStatusMetricCard(label, status, tone) {
-    return `<div class="metric-card metric-card--status"><div class="metric-card__label">${escapeHTML(label)}</div>${renderStatusBadge(status, tone)}</div>`;
-  }
-  function renderNotice(tone, title, message, icon) {
-    return `<div class="notice notice--${tone} diagnostic-notice"><strong>${renderIcon(icon)} ${escapeHTML(title)}</strong><p>${escapeHTML(message)}</p></div>`;
-  }
-  function renderMetricCard(label, value, tone = "neutral") {
-    return `<div class="metric-card"><div class="metric-card__label">${escapeHTML(label)}</div><div class="metric-card__value metric-card__value--${tone}">${escapeHTML(value)}</div></div>`;
-  }
-  function renderMetricRow(label, value, icon, tone = "neutral") {
-    const toneClass = tone === "error" ? " metric-card__value--error" : "";
-    return `<div class="metric-row"><span class="metric-row__label">${renderIcon(icon)}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
-  }
-  function escapeHTML(value) {
-    const entities = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    };
-    return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
-  }
-
   // internal/web/src/app.ts
   function getElement(id) {
     const element = document.getElementById(id);
     if (!element) throw new Error(`Required dashboard element #${id} was not found`);
     return element;
-  }
-  function diagnosticMetric(label, value, icon, tone = "neutral") {
-    return renderMetricRow(label, value, icon, tone);
   }
   var StreamController = class {
     constructor() {
@@ -430,8 +533,15 @@
       });
     }
     setPlaceholderPose(pose) {
+      this.applyPlaceholderPose(pose, getMioPosePresentation(pose));
+    }
+    setPlaceholderPoseForStreamState(state) {
+      const presentation = getStreamMascotPresentation(state);
+      this.applyPlaceholderPose(presentation.pose, presentation);
+    }
+    applyPlaceholderPose(pose, presentation) {
       this.placeholderPose = pose;
-      updateMascotImage(this.placeholderImage, getMioPosePresentation(pose), "placeholder", true);
+      updateMascotImage(this.placeholderImage, presentation, "placeholder", true);
       this.sleepDecoration.hidden = pose !== "sleeping";
       this.loadingElement.classList.toggle("is-sleeping", pose === "sleeping");
     }
@@ -560,11 +670,11 @@
     }
     restorePoseAfterDiagnostics() {
       if (this.streaming) return;
-      if (this.streamState === "capacity") this.setPlaceholderPose("angry");
-      else if (this.streamState === "unavailable") this.setPlaceholderPose("worried");
-      else if (this.streamState === "reconnecting") this.setPlaceholderPose("concerned");
-      else if (this.streamState === "connecting") this.setPlaceholderPose("curious");
-      else if (this.placeholderPose !== "sleeping") this.setPlaceholderPose("idle");
+      if (this.streamState === "ready") {
+        if (this.placeholderPose !== "sleeping") this.setPlaceholderPose("idle");
+      } else {
+        this.setPlaceholderPoseForStreamState(this.streamState);
+      }
       this.scheduleInactivitySleep();
     }
     updateCameraReadiness(state) {
@@ -682,26 +792,22 @@
         ]);
         if (!metricsResponse.ok) throw new Error("Failed to load live camera metrics");
         const metrics = await metricsResponse.json();
-        const aspectRatio = resolutionToAspectRatio(config.resolution);
-        if (aspectRatio) getElement("stream-container").style.aspectRatio = aspectRatio;
-        getElement("feed-mode-badge").hidden = config.mock_camera !== true;
-        const fps = Number(metrics.fps_current);
-        const targetFps = config.target_fps ?? Number.NaN;
-        this.fpsValue.textContent = this.streaming ? formatFrameRate(fps) : "";
+        const presentation = getLiveMetricsPresentation(config, metrics, this.streaming);
+        if (presentation.aspectRatio) getElement("stream-container").style.aspectRatio = presentation.aspectRatio;
+        getElement("feed-mode-badge").hidden = presentation.feedModeHidden;
+        this.fpsValue.textContent = presentation.fpsText;
         this.fpsValue.classList.remove("metric-card__value--success", "metric-card__value--warning", "metric-card__value--error");
-        const fpsTone = getFrameRateTone(fps, targetFps, this.streaming);
-        if (fpsTone !== "neutral") this.fpsValue.classList.add(`metric-card__value--${fpsTone}`);
-        if (this.streaming) this.setViewerPoseFromTone(fpsTone);
+        if (presentation.fpsTone !== "neutral") {
+          this.fpsValue.classList.add(`metric-card__value--${presentation.fpsTone}`);
+        }
+        if (this.streaming) this.setViewerPoseFromTone(presentation.fpsTone);
         this.updateFPSVisibility();
-        getElement("stat-resolution").textContent = formatResolution(config.resolution);
-        getElement("stat-quality").textContent = (config.jpeg_quality || "--") + "%";
-        getElement("stat-connections").textContent = formatStreamConnections(
-          metrics.stream_connections,
-          config.max_stream_connections
-        );
-        if (isCapacitySignal(metrics.stream_connections, config.max_stream_connections, this.streaming) && this.streamState === "ready") {
+        getElement("stat-resolution").textContent = presentation.resolutionText;
+        getElement("stat-quality").textContent = presentation.qualityText;
+        getElement("stat-connections").textContent = presentation.connectionsText;
+        if (presentation.capacitySignal && this.streamState === "ready") {
           this.showCapacityState();
-        } else if (this.streamState === "capacity" && !isCapacitySignal(metrics.stream_connections, config.max_stream_connections, this.streaming)) {
+        } else if (this.streamState === "capacity" && !presentation.capacitySignal) {
           this.updateStatus("ready");
           this.setPlaceholderPose("idle");
           this.placeholderText.textContent = "MIO's ready when you are.";
@@ -747,27 +853,12 @@
   function setCompanionPoseFromDiagnostics(data) {
     const controller = getStreamController();
     if (!controller || controller.isStreaming) return;
-    if (isCapacitySignal(data.stream_connections, data.max_stream_connections, false)) {
+    const pose = getDiagnosticsCompanionPose(data);
+    if (pose === "capacity") {
       controller.showCapacityState();
       return;
     }
-    if (!data.camera_ready && (data.capture_failures_consecutive || 0) > 3) {
-      controller.setPlaceholderPose("worried");
-      return;
-    }
-    if (!data.camera_ready || (data.error_rate_percent || 0) > 20 || (data.capture_failures_consecutive || 0) > 0) {
-      controller.setPlaceholderPose("concerned");
-      return;
-    }
-    if ((data.stream_connections || 0) > 0) {
-      controller.setPlaceholderPose("curious");
-      return;
-    }
-    if ((data.error_rate_percent || 0) > 5) {
-      controller.setPlaceholderPose("concerned");
-      return;
-    }
-    controller.setPlaceholderPose("happy");
+    controller.setPlaceholderPose(pose);
   }
   function openDiagnosticsModal() {
     const modal = getElement("diagnostics-modal");
@@ -821,80 +912,33 @@
       startDiagnosticsPolling();
     }
   }
-  function fetchDiagnostics() {
-    requestDiagnostics().then((response) => {
+  async function fetchDiagnostics() {
+    try {
+      const response = await requestDiagnostics();
       if (!response.ok) throw new Error("Failed to load diagnostics");
-      return response.json();
-    }).then((data) => {
+      const data = await response.json();
       setCompanionPoseFromDiagnostics(data);
       getStreamController()?.updateCameraReadiness(data.camera_ready ? "ready" : "unavailable");
-      const content = getElement("diagnostics-content");
-      const errorRate = Number(data.error_rate_percent || 0);
-      const consecutiveFailures = Number(data.capture_failures_consecutive || 0);
-      const healthTone = getHealthTone(data.health_status, data.camera_ready, errorRate, consecutiveFailures);
-      const cameraTone = data.camera_ready ? "success" : "error";
-      const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
-      const cameraCard = renderStatusMetricCard("Camera", cameraStatus, cameraTone);
-      const healthCard = renderStatusMetricCard("System health", data.health_status || "Unknown", healthTone);
-      const totalFailures = Number(data.capture_failures_total || 0);
-      const noticeTone = healthTone === "neutral" ? "info" : healthTone;
-      const existingDetails = content.querySelector(".diagnostics-details");
-      const detailsWereOpen = existingDetails?.open ?? false;
-      const detailsHadFocus = existingDetails?.contains(document.activeElement) ?? false;
-      content.innerHTML = `
-                ${renderSectionHeading("Camera health", "camera")}
-                <div class="diagnostic-summary-grid">
-                    ${cameraCard}
-                    ${healthCard}
-                </div>
-
-                ${renderNotice(noticeTone, "System status", data.message || "No status details right now.", noticeTone === "error" ? "alert" : "info")}
-
-                <details class="diagnostics-details">
-                    <summary class="disclosure-summary">Detailed metrics</summary>
-                    <div class="diagnostics-secondary-grid">
-                        ${renderMetricCard("Uptime", formatUptime(Number(data.uptime_seconds || 0)))}
-                        ${renderMetricCard("Error rate", `${errorRate.toFixed(1)}%`, healthTone)}
-                    </div>
-
-                    <div class="diagnostic-metric-list">
-                        ${diagnosticMetric("Frame rate", formatFrameRate(Number(data.fps_current ?? Number.NaN)), "camera")}
-                        ${diagnosticMetric("Resolution", formatResolution(data.resolution), "grid")}
-                        ${diagnosticMetric("JPEG quality", `${Number(data.jpeg_quality || 0)}%`, "quality")}
-                        ${diagnosticMetric("Frames captured", Number(data.frames_captured || 0).toLocaleString(), "image")}
-                        ${diagnosticMetric("Last frame age", formatFrameAge(data.last_frame_age_seconds), "clock")}
-                        ${diagnosticMetric("Active streams", formatStreamConnections(Number(data.stream_connections || 0), Number(data.max_stream_connections || 0)), "link")}
-                        ${diagnosticMetric("Recent failures", consecutiveFailures, "alert", consecutiveFailures > 0 ? "error" : "neutral")}
-                        ${diagnosticMetric("Total failures", totalFailures, "chart")}
-                    </div>
-                </details>
-
-                <div class="refresh-indicator">${renderIcon("refresh")}<span>Refreshes every 3 seconds</span></div>
-            `;
-      const updatedDetails = content.querySelector(".diagnostics-details");
-      if (updatedDetails) {
-        updatedDetails.open = detailsWereOpen;
-        if (detailsHadFocus) updatedDetails.querySelector("summary")?.focus();
-      }
-    }).catch((error) => {
-      console.error("Diagnostics request failed:", error);
-      const controller = getStreamController();
-      if (controller && !controller.isStreaming) {
-        controller.setPlaceholderPose("concerned");
-      }
-      const content = getElement("diagnostics-content");
-      content.innerHTML = `<div class="notice notice--error" role="alert">MIO couldn't load diagnostics just now. Please try again in a moment.</div>`;
-    });
+      updateDiagnosticsContent(getElement("diagnostics-content"), data);
+    } catch (error) {
+      handleDiagnosticsFailure(error);
+    }
   }
-  function formatUptime(seconds) {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor(seconds % 86400 / 3600);
-    const mins = Math.floor(seconds % 3600 / 60);
-    const secs = seconds % 60;
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${mins}m`;
-    if (mins > 0) return `${mins}m ${secs}s`;
-    return `${secs}s`;
+  function updateDiagnosticsContent(content, data) {
+    const existingDetails = content.querySelector(".diagnostics-details");
+    const detailsWereOpen = existingDetails?.open ?? false;
+    const detailsHadFocus = existingDetails?.contains(document.activeElement) ?? false;
+    content.innerHTML = renderDiagnosticsContent(data);
+    const updatedDetails = content.querySelector(".diagnostics-details");
+    if (!updatedDetails) return;
+    updatedDetails.open = detailsWereOpen;
+    if (detailsHadFocus) updatedDetails.querySelector("summary")?.focus();
+  }
+  function handleDiagnosticsFailure(error) {
+    console.error("Diagnostics request failed:", error);
+    const controller = getStreamController();
+    if (controller && !controller.isStreaming) controller.setPlaceholderPose("concerned");
+    getElement("diagnostics-content").innerHTML = `<div class="notice notice--error" role="alert">MIO couldn't load diagnostics just now. Please try again in a moment.</div>`;
   }
   document.addEventListener("DOMContentLoaded", () => {
     window.streamController = new StreamController();

@@ -5,13 +5,6 @@ import { MIO_SPRITES } from "./mio-assets.generated";
 import {
     ConsecutivePollHysteresis,
     MIO_SLEEP_AFTER_MS,
-    formatFrameAge,
-    formatFrameRate,
-    formatResolution,
-    formatStreamConnections,
-    getFrameRateTone,
-    getCompanionPoseForFrameRateTone,
-    getHealthTone,
     getCameraReadinessState,
     getCameraReadinessPresentation,
     getStreamMascotPresentation,
@@ -21,6 +14,15 @@ import {
     isCapacitySignal,
     isMioSleepDue,
 } from "./dashboard-presentation";
+import {
+    formatFrameAge,
+    formatFrameRate,
+    formatResolution,
+    formatStreamConnections,
+    getFrameRateTone,
+    getCompanionPoseForFrameRateTone,
+    getHealthTone,
+} from "./metrics-presentation";
 
 test("frame rate shows the measured rate with a unit and handles missing data", () => {
     assert.equal(formatFrameRate(0), "0.0 fps");
@@ -60,31 +62,41 @@ test("stream states have consistent labels and semantic tones", () => {
 
 test("MIO uses a friendly pose for every stream state", () => {
     assert.deepEqual(getStreamMascotPresentation("ready"), {
+        pose: "idle",
         src: MIO_SPRITES.idle,
         alt: "MIO is ready",
         animationClass: "mio-float",
     });
     assert.deepEqual(getStreamMascotPresentation("connecting"), {
+        pose: "curious",
         src: MIO_SPRITES.curious,
         alt: "MIO is curious",
         animationClass: "mio-pulse",
     });
     assert.deepEqual(getStreamMascotPresentation("live"), {
+        pose: "happy",
         src: MIO_SPRITES.happy,
         alt: "MIO is happily watching",
         animationClass: "mio-float",
     });
     assert.deepEqual(getStreamMascotPresentation("reconnecting"), {
+        pose: "concerned",
         src: MIO_SPRITES.concerned,
         alt: "MIO is concerned",
         animationClass: "mio-pulse",
     });
     assert.deepEqual(getStreamMascotPresentation("unavailable"), {
+        pose: "worried",
         src: MIO_SPRITES.worried,
         alt: "MIO is worried",
         animationClass: "mio-float",
     });
-    assert.equal(getStreamMascotPresentation("capacity").src.split("?")[0], "/static/mio/mio_pose_angry.png");
+    assert.deepEqual(getStreamMascotPresentation("capacity"), {
+        pose: "angry",
+        src: MIO_SPRITES.angry,
+        alt: "MIO is looking out for stream capacity",
+        animationClass: "mio-float",
+    });
 });
 
 test("stream descriptions follow the current state in MIO's voice", () => {

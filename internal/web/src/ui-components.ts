@@ -47,7 +47,7 @@ export function updateMascotImage(
 }
 
 /** Renders the shared status badge used in dynamically-built diagnostics cards. */
-export function renderStatusBadge(label: string, tone: BadgeTone): string {
+function renderStatusBadge(label: string, tone: BadgeTone): string {
     return `<span class="ui-badge ui-badge--${tone}"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">${escapeHTML(label)}</span></span>`;
 }
 
@@ -77,7 +77,7 @@ export function renderMetricRow(
     return `<div class="metric-row"><span class="metric-row__label">${renderIcon(icon)}<span>${escapeHTML(label)}</span></span><span class="metric-row__value${toneClass}">${escapeHTML(value)}</span></div>`;
 }
 
-export function escapeHTML(value: unknown): string {
+function escapeHTML(value: unknown): string {
     const entities: Record<string, string> = {
         "&": "&amp;",
         "<": "&lt;",
