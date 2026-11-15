@@ -158,6 +158,23 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("mode=max", cloudbuild)
         self.assertIn("--push", cloudbuild)
 
+    def test_demo_docker_context_includes_web_build_scripts(self):
+        dockerignore = (ROOT / ".dockerignore").read_text().splitlines()
+        allowed_scripts = {
+            line[1:]
+            for line in dockerignore
+            if line.startswith("!scripts/")
+        }
+
+        self.assertIn("scripts/*", dockerignore)
+        self.assertTrue(
+            {
+                "scripts/generate_mio_assets.ts",
+                "scripts/version_web_assets.ts",
+                "scripts/check_web_assets.ts",
+            }.issubset(allowed_scripts)
+        )
+
     def test_docker_images_are_pulled_and_scanned_per_architecture(self):
         text = workflow(DOCKER_WORKFLOW)
         build = workflow_step(text, "Build candidate and generate attestations")
