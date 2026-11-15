@@ -11,6 +11,10 @@ These repository skills give GitHub Copilot focused guidance for specialized GoG
 | [Go CLI Design](./go-cli-design/SKILL.md) | Changing the CLI dispatcher, commands, API client, help, or output. |
 | [Front-end Design](./front-end-design/SKILL.md) | Redesigning the visual hierarchy or interaction design of a web page or app surface. |
 | [API and Settings Patterns](./api-and-settings-patterns/SKILL.md) | Changing HTTP routes, middleware, OpenAPI contracts, or persistent settings behavior. |
+| [HTTP Security and Authentication](./http-security-and-authentication/SKILL.md) | Changing authentication, authorization boundaries, CORS, same-origin checks, proxy trust, or HTTP rate limiting. |
+| [Web UI Engineering](./web-ui-engineering/SKILL.md) | Implementing or changing GoGoMio browser behavior, API integration, UI tests, or embedded web assets. |
+| [Configuration and Validation](./configuration-and-validation/SKILL.md) | Changing environment configuration, defaults, validation, or startup configuration contracts. |
+| [CI and Container Workflows](./ci-container-workflows/SKILL.md) | Changing GitHub Actions, CI helper scripts, Docker builds, image publication, or architecture verification. |
 
 ## Keep skills current
 
@@ -22,7 +26,7 @@ These repository skills give GitHub Copilot focused guidance for specialized GoG
 
   ```bash
   python3 scripts/check_skills.py
-  python3 -m unittest discover -s scripts -p 'test_*.py'
+  python3 -B -m unittest discover -s scripts -p 'test_*.py'
   ```
 
 See [CLAUDE.md](../../CLAUDE.md) for the project overview, [CONTRIBUTING.md](../../CONTRIBUTING.md) for contribution guidance, and the linked implementation and deployment docs for current details.

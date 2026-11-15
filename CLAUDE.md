@@ -57,7 +57,7 @@ cmd/gogomio/main.go
 
 ### Key Packages
 
-**`internal/camera/`** — Core streaming logic. The `Camera` interface is implemented by `RealCamera` (spawns `libcamera-vid` or `ffmpeg` subprocess) and `MockCamera` (synthetic JPEG generator for development). `FrameBuffer` is the critical thread-safe latest-frame store using condition variables and atomic operations — it supports concurrent MJPEG clients via `GetFrame()` and implements `io.Writer` so the encoder writes directly into it.
+**`internal/camera/`** — Core streaming logic. The `Camera` interface is implemented by `RealCamera` (spawns `rpicam-vid`, `libcamera-vid`, or `ffmpeg` subprocesses) and `MockCamera` (synthetic or fixture-backed JPEG frames for development). `FrameBuffer` is the thread-safe latest-frame store: it protects the immutable frame snapshot and sequence with a mutex, and wakes waiters by closing and replacing a notification channel. `Write` copies caller data; `WriteImmutable` transfers ownership. It implements `io.Writer` for producers that can write frames directly into it.
 
 **`internal/api/`** — Go standard-library `http.ServeMux` routes and middleware. `FrameManager` coordinates the camera, frame buffering, and streaming. Key endpoints: `/stream.mjpg` (MJPEG multipart), `/snapshot.jpg`, `/v1/metrics/live`, `/v1/health/detailed`, `/health`, `/ready`, `/docs/` (API reference). Rate limiting: 100 req/10s per IP.
 
@@ -69,7 +69,7 @@ cmd/gogomio/main.go
 
 ### Concurrency Model
 
-`FrameBuffer` uses a condition variable (`sync.Cond`) for fan-out to multiple concurrent MJPEG clients. Frames are published atomically as immutable values. `ConnectionTracker` enforces max concurrent streams. Race condition tests live in `*_race_test.go` files and should always be run with `-race`.
+`FrameBuffer` uses a mutex-protected sequence and replaceable notification channel for fan-out to multiple concurrent MJPEG clients. Frames are published as immutable values. `ConnectionTracker` enforces max concurrent streams. Race condition tests live in `*_race_test.go` files and should always be run with `-race`.
 
 ### OpenAPI
 

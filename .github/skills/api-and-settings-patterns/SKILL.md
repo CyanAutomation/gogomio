@@ -13,6 +13,7 @@ Use the current handlers, settings manager, and tests as the source of truth. Pr
 - The rate limiter applies to all routes. Only trust forwarded client addresses from CIDRs configured in `MIO_TRUSTED_PROXY_CIDRS`; do not parse forwarding headers directly in a handler.
 - Keep versioned API routes and legacy aliases aligned when a change is intended to support both. Update the request and response contract in both [`docs/reference/openapi.json`](../../../docs/reference/openapi.json) and [`docs/reference/openapi.yaml`](../../../docs/reference/openapi.yaml); the server embeds these reference files.
 - Preserve existing cache behavior for dynamic and error responses. Reuse the current `noStore` helper where appropriate instead of setting caching headers inconsistently.
+- When changing authentication, CORS, same-origin mutation checks, or the order of HTTP middleware, follow the [HTTP Security and Authentication](../http-security-and-authentication/SKILL.md) contract and its tests.
 
 ## Persistent settings
 
