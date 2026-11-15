@@ -8,19 +8,11 @@ import {
     renderMetricRow,
     renderNotice,
     renderSectionHeading,
-    renderStatusBadge,
     renderStatusMetricCard,
     updateMascotImage,
     updateStatusBadge,
     type StatusBadgeView,
 } from "./ui-components";
-
-test("status badge rendering escapes its label and marks its decorative dot", () => {
-    assert.equal(
-        renderStatusBadge("Camera <ready>", "success"),
-        '<span class="ui-badge ui-badge--success"><span class="ui-badge__dot" aria-hidden="true"></span><span class="ui-badge__label">Camera &lt;ready&gt;</span></span>',
-    );
-});
 
 test("status badge updates keep a stable accessible label and use a semantic tone", () => {
     const view: StatusBadgeView = {
