@@ -78,7 +78,7 @@ test("diagnostics content formats metrics and escapes server-provided copy", () 
 });
 
 test("diagnostics render uptime with the largest complete unit", () => {
-    for (const [seconds, expected] of [[0, "0s"], [65, "1m 5s"], [3605, "1h 0m"], [86461, "1d 0h"]] as const) {
+    for (const [seconds, expected] of [[0, "0s"], [65, "1m 5s"], [65.9, "1m 5s"], [3605, "1h 0m"], [86461, "1d 0h"]] as const) {
         assert.ok(renderDiagnosticsContent({ ...healthyDiagnostics, uptime_seconds: seconds }).includes(expected));
     }
 });

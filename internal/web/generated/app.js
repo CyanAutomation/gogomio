@@ -324,7 +324,7 @@
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor(seconds % 86400 / 3600);
     const mins = Math.floor(seconds % 3600 / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     if (days > 0) return `${days}d ${hours}h`;
     if (hours > 0) return `${hours}h ${mins}m`;
     if (mins > 0) return `${mins}m ${secs}s`;
@@ -351,7 +351,7 @@
       fpsText: isStreaming ? formatFrameRate(fps) : "",
       fpsTone: getFrameRateTone(fps, targetFps, isStreaming),
       resolutionText: formatResolution(config.resolution),
-      qualityText: (config.jpeg_quality || "--") + "%",
+      qualityText: (config.jpeg_quality ?? "--") + "%",
       connectionsText: formatStreamConnections(metrics.stream_connections, config.max_stream_connections),
       capacitySignal: isCapacitySignal(metrics.stream_connections, config.max_stream_connections, isStreaming)
     };

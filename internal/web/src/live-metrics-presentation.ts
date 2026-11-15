@@ -49,7 +49,7 @@ export function getLiveMetricsPresentation(
         fpsText: isStreaming ? formatFrameRate(fps) : "",
         fpsTone: getFrameRateTone(fps, targetFps, isStreaming),
         resolutionText: formatResolution(config.resolution),
-        qualityText: (config.jpeg_quality || "--") + "%",
+        qualityText: (config.jpeg_quality ?? "--") + "%",
         connectionsText: formatStreamConnections(metrics.stream_connections, config.max_stream_connections),
         capacitySignal: isCapacitySignal(metrics.stream_connections, config.max_stream_connections, isStreaming),
     };
