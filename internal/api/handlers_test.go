@@ -262,6 +262,7 @@ func setupTestServer(t *testing.T) (http.Handler, *camera.MockCamera, *config.Co
 
 	router := http.NewServeMux()
 	frame := NewFrameManager(mockCam, cfg)
+	t.Cleanup(frame.Stop)
 	handler := RegisterHandlers(router, frame, cfg)
 
 	return handler, mockCam, cfg
