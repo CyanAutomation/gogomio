@@ -124,15 +124,15 @@ You can pipe fetch responses directly into the DOM without manual chunk handling
 const main = document.querySelector('main');
 const response = await fetch('/api/partial-update');
 
-// Pipe the stream directly into the element
+// Use the safe streaming method to sanitize HTML from the response.
 await response.body
   .pipeThrough(new TextDecoderStream())
-  .pipeTo(main.streamHTMLUnsafe({ runScripts: true }));
+  .pipeTo(main.streamHTML());
 
 // Or use the `textStream()` convenience method which streams directly without needing the intermediate `TextDecoderStream()` step
 await response
   .textStream()
-  .pipeTo(main.streamHTMLUnsafe({ runScripts: true }))
+  .pipeTo(main.streamHTML());
 ```
 
 ## Use Case Reference Matrix
