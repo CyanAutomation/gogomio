@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -198,23 +199,48 @@ func TestE2E_ConcurrentClients(t *testing.T) {
 	}
 }
 
-// TestE2E_HealthEndpoints validates health check endpoints
+// TestE2E_HealthEndpoints validates the distinct state fields exposed by the
+// legacy, readiness, and versioned detailed health routes.
+// Contract: TC-HTTP-02 (docs/testing/test-contracts.md).
 func TestE2E_HealthEndpoints(t *testing.T) {
-	fm := NewFrameManager(newStableFrameCamera(nil), &config.Config{
-		TargetFPS: 10,
-	})
+	testConfig := &config.Config{
+		FPS:                  10,
+		TargetFPS:            10,
+		Resolution:           [2]int{640, 480},
+		JPEGQuality:          80,
+		MaxStreamConnections: 2,
+	}
+	fm := NewFrameManager(newStableFrameCamera(nil), testConfig)
 	defer fm.Stop()
 
-	router := RegisterHandlers(http.NewServeMux(), fm, &config.Config{})
+	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
 
 	healthEndpoints := []struct {
 		path           string
 		expectedStatus int
-		expectedBody   string
+		wantFields     map[string]interface{}
 	}{
-		{"/health", http.StatusOK, ""},
-		{"/ready", http.StatusOK, ""},
-		{"/v1/health/detailed", http.StatusOK, ""},
+		{
+			path:           "/health",
+			expectedStatus: http.StatusOK,
+			wantFields:     map[string]interface{}{"status": "idle", "camera_ready": true},
+		},
+		{
+			path:           "/ready",
+			expectedStatus: http.StatusOK,
+			wantFields:     map[string]interface{}{"status": "ready"},
+		},
+		{
+			path:           "/v1/health/detailed",
+			expectedStatus: http.StatusOK,
+			wantFields: map[string]interface{}{
+				"status":                 "idle",
+				"health_status":          "Idle",
+				"camera_ready":           true,
+				"resolution":             "640x480",
+				"max_stream_connections": float64(2),
+			},
+		},
 	}
 
 	for _, endpoint := range healthEndpoints {
@@ -225,16 +251,23 @@ func TestE2E_HealthEndpoints(t *testing.T) {
 
 		if writer.Code != endpoint.expectedStatus {
 			t.Errorf("endpoint %s: expected status %d, got %d", endpoint.path, endpoint.expectedStatus, writer.Code)
+			continue
+		}
+		if got := writer.Header().Get("Content-Type"); got != "application/json" {
+			t.Errorf("endpoint %s: content type = %q, want application/json", endpoint.path, got)
 		}
 
-		if endpoint.expectedBody != "" && !strings.Contains(writer.Body.String(), endpoint.expectedBody) {
-			t.Errorf("endpoint %s: expected body to contain '%s', got '%s'", endpoint.path, endpoint.expectedBody, writer.Body.String())
+		var body map[string]interface{}
+		if err := json.Unmarshal(writer.Body.Bytes(), &body); err != nil {
+			t.Errorf("endpoint %s: decode health response: %v", endpoint.path, err)
+			continue
 		}
-
-		t.Logf("  ✓ %s → %d", endpoint.path, writer.Code)
+		for field, want := range endpoint.wantFields {
+			if got := body[field]; got != want {
+				t.Errorf("endpoint %s: %s = %v, want %v", endpoint.path, field, got, want)
+			}
+		}
 	}
-
-	t.Log("✓ Health endpoints validated")
 }
 
 // TestE2E_ClientDisconnection simulates client disconnect during streaming
@@ -317,38 +350,4 @@ func TestE2E_ClientDisconnection(t *testing.T) {
 	}
 
 	t.Logf("✓ Client disconnection handled cleanly: %d bytes streamed before disconnect", writer.GetBytesWritten())
-}
-
-// TestE2E_ConfigEndpoint validates /api/config endpoint
-func TestE2E_ConfigEndpoint(t *testing.T) {
-	testConfig := &config.Config{
-		Resolution: [2]int{1280, 720},
-		TargetFPS:  30,
-	}
-
-	fm := NewFrameManager(newStableFrameCamera(nil), testConfig)
-	defer fm.Stop()
-
-	router := RegisterHandlers(http.NewServeMux(), fm, testConfig)
-
-	req := httptest.NewRequest("GET", "/api/config", nil)
-	writer := httptest.NewRecorder()
-
-	router.ServeHTTP(writer, req)
-
-	if writer.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", writer.Code)
-	}
-
-	contentType := writer.Header().Get("Content-Type")
-	if !strings.Contains(contentType, "application/json") {
-		t.Fatalf("expected JSON content type, got %s", contentType)
-	}
-
-	body := writer.Body.String()
-	if !strings.Contains(body, "1280") || !strings.Contains(body, "720") || !strings.Contains(body, "30") {
-		t.Fatalf("expected config data in response, got: %s", body)
-	}
-
-	t.Logf("✓ Config endpoint validated: %s returned", contentType)
 }

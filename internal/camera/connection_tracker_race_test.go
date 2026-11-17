@@ -68,11 +68,12 @@ func TestConnectionTrackerConcurrentIncrementDecrementPreservesCount(t *testing.
 	}
 }
 
-// TestConnectionTrackerCountConsistency verifies Count() is always valid
-func TestConnectionTrackerCountConsistency(t *testing.T) {
+// TestConnectionTrackerConcurrentExtraDecrementsClampAtZero verifies extra
+// disconnects cannot leave a negative or stale count during concurrent use.
+// Contract: TC-CONN-01 (docs/testing/test-contracts.md).
+func TestConnectionTrackerConcurrentExtraDecrementsClampAtZero(t *testing.T) {
 	ct := NewConnectionTracker()
 
-	done := make(chan struct{})
 	var wg sync.WaitGroup
 	negativeCount := int32(0)
 
@@ -99,14 +100,13 @@ func TestConnectionTrackerCountConsistency(t *testing.T) {
 	}
 
 	wg.Wait()
-	close(done)
 
 	if negativeCount > 0 {
 		t.Errorf("connection count went negative %d times", negativeCount)
 	}
 
 	finalCount := ct.Count()
-	if finalCount < 0 {
-		t.Errorf("final connection count is negative: %d", finalCount)
+	if finalCount != 0 {
+		t.Errorf("final connection count = %d, want 0 after all clients disconnect", finalCount)
 	}
 }

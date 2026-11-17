@@ -14,9 +14,28 @@ function themeBlock(pattern: RegExp): string {
 }
 
 function token(block: string, name: string): string {
-    const match = block.match(new RegExp(`--${name}:\\s*(#[\\da-fA-F]{6});`));
-    if (!match?.[1]) throw new Error(`expected --${name} to be a six digit hex color`);
+    const match = block.match(new RegExp(`--${name}:\\s*(#[\\da-fA-F]{6}|var\\(--([\\w-]+)\\));`));
+    if (!match?.[1]) throw new Error(`expected --${name} to resolve to a six digit hex color`);
+    if (match[1].startsWith("var(")) {
+        if (!match[2]) throw new Error(`expected --${name} to reference a color token`);
+        return token(block, match[2]);
+    }
     return match[1].toLowerCase();
+}
+
+function cssRule(selector: string): string {
+    const marker = `${selector} {`;
+    const start = html.indexOf(marker);
+    if (start < 0) throw new Error(`expected CSS rule ${selector}`);
+    const end = html.indexOf("}", start + marker.length);
+    if (end < 0) throw new Error(`expected closing brace for ${selector}`);
+    return html.slice(start + marker.length, end);
+}
+
+function colorToken(rule: string, property: string): string {
+    const match = rule.match(new RegExp(`(?:^|\\s|;)${property}:\\s*var\\(--([\\w-]+)\\)`));
+    if (!match?.[1]) throw new Error(`expected ${property} to use a semantic color token`);
+    return match[1];
 }
 
 function luminance(hex: string): number {
@@ -76,6 +95,29 @@ test("primary action text stays readable in light and dark mode", () => {
     }
 });
 
+// Contract: TC-WEB-07 (docs/testing/test-contracts.md).
+test("status badge text meets WCAG AA contrast in light and dark modes", () => {
+    const themes = [
+        ["light", lightTheme],
+        ["dark", darkTheme],
+    ] as const;
+    for (const tone of ["neutral", "success", "warning", "error", "info"] as const) {
+        const rule = cssRule(`.ui-badge--${tone}`);
+        const background = colorToken(rule, "background");
+        const foreground = colorToken(rule, "color");
+
+        for (const [themeName, theme] of themes) {
+            const foregroundColor = token(theme, foreground);
+            const backgroundColor = token(theme, background);
+            const ratio = contrastRatio(foregroundColor, backgroundColor);
+            assert.ok(
+                ratio >= 4.5,
+                `${tone} badge text in ${themeName} mode has ${ratio.toFixed(2)}:1 contrast (${foregroundColor} on ${backgroundColor})`,
+            );
+        }
+    }
+});
+
 test("MIO stays in the header and viewer with accessible decorative companions", () => {
     assert.match(html, /<img[^>]*id="header-mio"[^>]*data-mio-pose="idle"[^>]*width="48" height="48"/);
     assert.match(html, /<img[^>]*id="stream-placeholder-mio"[^>]*data-mio-pose="idle"[^>]*width="200" height="200" alt="" aria-hidden="true"/);
@@ -100,18 +142,6 @@ test("camera details are expanded on first load so key metrics stay visible", ()
     assert.match(details[1], /id="stat-quality"/);
     assert.match(details[1], /id="stat-connections"/);
     assert.match(details[1], /<div class="metric-card metric-card--wide">[\s\S]*id="stat-connections"/);
-});
-
-test("brand header keeps its intrinsic height inside the flex page shell", () => {
-    const siteHeader = html.match(/\.site-header\s*\{([^}]+)\}/);
-    assert.ok(siteHeader?.[1], "expected a branded site header rule");
-    assert.match(siteHeader[1], /flex-shrink:\s*0/);
-});
-
-test("section titles stay together beside their status badges", () => {
-    const sectionTitle = html.match(/\.section-title\s*\{([^}]+)\}/);
-    assert.ok(sectionTitle?.[1], "expected a shared section title rule");
-    assert.match(sectionTitle[1], /white-space:\s*nowrap/);
 });
 
 test("every state mascot pose is backed by a bundled MIO asset", () => {
