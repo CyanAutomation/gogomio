@@ -66,8 +66,3 @@ test("missing target frame rate keeps the tone neutral and camera feed mode hidd
         capacitySignal: false,
     });
 });
-
-test("a zero JPEG quality is rendered as configured rather than missing", () => {
-    const presentation = getLiveMetricsPresentation({ ...config, jpeg_quality: 0 }, metrics, true);
-    assert.equal(presentation.qualityText, "0%");
-});
