@@ -600,6 +600,7 @@ func TestReadyRoute(t *testing.T) {
 }
 
 // TestConfigEndpoint tests the /api/config endpoint
+// Contract: TC-HTTP-03 (docs/testing/test-contracts.md).
 func TestConfigEndpoint(t *testing.T) {
 	router, cam, cfg := setupTestServer(t)
 	defer func() { _ = cam.Stop() }()

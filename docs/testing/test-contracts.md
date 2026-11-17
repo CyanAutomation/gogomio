@@ -13,6 +13,8 @@ guards a behavior that does not already have a traceable requirement or issue.
 | `TC-FRAME-02` | Frame writes publish the latest bytes, advance the sequence, preserve mutable caller input, and record frames when the buffer creates its own stats collector. | [FrameBuffer documentation](../../internal/camera/frame_buffer.go) |
 | `TC-FRAME-03` | Immutable frame writes publish the supplied storage without copying it; callers must not mutate it afterwards. | [WriteImmutable documentation](../../internal/camera/frame_buffer.go) |
 | `TC-HTTP-01` | Snapshot responses contain a decodable JPEG; stream responses contain complete multipart JPEG frames. | [API reference](../reference/openapi.yaml) |
+| `TC-HTTP-02` | Legacy health, readiness, and versioned detailed-health routes return their documented state fields. | [API reference](../reference/openapi.yaml#/paths/~1v1~1health~1detailed) |
+| `TC-HTTP-03` | The legacy configuration response exposes configured resolution, connection limit, and active camera mode as typed JSON fields. | [API reference](../reference/openapi.yaml#/paths/~1v1~1api~1config) |
 | `TC-DIAG-01` | Detailed health reports failures divided by all capture attempts (captured frames plus failures), including failures before the first frame. | [Detailed health API](../reference/openapi.yaml#/components/schemas/api.DetailedHealthResponse) |
 | `TC-DIAG-02` | Detailed health classifies rates above 5% as degraded, and rates above 20% or more than five consecutive failures as poor. | [Detailed health API](../reference/openapi.yaml#/components/schemas/api.DetailedHealthResponse) |
 | `TC-CAMERA-01` | Camera startup uses its first-frame deadline independently from the per-capture wait timeout. | [Real camera timeout contract](../../internal/camera/real_camera.go) |
@@ -26,6 +28,11 @@ guards a behavior that does not already have a traceable requirement or issue.
 | `TC-WEB-02` | Stream aspect ratio comes from configured resolution dimensions, and invalid CSS dimensions are rejected. | [Aspect-ratio helper](../../internal/web/src/aspect-ratio.ts) |
 | `TC-WEB-03` | Diagnostics dialog keyboard navigation stays inside the dialog and returns focus to its opener. | [Dialog behavior helper](../../internal/web/src/diagnostics-dialog.ts) |
 | `TC-WEB-04` | Dashboard API requests use the documented paths and HTTP methods for configuration, diagnostics, and stopping a stream. | [API endpoints](../../README.md#api) |
+| `TC-WEB-05` | Dynamic status messages are exposed as polite status live regions so assistive technology can announce changes without moving focus. | [WCAG status messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html) |
+| `TC-WEB-06` | Badges and primary actions use system colors in forced-colors mode. | [Forced-colors media feature](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/forced-colors) |
+| `TC-WEB-07` | Primary action and status-badge text meet 4.5:1 contrast in light and dark themes. | [WCAG contrast minimum](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) |
+| `TC-WEB-08` | Every embedded script, font, and mascot image URL carries the SHA-256 digest of the served asset bytes. | [Asset version generation](../../scripts/version_web_assets.ts), [MIO asset generation](../../scripts/generate_mio_assets.ts) |
+| `TC-CLI-01` | The CLI configuration view prints configured key/value pairs and omits deprecated fields. | [CLI usage](../../README.md#cli-usage) |
 | `TC-CI-01` | The coverage report upload is attempted even after the test job fails. | [Coverage workflow](../../.github/workflows/code-coverage-test.yml) |
 | `TC-CI-03` | The coverage gate accepts totals at or above 75% and rejects below-threshold or malformed totals. | [Coverage guidance](../../CONTRIBUTING.md#guidelines) |
 | `TC-DOC-01` | README and OpenAPI license labels match the canonical `LICENSE`, removal-date statements agree across docs, and documented API operations match registered Go handlers. | [Documentation contract check](../../scripts/test_documentation_contracts.py) |

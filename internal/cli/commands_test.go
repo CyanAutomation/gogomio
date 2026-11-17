@@ -125,6 +125,8 @@ func TestFormatHealthDetailed(t *testing.T) {
 	}
 }
 
+// TestFormatConfig verifies configured values are visible and deprecated fields are omitted.
+// Contract: TC-CLI-01 (docs/testing/test-contracts.md).
 func TestFormatConfig(t *testing.T) {
 	config := ConfigResponse{
 		"fps":          24,
@@ -138,8 +140,14 @@ func TestFormatConfig(t *testing.T) {
 	if !strings.Contains(output, "Configuration:") {
 		t.Errorf("expected 'Configuration:' in output, got: %s", output)
 	}
-	if !strings.Contains(output, "fps") {
-		t.Errorf("expected 'fps' in output, got: %s", output)
+	for _, expected := range []string{
+		"  fps: 24\n",
+		"  resolution: [640 480]\n",
+		"  jpeg_quality: 90\n",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected configuration output to contain %q, got: %s", expected, output)
+		}
 	}
 	if strings.Contains(output, "_deprecated") {
 		t.Errorf("should skip deprecated fields, got: %s", output)
