@@ -10,6 +10,7 @@
     "build:web": "tsx scripts/generate_mio_assets.ts && mkdir -p internal/web/generated && esbuild internal/web/src/app.ts --bundle --format=iife --target=es2020 --outfile=internal/web/generated/app.js && tsx scripts/version_web_assets.ts",
     "typecheck:web": "tsc --noEmit",
     "test:web": "tsx --test internal/web/src/*.test.ts",
+    "test:soyuz": "node --experimental-strip-types --test scripts/test_validate_soyuz.ts",
     "check:web": "npm run typecheck:web && npm run test:web && npm run verify:web",
     "verify:web": "tsx scripts/check_web_assets.ts"
   },

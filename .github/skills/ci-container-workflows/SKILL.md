@@ -13,7 +13,7 @@ Read the caller workflow, reusable workflow, helper scripts, and their tests bef
 - The main test workflow runs Go tests with race detection and coverage, enforces the configured coverage floor, and runs static checks. Pull requests also build both container architectures and smoke-test an amd64 mock-camera image.
 - The Docker publish workflow validates its selected source and requested tags, builds a candidate multi-architecture image, verifies and scans the immutable digest, then promotes that verified digest to final tags. Preserve this order and do not publish an unverified candidate.
 - The published image targets `linux/amd64` and `linux/arm64`. Keep architecture claims aligned with the Dockerfile, workflows, and deployment docs.
-- Reusable Kaseki workflows validate controller configuration and changed-file allowlists. Keep caller allowlists narrow and ensure task prompts agree with the permitted paths and validation command.
+- Reusable Kaseki workflows submit patch jobs to Soyuz. Keep caller allowlists narrow and ensure task prompts agree with the permitted paths and validation command. The reusable workflow validates the Soyuz origin and returned run ID, and its success summary reports submission acceptance rather than execution completion.
 - When a workflow runs scripts or generates embedded UI assets, preserve the repository's Node and Go version sources (`.nvmrc` and `go.mod`) and the source-backed contract checks.
 
 ## Safe workflow changes
@@ -40,7 +40,7 @@ The helper script also runs the skill checks, Python script tests, and web check
 - [`.github/workflows/code-coverage-test.yml`](../../workflows/code-coverage-test.yml) — tests, coverage, static checks, and pull request container checks
 - [`.github/workflows/build-docker.yml`](../../workflows/build-docker.yml) — candidate build, scan, verification, and promotion
 - [`.github/workflows/codeql.yml`](../../workflows/codeql.yml) — Go and JavaScript/TypeScript analysis
-- [`.github/workflows/kaseki-sweep.yml`](../../workflows/kaseki-sweep.yml) — reusable Kaseki workflow
+- [`.github/workflows/kaseki-sweep.yml`](../../workflows/kaseki-sweep.yml) — reusable Kaseki submission to Soyuz
 - [`scripts/test-ci-helpers.sh`](../../../scripts/test-ci-helpers.sh) — shared CI helper validation
 - [`scripts/test_workflow_contracts.py`](../../../scripts/test_workflow_contracts.py) — workflow behavior contracts
 - [`scripts/verify_docker_manifest.py`](../../../scripts/verify_docker_manifest.py) — multi-architecture manifest checks

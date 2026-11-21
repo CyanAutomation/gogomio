@@ -58,26 +58,30 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertEqual(text.count("node-version-file: .nvmrc"), expected_pins)
                 self.assertNotRegex(text, r"(?m)^\s+node-version:")
 
-    def test_kaseki_wrappers_share_a_main_only_normal_pr_workflow(self):
+    def test_kaseki_wrappers_share_a_main_only_soyuz_submission_workflow(self):
         reusable = workflow("kaseki-sweep.yml")
         for name in ("kaseki-docs.yaml", "kaseki-dry.yaml"):
             with self.subTest(workflow=name):
                 caller = workflow(name)
                 self.assertIn("uses: ./.github/workflows/kaseki-sweep.yml", caller)
                 self.assertIn("if: github.ref == 'refs/heads/main'", caller)
-                self.assertNotIn("KASEKI_API_TOKEN:", caller)
+                self.assertIn("github.sha", caller)
+                self.assertNotIn("SOYUZ_SUBMISSION_API_TOKEN:", caller)
         self.assertIn("if: github.ref == 'refs/heads/main'", reusable)
         self.assertIn("REF: main", reusable)
         self.assertIn('publishMode: "pr"', reusable)
-        self.assertIn("environment: kaseki-agent", reusable)
-        self.assertNotIn("KASEKI_API_TOKEN:", reusable.split("\njobs:", 1)[0])
-        self.assertIn("KASEKI_ALLOWED_HOSTS", reusable)
-        job_environment = reusable.split("\njobs:\n  sweep:", 1)[1].split("\n    steps:", 1)[0]
-        self.assertNotIn("KASEKI_API_TOKEN:", job_environment)
+        self.assertIn("environment: soyuz", reusable)
+        self.assertIn("SOYUZ_BASE_URL: ${{ vars.SOYUZ_BASE_URL }}", reusable)
+        self.assertNotIn("KASEKI_API_TOKEN", reusable)
+        self.assertNotIn("KASEKI_ALLOWED_HOSTS", reusable)
+        submit = workflow_step(reusable, "Submit Kaseki sweep to Soyuz")
+        self.assertIn("SOYUZ_SUBMISSION_API_TOKEN: ${{ secrets.SOYUZ_SUBMISSION_API_TOKEN }}", submit)
+        self.assertIn("SOYUZ_BASE_URL/v1/runs", submit)
+        self.assertIn('"Idempotency-Key: $idempotency_key"', submit)
         self.assertNotIn("draft", reusable.lower())
         for name, group in (
-            ("kaseki-docs.yaml", "kaseki-docs-sweep"),
-            ("kaseki-dry.yaml", "kaseki-dry-sweep"),
+            ("kaseki-docs.yaml", "soyuz-docs-sweep"),
+            ("kaseki-dry.yaml", "soyuz-dry-sweep"),
         ):
             with self.subTest(workflow=name):
                 self.assertIn(
@@ -85,17 +89,15 @@ class WorkflowContractTests(unittest.TestCase):
                     workflow(name),
                 )
 
-    def test_kaseki_health_probe_uses_the_validated_controller_url(self):
+    def test_soyuz_base_url_is_validated_before_submission(self):
         reusable = workflow("kaseki-sweep.yml")
-        validation = workflow_step(reusable, "Validate Kaseki configuration")
-        health = workflow_step(reusable, "Verify controller health")
+        node = workflow_step(reusable, "Set up Node.js")
+        validation = workflow_step(reusable, "Validate Soyuz URL")
 
-        self.assertIn("id: validate_kaseki_configuration", validation)
-        self.assertIn('echo "base_url=$validated_url" >> "$GITHUB_OUTPUT"', validation)
-        self.assertIn(
-            "base-url: ${{ steps.validate_kaseki_configuration.outputs.base_url }}",
-            health,
-        )
+        self.assertIn("node-version-file: .nvmrc", node)
+        self.assertIn("node --experimental-strip-types scripts/validate-soyuz-url.ts", validation)
+        self.assertNotIn("Verify controller health", reusable)
+        self.assertNotIn("gateway-test", reusable)
 
     def test_docker_publisher_validates_scans_verifies_and_attests_before_promotion(self):
         text = workflow(DOCKER_WORKFLOW)
@@ -248,14 +250,24 @@ class WorkflowContractTests(unittest.TestCase):
         scan = workflow_job(text, "scan")
         self.assertIn("permissions: {}", scan)
 
-    def test_kaseki_poll_deadline_precedes_controller_and_job_timeouts(self):
+    def test_soyuz_submission_is_bounded_and_does_not_wait_for_remote_completion(self):
         reusable = workflow("kaseki-sweep.yml")
-        wait = workflow_step(reusable, "Wait for Kaseki completion")
+        submit = workflow_step(reusable, "Submit Kaseki sweep to Soyuz")
+        summary = workflow_step(reusable, "Publish Soyuz submission details")
+
         self.assertIn("timeoutSeconds: 10800", reusable)
-        self.assertIn("POLL_TIMEOUT_SECONDS=10500", wait)
-        self.assertIn("poll_started_at=$SECONDS", wait)
-        self.assertIn("No terminal status within 175 minutes", wait)
-        self.assertNotIn("seq 1 185", wait)
+        self.assertIn("maxDiffBytes: 102400", reusable)
+        self.assertIn("timeout-minutes: 15", reusable)
+        self.assertIn("changedFilesAllowlist:", submit)
+        self.assertIn("validationCommands:", submit)
+        self.assertIn(".data.id | strings", submit)
+        self.assertIn("scripts/validate-soyuz-run-id.ts", submit)
+        self.assertIn("data.displayId", submit)
+        self.assertIn("data.status", submit)
+        self.assertIn('Accepted means Soyuz admitted the task', summary)
+        self.assertNotIn("Wait for Kaseki completion", reusable)
+        self.assertNotIn("/api/v1/runs/", reusable)
+        self.assertNotIn("validate_kaseki_changed_files.py", reusable)
 
     def test_ci_workflows_invoke_shared_test_runners(self):
         for name in ("code-coverage-test.yml", DOCKER_WORKFLOW):
@@ -358,11 +370,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("uses: actions/upload-artifact", step)
         self.assertIn("path: coverage.out", step)
 
-    def test_kaseki_completion_checks_actual_changed_files_against_allowlist(self):
+    def test_soyuz_receives_the_sweep_allowlist_for_server_side_enforcement(self):
         reusable = workflow("kaseki-sweep.yml")
-        wait = workflow_step(reusable, "Wait for Kaseki completion")
-        self.assertIn("/api/v1/runs/$RUN_ID/analysis", wait)
-        self.assertIn("scripts/validate_kaseki_changed_files.py", wait)
+        submit = workflow_step(reusable, "Submit Kaseki sweep to Soyuz")
+        self.assertIn("changedFilesAllowlist:", submit)
+        self.assertIn('map(select(length > 0))', submit)
+        self.assertIn("ALLOWLIST: ${{ inputs.allowlist }}", reusable)
+        self.assertIn("taskPrompt: $taskPrompt", submit)
 
     def test_documentation_link_check_does_not_accept_http_errors_globally(self):
         text = workflow("documentation.yml")

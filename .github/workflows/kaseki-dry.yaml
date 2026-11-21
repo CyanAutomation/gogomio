@@ -1,4 +1,4 @@
-name: Kaseki DRY Sweep
+name: Kaseki DRY Sweep via Soyuz
 
 on:
   schedule:
@@ -6,13 +6,13 @@ on:
   workflow_dispatch:
 
 run-name: >-
-  DRY sweep · ${{ github.repository }}@main
+  DRY sweep · ${{ github.repository }}@${{ github.sha }}
 
 permissions:
   contents: read
 
 concurrency:
-  group: kaseki-dry-sweep-${{ github.repository }}-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
+  group: soyuz-dry-sweep-${{ github.repository }}-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
