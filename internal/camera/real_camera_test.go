@@ -652,13 +652,24 @@ func TestRealCameraStartDetectsEarlyBackendExit(t *testing.T) {
 	}
 }
 
-func TestFirstFrameTimeoutRpiCamStartupMinimumIgnoresCaptureWaitTimeout(t *testing.T) {
+func TestFirstFrameTimeoutRpiCamUsesTenSecondStartupMinimum(t *testing.T) {
 	rc := NewRealCamera()
 	rc.fps = 24
 	rc.captureWaitTimeout = 75 * time.Millisecond
 	rc.backendAttempted = "rpicam-vid"
 
-	if got, want := rc.firstFrameTimeout(), 4*time.Second; got != want {
+	if got, want := rc.firstFrameTimeout(), 10*time.Second; got != want {
+		t.Fatalf("firstFrameTimeout() = %v, want %v", got, want)
+	}
+}
+
+func TestFirstFrameTimeoutRpiCamHonorsConfiguredStartupMinimum(t *testing.T) {
+	rc := NewRealCamera()
+	rc.fps = 24
+	rc.backendAttempted = "rpicam-vid"
+	rc.SetStartupTimeout(15 * time.Second)
+
+	if got, want := rc.firstFrameTimeout(), 15*time.Second; got != want {
 		t.Fatalf("firstFrameTimeout() = %v, want %v", got, want)
 	}
 }

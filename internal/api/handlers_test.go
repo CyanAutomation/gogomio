@@ -110,6 +110,15 @@ type readinessCamera struct {
 	ready bool
 }
 
+type backendReportingCamera struct {
+	camera.Camera
+	backend string
+	message string
+}
+
+func (c *backendReportingCamera) CameraBackend() string       { return c.backend }
+func (c *backendReportingCamera) CameraStatusMessage() string { return c.message }
+
 func (c *readinessCamera) Start(_, _, _, _ int) error { return nil }
 func (c *readinessCamera) Stop() error                { return nil }
 func (c *readinessCamera) IsReady() bool              { return c.ready }
@@ -562,13 +571,13 @@ func TestReadyRoute(t *testing.T) {
 			name:       "camera ready",
 			ready:      true,
 			wantStatus: http.StatusOK,
-			wantBody:   map[string]string{"status": "ready"},
+			wantBody:   map[string]string{"status": "ready", "camera_backend": "real"},
 		},
 		{
 			name:       "camera not ready",
 			ready:      false,
 			wantStatus: http.StatusServiceUnavailable,
-			wantBody:   map[string]string{"status": "initializing"},
+			wantBody:   map[string]string{"status": "initializing", "camera_backend": "real"},
 		},
 	}
 
@@ -687,6 +696,15 @@ func TestConfigEndpoint(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "active camera backend is exposed",
+			check: func(t *testing.T, payload map[string]interface{}) {
+				t.Helper()
+				if got := payload["camera_backend"]; got != "mock" {
+					t.Errorf("camera_backend = %v, want mock", got)
+				}
+			},
+		},
 	}
 
 	for _, tc := range fieldChecks {
@@ -697,13 +715,16 @@ func TestConfigEndpoint(t *testing.T) {
 }
 
 func TestCameraConfigCaching(t *testing.T) {
-	_, _, cfg := setupTestServer(t)
+	_, cam, cfg := setupTestServer(t)
+	activeCamera := &backendReportingCamera{Camera: cam, backend: "mock"}
+	fm := NewFrameManager(activeCamera, cfg)
+	t.Cleanup(fm.Stop)
 
 	request := func(ifNoneMatch string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/v1/config/camera", nil)
 		req.Header.Set("If-None-Match", ifNoneMatch)
 		w := httptest.NewRecorder()
-		handleCameraConfig(w, req, cfg)
+		handleCameraConfig(w, req, fm, cfg)
 		return w
 	}
 
@@ -711,7 +732,7 @@ func TestCameraConfigCaching(t *testing.T) {
 	if first.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", first.Code)
 	}
-	if got, want := first.Header().Get("Cache-Control"), "private, max-age=60, must-revalidate"; got != want {
+	if got, want := first.Header().Get("Cache-Control"), "private, max-age=5, must-revalidate"; got != want {
 		t.Errorf("Cache-Control = %q, want %q", got, want)
 	}
 	etag := first.Header().Get("ETag")
@@ -727,6 +748,9 @@ func TestCameraConfigCaching(t *testing.T) {
 	}
 	if !cameraConfig.MockCamera {
 		t.Error("cacheable camera configuration does not identify mock camera mode")
+	}
+	if cameraConfig.CameraBackend != "mock" {
+		t.Errorf("camera_backend = %q, want mock", cameraConfig.CameraBackend)
 	}
 
 	second := request("")
@@ -746,6 +770,81 @@ func TestCameraConfigCaching(t *testing.T) {
 	}
 	if got := notModified.Header().Get("ETag"); got != etag {
 		t.Errorf("304 ETag = %q, want %q", got, etag)
+	}
+
+	activeCamera.backend = "mock-fallback"
+	changed := request("")
+	if changed.Code != http.StatusOK {
+		t.Fatalf("updated camera config status = %d, want %d", changed.Code, http.StatusOK)
+	}
+	if got := changed.Header().Get("ETag"); got == etag {
+		t.Error("ETag did not change when the active camera backend changed")
+	}
+	if err := json.Unmarshal(changed.Body.Bytes(), &cameraConfig); err != nil {
+		t.Fatalf("decode updated camera config: %v", err)
+	}
+	if cameraConfig.CameraBackend != "mock-fallback" || !cameraConfig.MockCamera {
+		t.Errorf("updated camera source/mock = %q/%v, want mock-fallback/true", cameraConfig.CameraBackend, cameraConfig.MockCamera)
+	}
+}
+
+func TestMockFallbackIsReportedAsDegradedAndShowsActiveSource(t *testing.T) {
+	cfg := &config.Config{
+		Resolution:           [2]int{640, 480},
+		FPS:                  24,
+		TargetFPS:            24,
+		JPEGQuality:          90,
+		MaxStreamConnections: 2,
+	}
+	cam := &backendReportingCamera{
+		Camera:  &readinessCamera{ready: true},
+		backend: "mock-fallback",
+		message: "The real CSI camera is unavailable; simulated frames are active while recovery continues.",
+	}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	configResponse := httptest.NewRecorder()
+	handleCameraConfig(configResponse, httptest.NewRequest(http.MethodGet, "/v1/config/camera", nil), fm, cfg)
+	var cameraConfig CameraConfigResponse
+	if err := json.Unmarshal(configResponse.Body.Bytes(), &cameraConfig); err != nil {
+		t.Fatalf("decode camera config: %v", err)
+	}
+	if cameraConfig.CameraBackend != "mock-fallback" || !cameraConfig.MockCamera {
+		t.Errorf("camera config source/mock = %q/%v, want mock-fallback/true", cameraConfig.CameraBackend, cameraConfig.MockCamera)
+	}
+
+	healthResponse := httptest.NewRecorder()
+	handleDetailedHealth(healthResponse, httptest.NewRequest(http.MethodGet, "/v1/health/detailed", nil), fm, cfg, time.Now())
+	var health DetailedHealthResponse
+	if err := json.Unmarshal(healthResponse.Body.Bytes(), &health); err != nil {
+		t.Fatalf("decode detailed health: %v", err)
+	}
+	if health.CameraBackend != "mock-fallback" || health.Status != "degraded" || !health.Degraded {
+		t.Errorf("health source/status/degraded = %q/%q/%v, want mock-fallback/degraded/true", health.CameraBackend, health.Status, health.Degraded)
+	}
+	if health.Message != cam.message {
+		t.Errorf("health message = %q, want %q", health.Message, cam.message)
+	}
+}
+
+func TestReadyIncludesActiveCameraBackend(t *testing.T) {
+	cfg := &config.Config{Resolution: [2]int{640, 480}, FPS: 24, TargetFPS: 24, JPEGQuality: 90, MaxStreamConnections: 2}
+	cam := &backendReportingCamera{Camera: &readinessCamera{ready: true}, backend: "mock-fallback"}
+	fm := NewFrameManager(cam, cfg)
+	t.Cleanup(fm.Stop)
+
+	response := httptest.NewRecorder()
+	handleReady(response, httptest.NewRequest(http.MethodGet, "/v1/ready", nil), fm)
+	if response.Code != http.StatusOK {
+		t.Fatalf("readiness status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode readiness response: %v", err)
+	}
+	if payload["status"] != "ready" || payload["camera_backend"] != "mock-fallback" {
+		t.Errorf("readiness response = %#v, want ready/mock-fallback", payload)
 	}
 }
 
@@ -973,7 +1072,7 @@ func TestBasicAuthProtectsMainRoutesAndLeavesReadinessAvailable(t *testing.T) {
 	if configResponse.Code != http.StatusOK {
 		t.Fatalf("authenticated GET /v1/config/camera status = %d, want %d", configResponse.Code, http.StatusOK)
 	}
-	if got := configResponse.Header().Get("Cache-Control"); got != "private, max-age=60, must-revalidate" {
+	if got := configResponse.Header().Get("Cache-Control"); got != "private, max-age=5, must-revalidate" {
 		t.Errorf("authenticated response Cache-Control = %q, want private browser caching", got)
 	}
 	etag := configResponse.Header().Get("ETag")
@@ -989,7 +1088,7 @@ func TestBasicAuthProtectsMainRoutesAndLeavesReadinessAvailable(t *testing.T) {
 	if revalidatedResponse.Code != http.StatusNotModified {
 		t.Fatalf("authenticated conditional GET status = %d, want %d", revalidatedResponse.Code, http.StatusNotModified)
 	}
-	if got := revalidatedResponse.Header().Get("Cache-Control"); got != "private, max-age=60, must-revalidate" {
+	if got := revalidatedResponse.Header().Get("Cache-Control"); got != "private, max-age=5, must-revalidate" {
 		t.Errorf("authenticated 304 Cache-Control = %q, want private browser caching", got)
 	}
 }
@@ -1018,7 +1117,7 @@ func TestBasicAuthPreservesStaticAssetCachePolicies(t *testing.T) {
 		{path: "/openapi.json", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
 		{path: "/openapi.yaml", wantCache: "public, max-age=300, must-revalidate", wantETag: true},
 		{path: "/docs/missing.css", wantCache: "no-store", wantStatus: http.StatusNotFound},
-		{path: "/v1/config/camera", wantCache: "private, max-age=60, must-revalidate", wantETag: true},
+		{path: "/v1/config/camera", wantCache: "private, max-age=5, must-revalidate", wantETag: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.path, func(t *testing.T) {

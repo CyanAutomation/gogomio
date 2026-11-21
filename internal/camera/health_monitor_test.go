@@ -97,6 +97,7 @@ func TestHealthMonitorStallDetection(t *testing.T) {
 		diagnostics <- message
 	}), "", 0)
 	rc.frameSeq = 5
+	rc.isReady.Store(true)
 
 	done := make(chan struct{})
 	rc.startupID, rc.lifecycle = 1, lifecycleRunning
@@ -127,6 +128,9 @@ func TestHealthMonitorStallDetection(t *testing.T) {
 	assertDiagnostic(firstTick, "🏥 Health check: frames flowing normally (seq: 5)\n")
 	assertDiagnostic(firstTick.Add(11*time.Second), "ℹ️  Health check: no recent frames for 11s (seq: 5)\n")
 	assertDiagnostic(firstTick.Add(31*time.Second), "⚠️  Health check: frame capture stalled for 31s (seq: 5)\n")
+	if rc.IsReady() {
+		t.Fatal("camera remains ready after a 31-second frame stall")
+	}
 }
 
 // TestHealthMonitorReportsReaderError verifies that an error published by the
@@ -142,6 +146,7 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 	rc.readerDone = make(chan struct{})
 	rc.frameUpdateCh = make(chan struct{})
 	rc.startupID, rc.lifecycle = 1, lifecycleRunning
+	rc.isReady.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	stdout, backend := io.Pipe()
@@ -153,6 +158,9 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 		t.Fatalf("close camera stream: %v", err)
 	}
 	<-rc.readerDone
+	if rc.IsReady() {
+		t.Fatal("camera remains ready after the MJPEG reader failed")
+	}
 
 	done := make(chan struct{})
 	go rc.healthMonitor(nil, done, ctx, 1)
@@ -168,6 +176,9 @@ func TestHealthMonitorReportsReaderError(t *testing.T) {
 		select {
 		case diagnostic := <-diagnostics:
 			if diagnostic == want {
+				if rc.IsReady() {
+					t.Fatal("camera remains ready after the MJPEG reader failed")
+				}
 				return
 			}
 		case <-time.After(time.Second):

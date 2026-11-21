@@ -16,6 +16,7 @@ func clearConfigEnv(t *testing.T) {
 		"MIO_TARGET_FPS",
 		"MIO_JPEG_QUALITY",
 		"MIO_MAX_STREAM_CONNECTIONS",
+		"MIO_CAMERA_STARTUP_TIMEOUT_SECONDS",
 		"MIO_PORT",
 		"MIO_BIND_HOST",
 		"MOCK_CAMERA",
@@ -24,6 +25,43 @@ func clearConfigEnv(t *testing.T) {
 		"MIO_CORS_ALLOWED_ORIGINS",
 	} {
 		t.Setenv(key, "")
+	}
+}
+
+func TestCameraStartupTimeoutSecondsFromEnv(t *testing.T) {
+	clearConfigEnv(t)
+	if got := LoadFromEnv().CameraStartupTimeoutSeconds; got != 10 {
+		t.Fatalf("default CameraStartupTimeoutSeconds = %d, want 10", got)
+	}
+
+	t.Setenv("MIO_CAMERA_STARTUP_TIMEOUT_SECONDS", "15")
+	if got := LoadFromEnv().CameraStartupTimeoutSeconds; got != 15 {
+		t.Fatalf("configured CameraStartupTimeoutSeconds = %d, want 15", got)
+	}
+
+	for _, invalid := range []string{"0", "121", "abc"} {
+		t.Setenv("MIO_CAMERA_STARTUP_TIMEOUT_SECONDS", invalid)
+		if got := LoadFromEnv().CameraStartupTimeoutSeconds; got != 10 {
+			t.Errorf("invalid startup timeout %q yielded %d, want default 10", invalid, got)
+		}
+	}
+}
+
+func TestCameraStartupTimeoutSecondsValidation(t *testing.T) {
+	for _, seconds := range []int{-1, 121} {
+		cfg := LoadFromEnv()
+		cfg.CameraStartupTimeoutSeconds = seconds
+		if err := cfg.Validate(); err == nil {
+			t.Errorf("Validate() accepted camera startup timeout %d", seconds)
+		}
+	}
+
+	for _, seconds := range []int{0, 1, 120} {
+		cfg := LoadFromEnv()
+		cfg.CameraStartupTimeoutSeconds = seconds
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() rejected camera startup timeout %d: %v", seconds, err)
+		}
 	}
 }
 

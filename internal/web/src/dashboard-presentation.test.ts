@@ -108,7 +108,7 @@ test("stream descriptions follow the current state in MIO's voice", () => {
     assert.equal(getStreamDescription("capacity"), "MIO's at capacity right now. Try again when another stream is free.");
 });
 
-test("camera readiness has distinct copy and tones for checking, ready, starting, and unavailable", () => {
+test("camera readiness has distinct copy and tones for real, mock, fallback, starting, and unavailable", () => {
     assert.deepEqual(getCameraReadinessPresentation("checking"), {
         label: "Checking camera…",
         tone: "info",
@@ -118,6 +118,16 @@ test("camera readiness has distinct copy and tones for checking, ready, starting
         label: "Camera ready",
         tone: "success",
         guidance: "",
+    });
+    assert.deepEqual(getCameraReadinessPresentation("mock"), {
+        label: "Test camera",
+        tone: "warning",
+        guidance: "GoGoMio is using the configured simulated camera.",
+    });
+    assert.deepEqual(getCameraReadinessPresentation("fallback"), {
+        label: "Simulated fallback",
+        tone: "warning",
+        guidance: "The real camera is unavailable. Simulated frames are active while GoGoMio retries.",
     });
     assert.deepEqual(getCameraReadinessPresentation("initializing"), {
         label: "Camera starting",
@@ -137,11 +147,13 @@ test("camera readiness has distinct copy and tones for checking, ready, starting
 });
 
 test("camera readiness treats non-success responses as unavailable regardless of the body status", () => {
-    assert.equal(getCameraReadinessState(false, "initializing"), "unavailable");
-    assert.equal(getCameraReadinessState(false, "ready"), "unavailable");
-    assert.equal(getCameraReadinessState(true, "initializing"), "initializing");
-    assert.equal(getCameraReadinessState(true, "ready"), "ready");
-    assert.equal(getCameraReadinessState(true, "unexpected"), "unavailable");
+    assert.equal(getCameraReadinessState(false, "initializing", "real"), "unavailable");
+    assert.equal(getCameraReadinessState(false, "ready", "real"), "unavailable");
+    assert.equal(getCameraReadinessState(true, "initializing", "real"), "initializing");
+    assert.equal(getCameraReadinessState(true, "ready", "real"), "ready");
+    assert.equal(getCameraReadinessState(true, "ready", "mock"), "mock");
+    assert.equal(getCameraReadinessState(true, "ready", "mock-fallback"), "fallback");
+    assert.equal(getCameraReadinessState(true, "unexpected", "real"), "unavailable");
 });
 
 test("only the action relevant to the current stream state is shown", () => {
