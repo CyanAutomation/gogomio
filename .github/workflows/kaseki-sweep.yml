@@ -1,5 +1,8 @@
 name: Kaseki Sweep via Soyuz
 
+# Security contract: only kaseki-docs.yaml and kaseki-dry.yaml should call
+# this reusable workflow. Treat its task_prompt, allowlist, and validation_command
+# inputs as reviewed repository configuration, never event- or user-supplied values.
 on:
   workflow_call:
     inputs:

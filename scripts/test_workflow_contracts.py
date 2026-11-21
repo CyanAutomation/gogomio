@@ -60,7 +60,18 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_kaseki_wrappers_share_a_main_only_soyuz_submission_workflow(self):
         reusable = workflow("kaseki-sweep.yml")
-        for name in ("kaseki-docs.yaml", "kaseki-dry.yaml"):
+        expected_callers = ["kaseki-docs.yaml", "kaseki-dry.yaml"]
+        actual_callers = sorted(
+            path.name
+            for path in (ROOT / ".github" / "workflows").glob("*.y*ml")
+            if "uses: ./.github/workflows/kaseki-sweep.yml" in path.read_text()
+        )
+        self.assertEqual(actual_callers, expected_callers)
+        self.assertIn(
+            "only kaseki-docs.yaml and kaseki-dry.yaml should call", reusable
+        )
+        self.assertIn("this reusable workflow. Treat its task_prompt", reusable)
+        for name in expected_callers:
             with self.subTest(workflow=name):
                 caller = workflow(name)
                 self.assertIn("uses: ./.github/workflows/kaseki-sweep.yml", caller)
