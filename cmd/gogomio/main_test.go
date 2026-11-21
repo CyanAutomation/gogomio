@@ -122,6 +122,26 @@ func TestStartRealCameraRetriesFirstFrameTimeoutOnce(t *testing.T) {
 	}
 }
 
+func TestStartRealCameraReturnsFinalFirstFrameTimeout(t *testing.T) {
+	cfg := testConfig()
+	realCam := &fakeCamera{startResults: []error{
+		&camera.InitializationError{Backend: camera.BackendRpicam, Reason: "first timeout", Cause: camera.ErrFirstFrameTimeout},
+		&camera.InitializationError{Backend: camera.BackendRpicam, Reason: "second timeout", Cause: camera.ErrFirstFrameTimeout},
+	}}
+	waits := 0
+
+	err := startRealCameraWithRetry(log.New(&bytes.Buffer{}, "", 0), cfg, realCam, func(time.Duration) bool {
+		waits++
+		return true
+	})
+	if !errors.Is(err, camera.ErrFirstFrameTimeout) {
+		t.Fatalf("startRealCameraWithRetry() error = %v, want final first-frame timeout", err)
+	}
+	if realCam.startCalls != realCameraStartupAttempts || waits != realCameraStartupAttempts-1 {
+		t.Fatalf("Start() calls/waits = %d/%d, want %d/%d", realCam.startCalls, waits, realCameraStartupAttempts, realCameraStartupAttempts-1)
+	}
+}
+
 func TestStartRealCameraDoesNotRetryNonTimeoutFailure(t *testing.T) {
 	cfg := testConfig()
 	realCam := &fakeCamera{startErr: errors.New("camera process could not start")}

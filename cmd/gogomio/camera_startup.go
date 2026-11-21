@@ -36,12 +36,12 @@ func startRealCameraWithRetry(
 		logger = log.Default()
 	}
 	configureRealCamera(cam, cfg)
-	for attempt := 1; attempt <= realCameraStartupAttempts; attempt++ {
+	for attempt := 1; ; attempt++ {
 		err := cam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality)
 		if err == nil {
 			return nil
 		}
-		if !errors.Is(err, camera.ErrFirstFrameTimeout) || attempt == realCameraStartupAttempts {
+		if !errors.Is(err, camera.ErrFirstFrameTimeout) || attempt >= realCameraStartupAttempts {
 			return err
 		}
 		logger.Printf("⚠️ Native camera produced no first frame on attempt %d/%d; retrying after %v: %v", attempt, realCameraStartupAttempts, realCameraRetryDelay, err)
@@ -49,7 +49,6 @@ func startRealCameraWithRetry(
 			return context.Canceled
 		}
 	}
-	return nil
 }
 
 func sleepForRetry(delay time.Duration) bool {
