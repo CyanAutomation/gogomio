@@ -4,7 +4,7 @@ export type StreamState = "ready" | "connecting" | "live" | "reconnecting" | "un
 export type MioPose = "idle" | "sleeping" | "curious" | "concerned" | "happy" | "worried" | "angry" | "looking";
 export type StatusTone = "neutral" | "warning" | "success" | "error";
 export type MetricTone = "neutral" | "success" | "warning" | "error";
-export type CameraReadinessState = "checking" | "ready" | "initializing" | "unavailable" | "unknown";
+export type CameraReadinessState = "checking" | "ready" | "mock" | "fallback" | "initializing" | "unavailable" | "unknown";
 
 export interface StreamStatusPresentation {
     label: string;
@@ -154,6 +154,16 @@ export function getCameraReadinessPresentation(state: CameraReadinessState): Cam
     const presentations: Record<CameraReadinessState, CameraReadinessPresentation> = {
         checking: { label: "Checking camera…", tone: "info", guidance: "" },
         ready: { label: "Camera ready", tone: "success", guidance: "" },
+        mock: {
+            label: "Test camera",
+            tone: "warning",
+            guidance: "GoGoMio is using the configured simulated camera.",
+        },
+        fallback: {
+            label: "Simulated fallback",
+            tone: "warning",
+            guidance: "The real camera is unavailable. Simulated frames are active while GoGoMio retries.",
+        },
         initializing: {
             label: "Camera starting",
             tone: "warning",
@@ -177,9 +187,15 @@ export function getCameraReadinessPresentation(state: CameraReadinessState): Cam
 export function getCameraReadinessState(
     responseOk: boolean,
     status: string | undefined,
-): "ready" | "initializing" | "unavailable" {
+    backend: string | undefined,
+): "ready" | "mock" | "fallback" | "initializing" | "unavailable" {
     if (!responseOk) return "unavailable";
-    if (status === "ready" || status === "initializing") return status;
+    if (status === "initializing") return status;
+    if (status === "ready") {
+        if (backend === "mock-fallback") return "fallback";
+        if (backend === "mock") return "mock";
+        return "ready";
+    }
     return "unavailable";
 }
 

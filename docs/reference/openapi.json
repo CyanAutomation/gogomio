@@ -410,7 +410,7 @@
     },
     "/v1/ready": {
       "get": {
-        "description": "Returns 200 only when camera is fully initialized and ready to stream. Returns 503 during startup. Suitable for Kubernetes readiness probes to control traffic routing. Use /v1/health for liveness checks instead.",
+        "description": "Returns 200 when a camera source is ready to stream and 503 during startup. The response includes the active camera backend (real, mock, or mock-fallback). Use /v1/health for liveness checks instead.",
         "tags": [
           "Health"
         ],
@@ -422,6 +422,16 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ready"
+                    },
+                    "camera_backend": {
+                      "type": "string",
+                      "example": "real"
+                    }
+                  },
                   "additionalProperties": {
                     "type": "string"
                   }
@@ -435,6 +445,16 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "initializing"
+                    },
+                    "camera_backend": {
+                      "type": "string",
+                      "example": "real"
+                    }
+                  },
                   "additionalProperties": {
                     "type": "string"
                   }
@@ -491,7 +511,7 @@
   "components": {
     "schemas": {
       "api.CameraConfigResponse": {
-        "description": "Static camera configuration including encoded output resolution, quality, limits, and mock-camera mode; resolution does not describe sensor field of view",
+        "description": "Camera configuration and current source, including encoded output resolution, quality, and limits; resolution does not describe sensor field of view",
         "type": "object",
         "properties": {
           "api_version": {
@@ -518,6 +538,11 @@
             "description": "Whether the server is using the mock camera backend",
             "type": "boolean",
             "example": false
+          },
+          "camera_backend": {
+            "description": "Active camera source: real, mock, or mock-fallback",
+            "type": "string",
+            "example": "real"
           },
           "resolution": {
             "description": "Encoded output resolution in pixels [width, height]; does not describe sensor field of view",
@@ -546,6 +571,11 @@
             "description": "Whether the camera is initialized and ready",
             "type": "boolean",
             "example": true
+          },
+          "camera_backend": {
+            "description": "Active camera source: real, mock, or mock-fallback",
+            "type": "string",
+            "example": "real"
           },
           "capture_failures_consecutive": {
             "description": "Consecutive capture failures (resets on success)",

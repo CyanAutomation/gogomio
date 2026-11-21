@@ -19,6 +19,8 @@ guards a behavior that does not already have a traceable requirement or issue.
 | `TC-DIAG-02` | Detailed health classifies rates above 5% as degraded, and rates above 20% or more than five consecutive failures as poor. | [Detailed health API](../reference/openapi.yaml#/components/schemas/api.DetailedHealthResponse) |
 | `TC-CAMERA-01` | Camera startup uses its first-frame deadline independently from the per-capture wait timeout. | [Real camera timeout contract](../../internal/camera/real_camera.go) |
 | `TC-CAMERA-02` | Mock camera JPEG output reflects the configured dimensions and quality. | [Camera interface](../../internal/camera/camera_interface.go) |
+| `TC-CAMERA-03` | A native first-frame timeout is retried once; mock fallback keeps serving frames while the real camera is retried, and the reported backend follows a successful recovery. | [Camera startup recovery](../../cmd/gogomio/recovering_camera.go) |
+| `TC-CAMERA-04` | A stream-reader error or prolonged frame stall marks the real camera unready so the supervisor can switch to fallback and recover it. | [Camera health monitor](../../internal/camera/real_camera.go) |
 | `TC-CAPTURE-01` | A camera panic is recovered by the background capture loop, which then marks itself stopped. | [Capture loop](../../internal/api/handlers.go) |
 | `TC-CONFIG-01` | Frame timeout uses the configured frame interval, a 10 ms minimum, and a 5 second default. | [FrameTimeout documentation](../../internal/config/config.go) |
 | `TC-CONFIG-02` | Invalid or nonpositive target FPS falls back to the configured capture FPS. | [Environment configuration](../../internal/config/config.go) |

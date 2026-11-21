@@ -215,10 +215,7 @@ func initializeCameraWithLogger(
 	logger.Println("📹 Initializing camera backend: real (Raspberry Pi CSI)")
 	logger.Println("   Checking for CSI camera access...")
 	realCam := newRealCamera()
-	if configurable, ok := realCam.(interface{ SetSensorMode(int, int) }); ok {
-		configurable.SetSensorMode(cfg.SensorMode[0], cfg.SensorMode[1])
-	}
-	if err := realCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+	if err := startRealCameraWithRetry(logger, cfg, realCam, sleepForRetry); err != nil {
 		attemptedBackend := "unknown"
 		failureReason := err.Error()
 		var initErr *camera.InitializationError
@@ -251,10 +248,14 @@ func initializeCameraWithLogger(
 		logger.Println("   Note: RealCamera may internally try FFmpeg/V4L2 as an alternative backend.")
 		logger.Println("   Switching runtime camera backend to mock-fallback mode.")
 		logger.Println("🎬 Initializing camera backend: mock-fallback (development mode)")
-		return startMockCamera(logger, cfg, newMockCamera, "mock-fallback", true)
+		mockCam, backend, mockErr := startMockCamera(logger, cfg, newMockCamera, "mock-fallback", true)
+		if mockErr != nil {
+			return nil, "", mockErr
+		}
+		return newRecoveringCamera(mockCam, "mock-fallback", cfg, newRealCamera, newMockCamera, logger, err, initialCameraRecoveryDelay), backend, nil
 	}
 
-	return realCam, "real", nil
+	return newRecoveringCamera(realCam, "real", cfg, newRealCamera, newMockCamera, logger, nil, realCameraHealthPollInterval), "real", nil
 }
 
 func startMockCamera(logger *log.Logger, cfg *config.Config, newMockCamera func() camera.Camera, backend string, fallbackToSyntheticOnFixtureError bool) (camera.Camera, string, error) {

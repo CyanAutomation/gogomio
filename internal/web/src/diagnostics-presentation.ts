@@ -20,6 +20,7 @@ import {
 
 export interface DiagnosticsResponse {
     camera_ready: boolean;
+    camera_backend?: string;
     capture_failures_consecutive: number;
     capture_failures_total: number;
     error_rate_percent: number;
@@ -64,8 +65,10 @@ function renderDiagnosticsSummary(data: DiagnosticsResponse): string {
         Number(data.error_rate_percent || 0),
         Number(data.capture_failures_consecutive || 0),
     );
-    const cameraTone = data.camera_ready ? "success" : "error";
-    const cameraStatus = data.camera_ready ? "Ready" : "Unavailable";
+    const fallback = data.camera_backend === "mock-fallback";
+    const mock = data.camera_backend === "mock";
+    const cameraTone = !data.camera_ready ? "error" : fallback || mock ? "warning" : "success";
+    const cameraStatus = !data.camera_ready ? "Unavailable" : fallback ? "Simulated fallback" : mock ? "Test camera" : "Ready";
     const noticeTone = healthTone === "neutral" ? "info" : healthTone;
 
     return `
@@ -97,6 +100,7 @@ function renderDiagnosticsDetails(data: DiagnosticsResponse): string {
 
             <div class="diagnostic-metric-list">
                 ${renderMetricRow("Frame rate", formatFrameRate(Number(data.fps_current ?? Number.NaN)), "camera")}
+                ${data.camera_backend ? renderMetricRow("Camera source", data.camera_backend, "camera") : ""}
                 ${renderMetricRow("Resolution", formatResolution(data.resolution), "grid")}
                 ${renderMetricRow("JPEG quality", `${quality}%`, "quality")}
                 ${renderMetricRow("Frames captured", framesCaptured.toLocaleString(), "image")}

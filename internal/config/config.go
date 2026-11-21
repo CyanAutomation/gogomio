@@ -19,24 +19,30 @@ type Config struct {
 	Resolution [2]int `json:"resolution"`
 	// SensorMode optionally selects the native sensor readout size. A zero value
 	// leaves mode selection to libcamera.
-	SensorMode           [2]int   `json:"sensor_mode,omitempty"`
-	FPS                  int      `json:"fps"`
-	TargetFPS            int      `json:"target_fps"`
-	JPEGQuality          int      `json:"jpeg_quality"`
-	MaxStreamConnections int      `json:"max_stream_connections"`
-	Port                 int      `json:"port"`
-	BindHost             string   `json:"bind_host"`
-	MockCamera           bool     `json:"mock_camera"`
-	MockFrameDir         string   `json:"-"`
-	TrustedProxyCIDRs    []string `json:"trusted_proxy_cidrs"`
-	CORSAllowedOrigins   []string `json:"cors_allowed_origins"`
+	SensorMode [2]int `json:"sensor_mode,omitempty"`
+	FPS        int    `json:"fps"`
+	TargetFPS  int    `json:"target_fps"`
+	// CameraStartupTimeoutSeconds is the minimum time to await the first native
+	// camera frame. Zero selects the default for manually constructed configs.
+	CameraStartupTimeoutSeconds int      `json:"camera_startup_timeout_seconds"`
+	JPEGQuality                 int      `json:"jpeg_quality"`
+	MaxStreamConnections        int      `json:"max_stream_connections"`
+	Port                        int      `json:"port"`
+	BindHost                    string   `json:"bind_host"`
+	MockCamera                  bool     `json:"mock_camera"`
+	MockFrameDir                string   `json:"-"`
+	TrustedProxyCIDRs           []string `json:"trusted_proxy_cidrs"`
+	CORSAllowedOrigins          []string `json:"cors_allowed_origins"`
 }
 
 const (
-	maxCaptureWidth  = 3840
-	maxCaptureHeight = 2160
-	maxCaptureFPS    = 120
-	maxConnections   = 100
+	maxCaptureWidth                    = 3840
+	maxCaptureHeight                   = 2160
+	maxCaptureFPS                      = 120
+	maxConnections                     = 100
+	minCameraStartupTimeoutSeconds     = 1
+	defaultCameraStartupTimeoutSeconds = 10
+	maxCameraStartupTimeoutSeconds     = 120
 )
 
 // Validate rejects configurations that could exhaust camera, memory, or CPU
@@ -51,6 +57,9 @@ func (c *Config) Validate() error {
 	}
 	if c.FPS <= 0 || c.FPS > maxCaptureFPS || c.TargetFPS <= 0 || c.TargetFPS > maxCaptureFPS {
 		return fmt.Errorf("fps and target fps must be between 1 and %d", maxCaptureFPS)
+	}
+	if c.CameraStartupTimeoutSeconds < 0 || c.CameraStartupTimeoutSeconds > maxCameraStartupTimeoutSeconds {
+		return fmt.Errorf("camera startup timeout must be between %d and %d seconds", minCameraStartupTimeoutSeconds, maxCameraStartupTimeoutSeconds)
 	}
 	if c.JPEGQuality < 1 || c.JPEGQuality > 100 {
 		return fmt.Errorf("jpeg quality must be between 1 and 100")
@@ -75,16 +84,17 @@ func (c *Config) Validate() error {
 // LoadFromEnv loads configuration from environment variables with defaults.
 func LoadFromEnv() *Config {
 	cfg := &Config{
-		Resolution:           [2]int{640, 480},
-		FPS:                  24,
-		TargetFPS:            24,
-		JPEGQuality:          90,
-		MaxStreamConnections: 2,
-		Port:                 DefaultPort,
-		BindHost:             DefaultBindHost,
-		MockCamera:           false,
-		TrustedProxyCIDRs:    []string{},
-		CORSAllowedOrigins:   []string{},
+		Resolution:                  [2]int{640, 480},
+		FPS:                         24,
+		TargetFPS:                   24,
+		CameraStartupTimeoutSeconds: defaultCameraStartupTimeoutSeconds,
+		JPEGQuality:                 90,
+		MaxStreamConnections:        2,
+		Port:                        DefaultPort,
+		BindHost:                    DefaultBindHost,
+		MockCamera:                  false,
+		TrustedProxyCIDRs:           []string{},
+		CORSAllowedOrigins:          []string{},
 	}
 
 	// Resolution
@@ -116,6 +126,12 @@ func LoadFromEnv() *Config {
 		}
 	} else {
 		cfg.TargetFPS = cfg.FPS
+	}
+
+	if startupTimeout := os.Getenv("MIO_CAMERA_STARTUP_TIMEOUT_SECONDS"); startupTimeout != "" {
+		if seconds, err := strconv.Atoi(startupTimeout); err == nil && seconds >= minCameraStartupTimeoutSeconds && seconds <= maxCameraStartupTimeoutSeconds {
+			cfg.CameraStartupTimeoutSeconds = seconds
+		}
 	}
 
 	// JPEG quality

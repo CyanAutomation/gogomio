@@ -118,6 +118,8 @@ type RealCamera struct {
 	procWaitDone chan error
 	stopCancel   context.CancelFunc
 
+	nativeStartupTimeout time.Duration
+
 	backendAttempted string
 
 	// test hooks
@@ -165,15 +167,16 @@ func (e *InitializationError) Unwrap() error {
 // NewRealCamera creates a new camera instance for Raspberry Pi CSI camera.
 func NewRealCamera() *RealCamera {
 	rc := &RealCamera{
-		width:              640,
-		height:             480,
-		fps:                24,
-		jpegQuality:        80,
-		devicePath:         DefaultDevicePath,
-		captureWaitTimeout: defaultCaptureWaitTimeout,
-		stopWaitTimeout:    defaultStopWaitTimeout,
-		startupNowFn:       time.Now,
-		startupSleepFn:     time.Sleep,
+		width:                640,
+		height:               480,
+		fps:                  24,
+		jpegQuality:          80,
+		devicePath:           DefaultDevicePath,
+		captureWaitTimeout:   defaultCaptureWaitTimeout,
+		stopWaitTimeout:      defaultStopWaitTimeout,
+		nativeStartupTimeout: 10 * time.Second,
+		startupNowFn:         time.Now,
+		startupSleepFn:       time.Sleep,
 	}
 	rc.lookPath = exec.LookPath
 	rc.statFn = os.Stat
@@ -206,6 +209,14 @@ func (rc *RealCamera) SetSensorMode(width, height int) {
 		return
 	}
 	rc.sensorMode = [2]int{}
+}
+
+// SetStartupTimeout sets the minimum time to wait for the first JPEG from the
+// native Raspberry Pi camera backend. Non-positive values keep the default.
+func (rc *RealCamera) SetStartupTimeout(timeout time.Duration) {
+	if timeout > 0 {
+		rc.nativeStartupTimeout = timeout
+	}
 }
 
 // Start initializes camera configuration and starts the long-lived capture process.
@@ -431,7 +442,10 @@ func (rc *RealCamera) firstFrameTimeout() time.Duration {
 	// rpicam-vid and libcamera-vid need extra time to initialize libcamera daemon,
 	// detect camera, configure ISP pipeline, and produce first frame
 	if rc.backendAttempted == BackendRpicam || rc.backendAttempted == BackendLibcamera {
-		minTimeout := 4 * time.Second
+		minTimeout := rc.nativeStartupTimeout
+		if minTimeout <= 0 {
+			minTimeout = 10 * time.Second
+		}
 		if timeout < minTimeout {
 			timeout = minTimeout
 		}
@@ -892,6 +906,7 @@ func (rc *RealCamera) readMJPEGStream(stdout io.Reader, done chan struct{}, stop
 			rc.readBuffer = append(rc.readBuffer, buf[:n]...)
 			if len(rc.readBuffer) > maxReadBufferSize {
 				rc.readerErr = fmt.Errorf("read buffer exceeded maximum size")
+				rc.isReady.Store(false)
 				if rc.frameUpdateCh != nil {
 					close(rc.frameUpdateCh)
 					rc.frameUpdateCh = nil
@@ -938,6 +953,7 @@ func (rc *RealCamera) readMJPEGStream(stdout io.Reader, done chan struct{}, stop
 			rc.frameMutex.Lock()
 			if rc.readerErr == nil {
 				rc.readerErr = err
+				rc.isReady.Store(false)
 				if rc.frameUpdateCh != nil {
 					close(rc.frameUpdateCh)
 					rc.frameUpdateCh = nil
@@ -1081,6 +1097,7 @@ func (rc *RealCamera) healthMonitor(proc *exec.Cmd, done chan struct{}, stopCtx 
 				stalledDuration := tickTime.Sub(lastFrameTime)
 				if stalledDuration > 30*time.Second {
 					logger.Printf("⚠️  Health check: frame capture stalled for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
+					rc.isReady.Store(false)
 				} else if stalledDuration > 10*time.Second {
 					logger.Printf("ℹ️  Health check: no recent frames for %v (seq: %d)", stalledDuration.Round(time.Second), currentFrameSeq)
 				}
@@ -1089,6 +1106,7 @@ func (rc *RealCamera) healthMonitor(proc *exec.Cmd, done chan struct{}, stopCtx 
 
 		if readerErr != nil {
 			logger.Printf("⚠️  Health check: reader error detected: %v", readerErr)
+			rc.isReady.Store(false)
 		}
 	}
 }
