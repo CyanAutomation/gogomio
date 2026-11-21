@@ -1,4 +1,4 @@
-name: Kaseki Docs Sweep
+name: Kaseki Docs Sweep via Soyuz
 
 on:
   schedule:
@@ -6,13 +6,13 @@ on:
   workflow_dispatch:
 
 run-name: >-
-  Docs sweep · ${{ github.repository }}@main
+  Docs sweep · ${{ github.repository }}@${{ github.sha }}
 
 permissions:
   contents: read
 
 concurrency:
-  group: kaseki-docs-sweep-${{ github.repository }}-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
+  group: soyuz-docs-sweep-${{ github.repository }}-${{ github.ref == 'refs/heads/main' && 'main' || github.run_id }}
   cancel-in-progress: false
 
 jobs:

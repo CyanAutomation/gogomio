@@ -10,7 +10,7 @@ RUNNER = ROOT / "scripts" / "test-ci-helpers.sh"
 
 
 class CIRunnerTests(unittest.TestCase):
-    # Keeps the web TypeScript tests, typecheck, and generated bundle current in CI.
+    # Keeps the Soyuz helper tests and web checks registered in the CI runner.
     def test_runner_executes_each_registered_helper_suite(self):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
@@ -45,6 +45,7 @@ class CIRunnerTests(unittest.TestCase):
                     "bash\tscripts/test-docker-go-tests.sh",
                     "python3\t-B -m unittest discover -s scripts -p test_*.py",
                     "npm\tci",
+                    "npm\trun test:soyuz",
                     "npm\trun check:web",
                 ],
             )
