@@ -16,6 +16,7 @@ export interface CameraConfigResponse {
     target_fps?: number | null;
     jpeg_quality: number;
     mock_camera: boolean;
+    camera_backend?: string;
     max_stream_connections: number;
 }
 

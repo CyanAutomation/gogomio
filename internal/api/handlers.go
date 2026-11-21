@@ -795,7 +795,7 @@ func writeMultipartFrame(w http.ResponseWriter, contentLengthScratch *[]byte, fr
 	return err
 }
 
-// CameraConfigResponse contains static camera configuration
+// CameraConfigResponse contains camera configuration and the active backend.
 type CameraConfigResponse struct {
 	// Encoded output resolution in pixels [width, height]; does not describe sensor field of view
 	Resolution [2]int `json:"resolution"`
@@ -809,6 +809,8 @@ type CameraConfigResponse struct {
 	MaxStreamConnections int `json:"max_stream_connections" example:"5"`
 	// Whether the server is using the mock camera backend
 	MockCamera bool `json:"mock_camera" example:"false"`
+	// Active camera source: real, mock, or mock-fallback
+	CameraBackend string `json:"camera_backend" example:"real"`
 	// API version
 	APIVersion string `json:"api_version" example:"1"`
 }
@@ -865,6 +867,8 @@ type DetailedHealthResponse struct {
 	Message string `json:"message" example:"Camera is functioning normally"`
 	// Whether the camera is initialized and ready
 	CameraReady bool `json:"camera_ready" example:"true"`
+	// Active camera source: real, mock, or mock-fallback
+	CameraBackend string `json:"camera_backend" example:"real"`
 	// Whether system is operating in degraded mode
 	Degraded bool `json:"degraded" example:"false"`
 	// System uptime in seconds
@@ -1215,7 +1219,7 @@ func registerV1Handlers(router *http.ServeMux, fm *FrameManager, cfg *config.Con
 
 	// New refactored config and metrics endpoints
 	router.HandleFunc("GET /v1/config/camera", func(w http.ResponseWriter, r *http.Request) {
-		handleCameraConfig(w, r, cfg)
+		handleCameraConfig(w, r, fm, cfg)
 	})
 
 	router.HandleFunc("GET /v1/metrics/live", noStore(func(w http.ResponseWriter, r *http.Request) {
@@ -1395,16 +1399,19 @@ func currentFrameMetrics(fm *FrameManager, cfg *config.Config) (frames int64, fp
 	return
 }
 
-func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
+func handleCameraConfig(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config) {
 	// Runtime settings are stored separately and never mutate cfg, so these
-	// startup values are immutable for the lifetime of the process.
+	// startup values are immutable for the lifetime of the process. The active
+	// backend can change while a mock fallback retries the real camera.
+	backend := activeCameraBackend(fm.cam)
 	response := CameraConfigResponse{
 		Resolution:           cfg.Resolution,
 		FPS:                  cfg.FPS,
 		TargetFPS:            cfg.TargetFPS,
 		JPEGQuality:          cfg.JPEGQuality,
 		MaxStreamConnections: cfg.MaxStreamConnections,
-		MockCamera:           cfg.MockCamera,
+		MockCamera:           backend != "real",
+		CameraBackend:        backend,
 		APIVersion:           "1",
 	}
 
@@ -1418,13 +1425,45 @@ func handleCameraConfig(w http.ResponseWriter, r *http.Request, cfg *config.Conf
 	etag := fmt.Sprintf("\"%x\"", digest)
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
-	w.Header().Set("Cache-Control", "private, max-age=60, must-revalidate")
+	w.Header().Set("Cache-Control", "private, max-age=5, must-revalidate")
 	w.Header().Set("ETag", etag)
 	if ifNoneMatch(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
 	_, _ = w.Write(body)
+}
+
+type cameraBackendReporter interface {
+	CameraBackend() string
+}
+
+type cameraStatusReporter interface {
+	CameraStatusMessage() string
+}
+
+func activeCameraBackend(cam camera.Camera) string {
+	if reporter, ok := cam.(cameraBackendReporter); ok {
+		return reporter.CameraBackend()
+	}
+	if _, ok := cam.(*camera.MockCamera); ok {
+		return "mock"
+	}
+	return "real"
+}
+
+func cameraStatusMessage(cam camera.Camera) string {
+	if reporter, ok := cam.(cameraStatusReporter); ok {
+		return reporter.CameraStatusMessage()
+	}
+	switch activeCameraBackend(cam) {
+	case "mock-fallback":
+		return "The real camera is unavailable; GoGoMio is serving simulated frames and retrying."
+	case "mock":
+		return "The simulated camera is active."
+	default:
+		return "The real Raspberry Pi camera is active."
+	}
 }
 
 // ifNoneMatch performs the weak comparison required for GET If-None-Match.
@@ -1473,6 +1512,7 @@ func handlePrometheusMetrics(w http.ResponseWriter, fm *FrameManager) {
 func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManager, cfg *config.Config, startTime time.Time) {
 	frameCount, fps, lastFrameAge, frameStale := currentFrameMetrics(fm, cfg)
 	consecutiveFailures, totalFailures, degraded := fm.GetCaptureFailures()
+	backend := activeCameraBackend(fm.cam)
 
 	status := "ok"
 	message := "Camera is functioning normally"
@@ -1524,6 +1564,12 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		healthStatus = "Degraded"
 		status = "degraded"
 	}
+	if backend == "mock-fallback" && status != "error" {
+		healthStatus = "Degraded"
+		status = "degraded"
+		degraded = true
+		message = cameraStatusMessage(fm.cam)
+	}
 
 	resolution := fmt.Sprintf("%dx%d", cfg.Resolution[0], cfg.Resolution[1])
 
@@ -1532,6 +1578,7 @@ func handleDetailedHealth(w http.ResponseWriter, r *http.Request, fm *FrameManag
 		HealthStatus:               healthStatus,
 		Message:                    message,
 		CameraReady:                fm.cam.IsReady(),
+		CameraBackend:              backend,
 		Degraded:                   degraded || status == "degraded",
 		UptimeSeconds:              int64(time.Since(startTime).Seconds()),
 		FPSCurrent:                 fps,
@@ -1561,14 +1608,14 @@ func handleReady(w http.ResponseWriter, r *http.Request, fm *FrameManager) {
 	if !fm.cam.IsReady() {
 		w.Header().Set("Content-Type", ContentTypeJSON)
 		w.WriteHeader(http.StatusServiceUnavailable)
-		if err := json.NewEncoder(w).Encode(map[string]string{"status": "initializing"}); err != nil {
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "initializing", "camera_backend": activeCameraBackend(fm.cam)}); err != nil {
 			_ = err
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready"}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ready", "camera_backend": activeCameraBackend(fm.cam)}); err != nil {
 		_ = err
 	}
 }
@@ -1593,7 +1640,8 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 	// Deprecated: combines static config with live metrics
 	// Return a merged response for backward compatibility
 	frameCount, fps, lastFrameAge, _ := currentFrameMetrics(fm, cfg)
-	_, mockCamera := fm.cam.(*camera.MockCamera)
+	backend := activeCameraBackend(fm.cam)
+	mockCamera := backend != "real"
 
 	response := map[string]interface{}{
 		"resolution":                 cfg.Resolution,
@@ -1601,6 +1649,7 @@ func handleAPIConfigure(w http.ResponseWriter, r *http.Request, fm *FrameManager
 		"target_fps":                 cfg.TargetFPS,
 		"jpeg_quality":               cfg.JPEGQuality,
 		"mock_camera":                mockCamera,
+		"camera_backend":             backend,
 		"max_stream_connections":     cfg.MaxStreamConnections,
 		"current_stream_connections": fm.connTracker.Count(),
 		"frames_captured":            frameCount,

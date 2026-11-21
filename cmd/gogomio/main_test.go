@@ -22,10 +22,12 @@ import (
 )
 
 type fakeCamera struct {
-	startErr   error
-	startCalls int
-	stopCalls  int
-	mu         sync.Mutex
+	startErr      error
+	startResults  []error
+	startCalls    int
+	stopCalls     int
+	forceNotReady bool
+	mu            sync.Mutex
 }
 
 type trackingListener struct {
@@ -50,8 +52,11 @@ func (l *trackingListener) Close() error {
 
 func (f *fakeCamera) Start(width, height, fps, jpegQuality int) error {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.startCalls++
-	f.mu.Unlock()
+	if f.startCalls <= len(f.startResults) {
+		return f.startResults[f.startCalls-1]
+	}
 	return f.startErr
 }
 
@@ -63,18 +68,150 @@ func (f *fakeCamera) CaptureFrameWithContext(ctx context.Context) ([]byte, error
 
 func (f *fakeCamera) Stop() error {
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.stopCalls++
-	f.mu.Unlock()
 	return nil
 }
 
-func (f *fakeCamera) IsReady() bool { return true }
+func (f *fakeCamera) IsReady() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.forceNotReady
+}
+
+func (f *fakeCamera) setReady(ready bool) {
+	f.mu.Lock()
+	f.forceNotReady = !ready
+	f.mu.Unlock()
+}
+
+func (f *fakeCamera) stopCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stopCalls
+}
 
 func testConfig() *config.Config {
 	return &config.Config{
 		Resolution:  [2]int{640, 640},
 		FPS:         24,
 		JPEGQuality: 90,
+	}
+}
+
+func TestStartRealCameraRetriesFirstFrameTimeoutOnce(t *testing.T) {
+	cfg := testConfig()
+	realCam := &fakeCamera{startResults: []error{
+		&camera.InitializationError{Backend: camera.BackendRpicam, Reason: "timeout", Cause: camera.ErrFirstFrameTimeout},
+		nil,
+	}}
+	waits := make([]time.Duration, 0, 1)
+
+	err := startRealCameraWithRetry(log.New(&bytes.Buffer{}, "", 0), cfg, realCam, func(delay time.Duration) bool {
+		waits = append(waits, delay)
+		return true
+	})
+	if err != nil {
+		t.Fatalf("startRealCameraWithRetry() error = %v", err)
+	}
+	if realCam.startCalls != 2 {
+		t.Fatalf("real camera Start() calls = %d, want 2", realCam.startCalls)
+	}
+	if len(waits) != 1 || waits[0] != realCameraRetryDelay {
+		t.Fatalf("retry waits = %v, want [%v]", waits, realCameraRetryDelay)
+	}
+}
+
+func TestStartRealCameraDoesNotRetryNonTimeoutFailure(t *testing.T) {
+	cfg := testConfig()
+	realCam := &fakeCamera{startErr: errors.New("camera process could not start")}
+	waits := 0
+
+	err := startRealCameraWithRetry(log.New(&bytes.Buffer{}, "", 0), cfg, realCam, func(time.Duration) bool {
+		waits++
+		return true
+	})
+	if err == nil {
+		t.Fatal("startRealCameraWithRetry() error = nil, want startup error")
+	}
+	if realCam.startCalls != 1 || waits != 0 {
+		t.Fatalf("Start() calls/waits = %d/%d, want 1/0", realCam.startCalls, waits)
+	}
+}
+
+func TestRecoveringCameraReturnsToRealBackendAfterMockFallback(t *testing.T) {
+	cfg := testConfig()
+	mockCam := &fakeCamera{}
+	if err := mockCam.Start(cfg.Resolution[0], cfg.Resolution[1], cfg.FPS, cfg.JPEGQuality); err != nil {
+		t.Fatalf("start mock camera: %v", err)
+	}
+	realCam := &fakeCamera{}
+	recovering := newRecoveringCamera(
+		mockCam,
+		"mock-fallback",
+		cfg,
+		func() camera.Camera { return realCam },
+		func() camera.Camera { return &fakeCamera{} },
+		log.New(&bytes.Buffer{}, "", 0),
+		errors.New("first frame timeout"),
+		time.Millisecond,
+	)
+	t.Cleanup(func() { _ = recovering.Stop() })
+
+	deadline := time.Now().Add(time.Second)
+	for recovering.CameraBackend() != "real" {
+		if time.Now().After(deadline) {
+			t.Fatalf("camera backend remained %q; expected recovery to real", recovering.CameraBackend())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	deadline = time.Now().Add(time.Second)
+	for mockCam.stopCount() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := mockCam.stopCount(); got != 1 {
+		t.Fatalf("mock Stop() calls = %d, want 1 after backend swap", got)
+	}
+	if recovering.LastCameraError() != "" {
+		t.Fatalf("LastCameraError() = %q, want empty after recovery", recovering.LastCameraError())
+	}
+	if err := recovering.Stop(); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if got := realCam.stopCount(); got != 1 {
+		t.Fatalf("real Stop() calls = %d, want 1 during shutdown", got)
+	}
+}
+
+func TestRecoveringCameraFailsOverWhenRealCameraBecomesUnready(t *testing.T) {
+	cfg := testConfig()
+	realCam := &fakeCamera{}
+	recovering := newRecoveringCamera(
+		realCam,
+		"real",
+		cfg,
+		func() camera.Camera { return &fakeCamera{} },
+		func() camera.Camera { return &fakeCamera{} },
+		log.New(&bytes.Buffer{}, "", 0),
+		nil,
+		5*time.Millisecond,
+	)
+	t.Cleanup(func() { _ = recovering.Stop() })
+	realCam.setReady(false)
+
+	deadline := time.Now().Add(time.Second)
+	for recovering.CameraBackend() != "mock-fallback" {
+		if time.Now().After(deadline) {
+			t.Fatalf("camera backend remained %q; expected simulated failover", recovering.CameraBackend())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	deadline = time.Now().Add(time.Second)
+	for realCam.stopCount() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if got := realCam.stopCount(); got != 1 {
+		t.Fatalf("real Stop() calls = %d, want 1 after failover", got)
 	}
 }
 
@@ -110,9 +247,11 @@ func TestInitializeCamera_RealCameraStartsOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initializeCamera failed: %v", err)
 	}
-	if cam != realCam {
-		t.Fatalf("expected real camera, got %T", cam)
+	recovering, ok := cam.(*recoveringCamera)
+	if !ok || recovering.CameraBackend() != "real" {
+		t.Fatalf("camera/backend = %T/%q, want supervised real camera", cam, backend)
 	}
+	t.Cleanup(func() { _ = recovering.Stop() })
 	if backend != "real" {
 		t.Fatalf("expected backend real, got %q", backend)
 	}
@@ -137,9 +276,11 @@ func TestInitializeCamera_RealFailureFallsBackToMock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initializeCamera failed: %v", err)
 	}
-	if cam != mockCam {
-		t.Fatalf("expected mock camera fallback, got %T", cam)
+	fallbackCam, ok := cam.(*recoveringCamera)
+	if !ok || fallbackCam.CameraBackend() != "mock-fallback" {
+		t.Fatalf("camera/backend = %T/%q, want recovering mock fallback", cam, backend)
 	}
+	t.Cleanup(func() { _ = fallbackCam.Stop() })
 	if backend != "mock-fallback" {
 		t.Fatalf("expected backend mock-fallback, got %q", backend)
 	}
@@ -211,8 +352,15 @@ func TestInitializeCameraLoadsTimedFixturesForMockAndFallback(t *testing.T) {
 			if backend != test.wantBackend {
 				t.Fatalf("backend = %q, want %q", backend, test.wantBackend)
 			}
-			if got != mockCam {
-				t.Fatalf("camera = %T, want configured mock camera", got)
+			if test.mockMode {
+				if got != mockCam {
+					t.Fatalf("camera = %T, want configured mock camera", got)
+				}
+			} else {
+				fallbackCam, ok := got.(*recoveringCamera)
+				if !ok || fallbackCam.CameraBackend() != "mock-fallback" {
+					t.Fatalf("camera = %T, want recovering mock fallback", got)
+				}
 			}
 			frame, err := got.CaptureFrame()
 			if err != nil {
@@ -251,9 +399,11 @@ func TestInitializeCameraUsesSyntheticFramesWhenFallbackFixturesAreInvalid(t *te
 		if err != nil {
 			t.Fatalf("initializeCameraWithLogger failed: %v", err)
 		}
-		if backend != "mock-fallback" || got != mockCam {
-			t.Fatalf("camera/backend = %T/%q, want configured mock-fallback", got, backend)
+		fallbackCam, ok := got.(*recoveringCamera)
+		if backend != "mock-fallback" || !ok {
+			t.Fatalf("camera/backend = %T/%q, want recovering mock-fallback", got, backend)
 		}
+		t.Cleanup(func() { _ = fallbackCam.Stop() })
 		if !strings.Contains(logs.String(), "using synthetic frames") {
 			t.Fatalf("fallback warning missing from logs: %s", logs.String())
 		}
@@ -289,7 +439,7 @@ func TestInitializeCamera_RealFailureLogsMockFallbackRuntimeSwitch(t *testing.T)
 	var logBuffer bytes.Buffer
 	logger := log.New(&logBuffer, "", 0)
 
-	_, backend, err := initializeCameraWithLogger(
+	cam, backend, err := initializeCameraWithLogger(
 		logger,
 		cfg,
 		func() camera.Camera { return realCam },
@@ -301,6 +451,7 @@ func TestInitializeCamera_RealFailureLogsMockFallbackRuntimeSwitch(t *testing.T)
 	if backend != "mock-fallback" {
 		t.Fatalf("expected backend mock-fallback, got %q", backend)
 	}
+	t.Cleanup(func() { _ = cam.Stop() })
 
 	logs := logBuffer.String()
 	if !strings.Contains(logs, "RealCamera may internally try FFmpeg/V4L2 as an alternative backend") {

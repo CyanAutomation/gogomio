@@ -285,6 +285,8 @@ The embedded browser UI is served at **GET `/`**. The API reference is served at
 - **GET `/v1/health`** - Versioned liveness probe (same as `/health`)
 - **GET `/v1/ready`** - Versioned readiness probe (same as `/ready`)
 
+The readiness and detailed-health responses include `camera_backend` (`real`, `mock`, or `mock-fallback`). Native CSI startup waits at least 10 seconds for its first frame by default; configure `MIO_CAMERA_STARTUP_TIMEOUT_SECONDS` to adjust that window. A first-frame timeout is retried once. If the camera later stops producing frames for 30 seconds or its stream reader exits, GoGoMio marks it unhealthy, switches to simulated frames, and retries the CSI camera in the background with backoff. The dashboard labels this degraded fallback explicitly.
+
 ### Monitoring
 
 - **GET `/metrics`** - Prometheus-compatible metrics
@@ -415,6 +417,7 @@ Application environment variables and defaults:
 | --- | --- | --- |
 | `MIO_RESOLUTION` | `640x480` | Encoded output size; width up to 3840 and height up to 2160 |
 | `MIO_SENSOR_MODE` | Automatic | Optional native camera sensor readout mode as `WIDTHxHEIGHT`; ignored by FFmpeg/V4L2 fallback |
+| `MIO_CAMERA_STARTUP_TIMEOUT_SECONDS` | `10` | Minimum seconds to wait for the first valid native CSI frame; valid range 1–120 |
 | `MIO_FPS` | `24` | Capture rate, valid range 1–120 |
 | `MIO_TARGET_FPS` | Same as `MIO_FPS` | Frame-buffer target rate, valid range 1–120 |
 | `MIO_JPEG_QUALITY` | `90` | Quality from 1–100; meaning differs by camera backend below |

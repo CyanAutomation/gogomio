@@ -77,6 +77,19 @@ test("diagnostics content formats metrics and escapes server-provided copy", () 
     assert.doesNotMatch(html, /<img src=x/);
 });
 
+test("diagnostics identify simulated fallback as the active camera source", () => {
+    const html = renderDiagnosticsContent({
+        ...healthyDiagnostics,
+        camera_backend: "mock-fallback",
+        health_status: "Degraded",
+        message: "Real camera startup failed; simulated frames are active while retrying.",
+    });
+
+    assert.match(html, />Simulated fallback</);
+    assert.match(html, /Camera source[\s\S]*mock-fallback/);
+    assert.match(html, /Real camera startup failed/);
+});
+
 test("diagnostics render uptime with the largest complete unit", () => {
     for (const [seconds, expected] of [[0, "0s"], [65, "1m 5s"], [65.9, "1m 5s"], [3605, "1h 0m"], [86461, "1d 0h"]] as const) {
         assert.ok(renderDiagnosticsContent({ ...healthyDiagnostics, uptime_seconds: seconds }).includes(expected));

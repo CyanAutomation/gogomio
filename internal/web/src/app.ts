@@ -37,6 +37,7 @@ import {
 
 interface CameraReadinessResponse {
     status: string;
+    camera_backend?: string;
 }
 
 function getElement<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -349,7 +350,7 @@ class StreamController {
                 const data = response.ok
                     ? await response.json() as CameraReadinessResponse
                     : undefined;
-                this.updateCameraReadiness(getCameraReadinessState(response.ok, data?.status));
+                this.updateCameraReadiness(getCameraReadinessState(response.ok, data?.status, data?.camera_backend));
             })
             .catch(() => this.updateCameraReadiness("unknown"))
             .finally(() => {
@@ -517,7 +518,7 @@ class StreamController {
                 if (!response.ok) throw new Error("Failed to load camera configuration");
                 const config = await response.json() as CameraConfigResponse;
                 this.cameraConfig = config;
-                this.cameraConfigExpiresAt = Date.now() + 60_000;
+                this.cameraConfigExpiresAt = Date.now() + 5_000;
                 return config;
             })
             .finally(() => {
